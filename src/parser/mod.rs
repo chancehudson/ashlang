@@ -1,7 +1,7 @@
 use self::AstNode::*;
+use pest::error::Error;
 use pest::{iterators::Pairs, pratt_parser::PrattParser, Parser};
 use pest_derive::Parser;
-use pest::error::Error;
 
 #[derive(Parser)]
 #[grammar = "parser/grammar.pest"] // relative to project `src`
@@ -9,7 +9,7 @@ struct AshParser;
 
 #[derive(Debug, Clone)]
 pub enum AstNode {
-    Stmt(String, bool, Expr)
+    Stmt(String, bool, Expr),
 }
 
 #[derive(Debug, Clone)]
@@ -19,8 +19,8 @@ pub enum Expr {
     NumOp {
         lhs: Box<Expr>,
         op: Op,
-        rhs: Box<Expr>
-    }
+        rhs: Box<Expr>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -28,7 +28,7 @@ pub enum Op {
     Add,
     Sub,
     Inv,
-    Mul
+    Mul,
 }
 
 pub fn parse(source: &str) -> Result<Vec<AstNode>, Error<Rule>> {
@@ -37,7 +37,7 @@ pub fn parse(source: &str) -> Result<Vec<AstNode>, Error<Rule>> {
     let pairs = AshParser::parse(Rule::program, source)?;
     for pair in pairs {
         match pair.as_rule() {
-            Rule::stmt=> {
+            Rule::stmt => {
                 ast.push(build_ast_from_pair(pair));
             }
             _ => {}
@@ -71,7 +71,7 @@ fn build_ast_from_pair(pair: pest::iterators::Pair<Rule>) -> AstNode {
 
             let n = pair.next().unwrap();
             Stmt(name.as_str().to_string(), is_let, build_expr_from_pair(n))
-        },
+        }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
 }
@@ -80,13 +80,11 @@ fn build_expr_from_pair(pair: pest::iterators::Pair<Rule>) -> Expr {
     match pair.as_rule() {
         Rule::atom => {
             let mut pair = pair.into_inner();
-            println!("testt {}",pair);
             let n = pair.next().unwrap();
             match n.as_rule() {
                 Rule::varname => Expr::Val(n.as_str().to_string()),
                 Rule::literal_dec => Expr::Lit(n.as_str().parse::<u64>().unwrap()),
-                _ => panic!("invalid atom")
-                
+                _ => panic!("invalid atom"),
             }
             // Expr::Val(pair.next().unwrap().as_str().to_string())
         }
@@ -106,9 +104,9 @@ fn build_expr_from_pair(pair: pest::iterators::Pair<Rule>) -> Expr {
                     Rule::sub => Op::Sub,
                     Rule::mul => Op::Mul,
                     Rule::inv => Op::Inv,
-                    _ => panic!("invalid op")
+                    _ => panic!("invalid op"),
                 },
-                rhs: Box::new(build_expr_from_pair(rhs))
+                rhs: Box::new(build_expr_from_pair(rhs)),
             }
         }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),

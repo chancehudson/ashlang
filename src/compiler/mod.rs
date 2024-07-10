@@ -5,7 +5,7 @@ use crate::parser::{AstNode, Expr, Op};
 struct VM {
     stack: Vec<String>,
     vars: HashMap<String, usize>,
-    asm: Vec<String>
+    asm: Vec<String>,
 }
 
 impl VM {
@@ -13,11 +13,11 @@ impl VM {
         VM {
             vars: HashMap::new(),
             stack: Vec::new(),
-            asm: Vec::new()
+            asm: Vec::new(),
         }
     }
 
-    pub fn let_var(& mut self, name: String, expr: Expr) {
+    pub fn let_var(&mut self, name: String, expr: Expr) {
         if self.vars.contains_key(&name) {
             panic!("var is not unique");
         }
@@ -25,7 +25,7 @@ impl VM {
         self.vars.insert(name, self.stack.len());
     }
 
-    pub fn set_var(& mut self, name: String, expr: Expr) {
+    pub fn set_var(&mut self, name: String, expr: Expr) {
         if !self.vars.contains_key(&name) {
             panic!("var does not exist");
         }
@@ -34,7 +34,7 @@ impl VM {
         self.vars.insert(name, self.stack.len());
     }
 
-    pub fn stack_index(& mut self, var_name: &String) -> usize {
+    pub fn stack_index(&mut self, var_name: &String) -> usize {
         if let Some(var) = self.vars.get(var_name) {
             self.stack.len() - var
         } else {
@@ -42,16 +42,16 @@ impl VM {
         }
     }
 
-    pub fn eval(& mut self, expr: Expr) {
+    pub fn eval(&mut self, expr: Expr) {
         let mut asm = match &expr {
             Expr::Val(name) => {
                 self.stack.push(name.clone());
                 vec![format!("dup {}", self.stack_index(&name))]
-            },
+            }
             Expr::Lit(v) => {
                 self.stack.push(v.to_string());
                 vec![format!("push {}", v)]
-            },
+            }
             Expr::NumOp { lhs, op, rhs } => {
                 let l = (*lhs).clone();
                 self.eval(*l);
@@ -62,17 +62,17 @@ impl VM {
                         self.stack.pop();
                         self.stack.pop();
                         vec![format!("add")]
-                    },
+                    }
                     Op::Sub => {
                         self.stack.pop();
                         self.stack.pop();
                         vec![format!("sub")]
-                    },
+                    }
                     Op::Mul => {
                         self.stack.pop();
                         self.stack.pop();
                         vec![format!("mul")]
-                    },
+                    }
                     Op::Inv => {
                         self.stack.pop();
                         self.stack.pop();
@@ -81,11 +81,15 @@ impl VM {
                 }
             }
         };
-        self.asm.append(& mut asm);
+        self.asm.append(&mut asm);
+    }
+
+    pub fn halt(&mut self) {
+        self.asm.push("halt".to_string());
     }
 }
 
-pub fn compile(ast: Vec<AstNode>) {
+pub fn compile(ast: Vec<AstNode>) -> String {
     let mut vm = VM::new();
 
     for v in ast {
@@ -96,10 +100,12 @@ pub fn compile(ast: Vec<AstNode>) {
                 } else {
                     vm.set_var(name, expr)
                 }
-            },
+            }
         }
     }
-    for l in vm.asm {
+    vm.halt();
+    for l in &vm.asm {
         println!("{}", l);
     }
+    vm.asm.clone().join("\n")
 }
