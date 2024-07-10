@@ -29,14 +29,16 @@ impl VM {
         if !self.vars.contains_key(&name) {
             panic!("var does not exist");
         }
+        // new value is on the top of the stack
         self.eval(expr);
-        self.vars.remove(&name).unwrap();
-        self.vars.insert(name, self.stack.len());
+        self.asm.push(format!("swap {}", self.stack_index(&name)));
+        self.asm.push(format!("pop 1"));
+        self.stack.pop();
     }
 
-    pub fn stack_index(&mut self, var_name: &String) -> usize {
+    pub fn stack_index(&self, var_name: &String) -> usize {
         if let Some(var) = self.vars.get(var_name) {
-            self.stack.len() - var
+            (self.stack.len() - var) + 1
         } else {
             panic!("unknown var");
         }
@@ -58,23 +60,22 @@ impl VM {
                 let r = (*rhs).clone();
                 self.eval(*r);
                 match op {
+                    // each one of these removes two elements and
+                    // adds 1
+                    // so we have a net effect of a single pop
                     Op::Add => {
-                        self.stack.pop();
                         self.stack.pop();
                         vec![format!("add")]
                     }
                     Op::Sub => {
                         self.stack.pop();
-                        self.stack.pop();
                         vec![format!("sub")]
                     }
                     Op::Mul => {
                         self.stack.pop();
-                        self.stack.pop();
                         vec![format!("mul")]
                     }
                     Op::Inv => {
-                        self.stack.pop();
                         self.stack.pop();
                         vec![format!("invert"), format!("mul")]
                     }
