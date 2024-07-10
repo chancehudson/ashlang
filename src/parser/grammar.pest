@@ -1,0 +1,21 @@
+WHITESPACE = _{ " " }
+program = _{ SOI ~ "\n"* ~ (stmt ~ "\n"+) * ~ stmt? ~ EOI }
+
+stmt = { vardef ~ "=" ~ expr ~ ";" }
+
+char = _{ ASCII_ALPHANUMERIC | "_" }
+
+varname = { char+ }
+literal_dec = _{ ASCII_DIGIT+ }
+
+atom = @{ varname | literal_dec }
+
+vardef = @{ "let "? ~ varname }
+
+op = _{ add | sub | mul | inv }
+    add = { "+" }
+    sub = { "-" }
+    mul = { "*" }
+    inv = { "/" }
+
+expr = { atom ~ (op ~ expr)* }
