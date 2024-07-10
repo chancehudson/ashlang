@@ -7,24 +7,14 @@ use pest::error::Error;
 #[grammar = "parser/grammar.pest"] // relative to project `src`
 struct AshParser;
 
-// pub enum Val {
-//     Var(String),
-//     Val(u64)
-// }
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AstNode {
-    Print(Box<AstNode>),
-    Stmt {
-        name: String,
-        expr: Box<AstNode>
-    },
-    Expr(Expr),
-    Op
+    Stmt(String, bool, Expr)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
+    Lit(u64),
     Val(String),
     NumOp {
         lhs: Box<Expr>,
@@ -33,7 +23,7 @@ pub enum Expr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Op {
     Add,
     Sub,
@@ -61,16 +51,27 @@ fn build_ast_from_pair(pair: pest::iterators::Pair<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::stmt => {
             let mut pair = pair.into_inner();
-            let name = pair.next().unwrap();
-            let n = pair.next().unwrap();
-            Stmt {
-                name: name.as_str().to_string(),
-                expr: Box::new(build_ast_from_pair(n))
+            // get vardef
+            let next = pair.next().unwrap();
+            let mut varpair = next.into_inner();
+            let name;
+            let is_let;
+            if varpair.len() == 2 {
+                // it's a let assignment
+                varpair.next();
+                name = varpair.next().unwrap();
+                is_let = true;
+            } else if varpair.len() == 1 {
+                // it's a regular assignment
+                name = varpair.next().unwrap();
+                is_let = false;
+            } else {
+                panic!("invalid varpait");
             }
+
+            let n = pair.next().unwrap();
+            Stmt(name.as_str().to_string(), is_let, build_expr_from_pair(n))
         },
-        Rule::expr => {
-            Expr(build_expr_from_pair(pair))
-        }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
 }
@@ -79,18 +80,27 @@ fn build_expr_from_pair(pair: pest::iterators::Pair<Rule>) -> Expr {
     match pair.as_rule() {
         Rule::atom => {
             let mut pair = pair.into_inner();
-            Expr::Val(pair.next().unwrap().as_str().to_string())
+            println!("testt {}",pair);
+            let n = pair.next().unwrap();
+            match n.as_rule() {
+                Rule::varname => Expr::Val(n.as_str().to_string()),
+                Rule::literal_dec => Expr::Lit(n.as_str().parse::<u64>().unwrap()),
+                _ => panic!("invalid atom")
+                
+            }
+            // Expr::Val(pair.next().unwrap().as_str().to_string())
         }
         Rule::expr => {
             let mut pair = pair.into_inner();
             let first_atom = pair.next().unwrap();
             if pair.len() == 0 {
-                return Expr::Val(first_atom.as_str().to_string());
+                return build_expr_from_pair(first_atom);
+                // return Expr::Val(first_atom.as_str().to_string());
             }
             let op = pair.next().unwrap();
             let rhs = pair.next().unwrap();
             Expr::NumOp {
-                lhs: Box::new(Expr::Val(first_atom.as_str().to_string())),
+                lhs: Box::new(build_expr_from_pair(first_atom)),
                 op: match op.as_rule() {
                     Rule::add => Op::Add,
                     Rule::sub => Op::Sub,

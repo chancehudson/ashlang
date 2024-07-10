@@ -5,12 +5,14 @@ stmt = { vardef ~ "=" ~ expr ~ ";" }
 
 char = _{ ASCII_ALPHANUMERIC | "_" }
 
-varname = { char+ }
-literal_dec = _{ ASCII_DIGIT+ }
+varname = @{ char+ }
+literal_dec = @{ ASCII_DIGIT+ }
 
-atom = @{ varname | literal_dec }
+atom = { literal_dec | varname }
 
-vardef = @{ "let "? ~ varname }
+let_r = { "let " }
+
+vardef = { let_r? ~ varname }
 
 op = _{ add | sub | mul | inv }
     add = { "+" }
