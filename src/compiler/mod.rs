@@ -32,7 +32,7 @@ impl VM {
         // new value is on the top of the stack
         self.eval(expr);
         self.asm.push(format!("swap {}", self.stack_index(&name)));
-        self.asm.push(format!("pop 1"));
+        self.asm.push("pop 1".to_string());
         self.stack.pop();
     }
 
@@ -48,7 +48,7 @@ impl VM {
         let mut asm = match &expr {
             Expr::Val(name) => {
                 self.stack.push(name.clone());
-                vec![format!("dup {}", self.stack_index(&name))]
+                vec![format!("dup {}", self.stack_index(name))]
             }
             Expr::Lit(v) => {
                 self.stack.push(v.to_string());
