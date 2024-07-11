@@ -16,7 +16,7 @@ let state[T]
 state[0] = 0 # unnecessary, added for clarity
 state[1..T] = inputs
 
-# these constants are calculated
+# these constants are pre-calculated
 # according to the current field
 #
 # constants are included in the
