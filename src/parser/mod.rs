@@ -1,6 +1,6 @@
 use self::AstNode::*;
 use pest::error::Error;
-use pest::{iterators::Pairs, pratt_parser::PrattParser, Parser};
+use pest::Parser;
 use pest_derive::Parser;
 
 #[derive(Parser)]
