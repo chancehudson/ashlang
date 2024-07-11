@@ -1,7 +1,7 @@
 WHITESPACE = _{ " " }
 program = _{ SOI ~ "\n"* ~ (stmt ~ "\n"+) * ~ stmt? ~ EOI }
 
-stmt = { vardef ~ "=" ~ expr ~ ";" }
+stmt = { var ~ "=" ~ expr }
 
 char = _{ ASCII_ALPHANUMERIC | "_" }
 
@@ -12,7 +12,7 @@ atom = { literal_dec | varname }
 
 let_r = { "let " }
 
-vardef = { let_r? ~ varname }
+var = { let_r? ~ varname }
 
 op = _{ add | sub | mul | inv }
     add = { "+" }

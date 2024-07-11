@@ -7,7 +7,7 @@ use parser::*;
 use triton_vm::prelude::*;
 
 fn main() {
-    let unparsed_file = std::fs::read_to_string("test.ash").expect("cannot read ash file");
+    let unparsed_file = std::fs::read_to_string("src/test.ash").expect("cannot read ash file");
     let ast = parse(&unparsed_file).expect("unsuccessful parse");
     let asm = compile(ast);
     // return;
