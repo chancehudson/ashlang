@@ -2,6 +2,13 @@ use std::collections::HashMap;
 
 use crate::parser::{AstNode, Expr, Op};
 
+
+/**
+ * Iterate over the AST to see what variables
+ * are accessed the most
+ * 
+ * Automatically move vars between memory and stack
+ */
 struct VM {
     stack: Vec<String>,
     vars: HashMap<String, usize>,

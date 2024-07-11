@@ -9,6 +9,7 @@ struct AshParser;
 
 #[derive(Debug, Clone)]
 pub enum AstNode {
+    Params(Expr), // must be Val
     Stmt(String, bool, Expr),
 }
 
