@@ -1,4 +1,4 @@
-export poseidon_C(T)
+(T)
 
 if T == 3
     return [

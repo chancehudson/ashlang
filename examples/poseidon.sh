@@ -4,8 +4,7 @@
 # Grassi, Khovratovich,
 # Rechberger, Roy, Schofnegger
 
-# name of the exported function
-export poseidon(inputs)
+(inputs)
 
 let T = inputs[0]
 let state = [[0], inputs[1..T + 1]]
