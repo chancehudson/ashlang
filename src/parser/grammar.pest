@@ -1,18 +1,11 @@
 WHITESPACE = _{ " " }
-program = _{ SOI ~ "\n"* ~ params ~ "\n"+ ~ (stmt ~ "\n"+) * ~ stmt? ~ EOI }
+program = _{ SOI ~ "\n"* ~ (stmt ~ "\n"+) * ~ stmt? ~ EOI }
 
-// parameters input to the ff (file function)
-params = { "(" ~ (varname ~ ","?)* ~ ")"}
-
-// a single line of code
-stmt = { (var ~ "=" ~ expr) | (let_r ~ varname) }
-
-// jump function
-jmp_fn = { ":" ~ varname  ~ expr? }
+stmt = { var ~ "=" ~ expr }
 
 char = _{ ASCII_ALPHANUMERIC | "_" }
 
-varname = @{ char+ ~ dimension }
+varname = @{ char+ }
 literal_dec = @{ ASCII_DIGIT+ }
 
 atom = { literal_dec | varname }
@@ -20,13 +13,6 @@ atom = { literal_dec | varname }
 let_r = { "let " }
 
 var = { let_r? ~ varname }
-
-dimension = { ("[" ~ (range | expr)? ~ "]")+ }
-
-range = { expr? ~ ".." ~ expr? }
-
-vec_literal = { "[" ~ (vec_literal | expr) ~ "]" }
-
 
 op = _{ add | sub | mul | inv }
     add = { "+" }
