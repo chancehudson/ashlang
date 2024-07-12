@@ -28,7 +28,7 @@ Below is the [poseidon](https://eprint.iacr.org/2019/458.pdf) hash function impl
 - [solidity (optimized)](https://github.com/vimwitch/poseidon-solidity/blob/main/contracts/PoseidonT3.sol)
 - [javascript](https://github.com/vimwitch/poseidon-hash/blob/main/src/index.mjs)
 
-Below is the ashlang implementation `poseidon`. See [examples/poseidon.sh](examples/poseidon.sh) for a commented version. Note that vectors can be manipulated using the `*+-/` operators directly.
+Below is the ashlang implementation `poseidon`. See [examples/poseidon.ash](examples/poseidon.ash) for a commented version. Note that vectors can be manipulated using the `*+-/` operators directly.
 
 ```sh
 ########################
