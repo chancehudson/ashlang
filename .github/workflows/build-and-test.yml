@@ -30,4 +30,4 @@ jobs:
                   toolchain: stable
                   override: true
             - name: Compile a program and build a STARK
-              run: cargo run
+              run: cargo run ./src/test.ash
