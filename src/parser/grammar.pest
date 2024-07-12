@@ -1,7 +1,11 @@
 WHITESPACE = _{ " " }
-program = _{ SOI ~ "\n"* ~ (stmt ~ "\n"+) * ~ stmt? ~ EOI }
+COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
+
+program = _{ SOI ~ "\n"* ~ fn_header? ~ "\n"* ~ (stmt ~ "\n"+) * ~ stmt? ~ EOI }
 
 stmt = { var ~ "=" ~ expr }
+
+fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") ~ "\n" }
 
 char = _{ ASCII_ALPHANUMERIC | "_" }
 

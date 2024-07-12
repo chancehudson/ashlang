@@ -9,6 +9,7 @@ struct AshParser;
 
 #[derive(Debug, Clone)]
 pub enum AstNode {
+    FnVar(Vec<String>),
     Stmt(String, bool, Expr),
 }
 
@@ -37,6 +38,19 @@ pub fn parse(source: &str) -> Result<Vec<AstNode>, Error<Rule>> {
     let pairs = AshParser::parse(Rule::program, source)?;
     for pair in pairs {
         match pair.as_rule() {
+            Rule::fn_header => {
+                // parse the function header which includes argument
+                // if invocation started in the file no arguments
+                // should be accepted. Instead the argv function should
+                // be used
+                let pair = pair.into_inner();
+                let mut vars: Vec<String> = Vec::new();
+                for v in pair {
+                    vars.push(v.as_str().to_string());
+                }
+                // let pair.next().unwrap()
+                ast.push(FnVar(vars));
+            }
             Rule::stmt => {
                 ast.push(build_ast_from_pair(pair));
             }

@@ -108,6 +108,11 @@ pub fn compile(ast: Vec<AstNode>) -> String {
                     vm.set_var(name, expr)
                 }
             }
+            AstNode::FnVar(vars) => {
+                for v in vars {
+                    vm.let_var(v, Expr::Lit(0));
+                }
+            }
         }
     }
     vm.halt();
