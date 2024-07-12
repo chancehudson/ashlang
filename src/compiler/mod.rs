@@ -1,123 +1,101 @@
-use std::collections::HashMap;
+use crate::parser::{parse, AstNode, Expr};
+use std::path::PathBuf;
+use std::{collections::HashMap, fs};
 
-use crate::parser::{AstNode, Expr, Op};
+mod vm;
+use vm::VM;
 
-/**
- * Iterate over the AST to see what variables
- * are accessed the most
- *
- * Automatically move vars between memory and stack
- */
-struct VM {
-    stack: Vec<String>,
-    vars: HashMap<String, usize>,
-    asm: Vec<String>,
+pub struct Compiler {
+    path_to_fn: HashMap<PathBuf, String>,
+    fn_to_path: HashMap<String, PathBuf>,
+    #[allow(unused)]
+    fn_to_ast: HashMap<String, Vec<AstNode>>,
 }
 
-impl VM {
+impl Compiler {
     pub fn new() -> Self {
-        VM {
-            vars: HashMap::new(),
-            stack: Vec::new(),
-            asm: Vec::new(),
+        Compiler {
+            path_to_fn: HashMap::new(),
+            fn_to_path: HashMap::new(),
+            fn_to_ast: HashMap::new(),
         }
     }
 
-    pub fn let_var(&mut self, name: String, expr: Expr) {
-        if self.vars.contains_key(&name) {
-            panic!("var is not unique");
-        }
-        self.eval(expr);
-        self.vars.insert(name, self.stack.len());
+    // TODO: read the functions in the AST to determine
+    // what files to parse next
+    //
+    // DEPENDS: function parsing
+    pub fn parse_entry(file_path: &PathBuf) -> Vec<AstNode> {
+        let unparsed_file = std::fs::read_to_string(file_path)
+            .unwrap_or_else(|_| panic!("Failed to read source file: {:?}", file_path));
+        // let the parser throw it's error to stderr/out
+        parse(&unparsed_file).unwrap()
     }
 
-    pub fn set_var(&mut self, name: String, expr: Expr) {
-        if !self.vars.contains_key(&name) {
-            panic!("var does not exist");
-        }
-        // new value is on the top of the stack
-        self.eval(expr);
-        self.asm.push(format!("swap {}", self.stack_index(&name)));
-        self.asm.push("pop 1".to_string());
-        self.stack.pop();
-    }
-
-    pub fn stack_index(&self, var_name: &String) -> usize {
-        if let Some(var) = self.vars.get(var_name) {
-            (self.stack.len() - var) + 1
-        } else {
-            panic!("unknown var");
-        }
-    }
-
-    pub fn eval(&mut self, expr: Expr) {
-        let mut asm = match &expr {
-            Expr::Val(name) => {
-                self.stack.push(name.clone());
-                vec![format!("dup {}", self.stack_index(name))]
+    pub fn include(&mut self, path: PathBuf) {
+        // first check if it's a directory
+        let metadata = fs::metadata(&path)
+            .unwrap_or_else(|_| panic!("Failed to stat metadata for include path: {:?}", path));
+        let ext = path
+            .extension()
+            .unwrap_or_else(|| panic!("Failed to get extension for path: {:?}", path));
+        if metadata.is_file() && ext == "ash" {
+            let name = path.file_stem().unwrap_or_else(|| {
+                panic!("Failed to parse file stem for include path: {:?}", path)
+            });
+            let name_str = name
+                .to_str()
+                .unwrap_or_else(|| panic!("Failed to unwrap filename for path: {:?}", &path))
+                .to_string();
+            if self.fn_to_path.contains_key(&name_str) {
+                println!("Duplicate file/function names detected: {name_str}");
+                println!("Path 1: {:?}", &path);
+                println!("Path 2: {:?}", self.fn_to_path.get(&name_str).unwrap());
+                std::process::exit(1);
+            } else {
+                self.fn_to_path.insert(name_str.clone(), path.clone());
+                self.path_to_fn.insert(path, name_str);
             }
-            Expr::Lit(v) => {
-                self.stack.push(v.to_string());
-                vec![format!("push {}", v)]
+        } else if metadata.is_dir() {
+            let files = fs::read_dir(&path)
+                .unwrap_or_else(|_| panic!("Failed to read directory: {:?}", &path));
+            for entry in files {
+                let next_path = entry
+                    .unwrap_or_else(|_| panic!("Failed to read dir entry: {:?}", &path))
+                    .path();
+                self.include(next_path);
             }
-            Expr::NumOp { lhs, op, rhs } => {
-                let l = (*lhs).clone();
-                self.eval(*l);
-                let r = (*rhs).clone();
-                self.eval(*r);
-                match op {
-                    // each one of these removes two elements and
-                    // adds 1
-                    // so we have a net effect of a single pop
-                    Op::Add => {
-                        self.stack.pop();
-                        vec![format!("add")]
+        }
+    }
+
+    // start at the entry file
+    // parse it and determine what other files are needed
+    // repeat until all files have been parsed
+    pub fn compile(&mut self, entry: &PathBuf) -> String {
+        let ast = Compiler::parse_entry(entry);
+
+        let mut vm = VM::new();
+        for v in ast {
+            match v {
+                AstNode::Stmt(name, is_let, expr) => {
+                    if is_let {
+                        vm.let_var(name, expr);
+                    } else {
+                        vm.set_var(name, expr)
                     }
-                    Op::Sub => {
-                        self.stack.pop();
-                        vec![format!("push -1"), format!("mul"), format!("add")]
-                    }
-                    Op::Mul => {
-                        self.stack.pop();
-                        vec![format!("mul")]
-                    }
-                    Op::Inv => {
-                        self.stack.pop();
-                        vec![format!("invert"), format!("mul")]
+                }
+                AstNode::FnVar(vars) => {
+                    for v in vars {
+                        vm.let_var(v, Expr::Lit(0));
                     }
                 }
             }
-        };
-        self.asm.append(&mut asm);
-    }
-
-    pub fn halt(&mut self) {
-        self.asm.push("halt".to_string());
-    }
-}
-
-pub fn compile(ast: Vec<AstNode>) -> String {
-    let mut vm = VM::new();
-
-    for v in ast {
-        match v {
-            AstNode::Stmt(name, is_let, expr) => {
-                if is_let {
-                    vm.let_var(name, expr);
-                } else {
-                    vm.set_var(name, expr)
-                }
-            }
-            AstNode::FnVar(vars) => {
-                for v in vars {
-                    vm.let_var(v, Expr::Lit(0));
-                }
-            }
         }
+        vm.halt();
+        // prints the assembly
+        for l in &vm.asm {
+            println!("{}", l);
+        }
+        vm.asm.clone().join("\n")
     }
-    vm.halt();
-    for l in &vm.asm {
-        println!("{}", l);
-    }
-    vm.asm.clone().join("\n")
 }

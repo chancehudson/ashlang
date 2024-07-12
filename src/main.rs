@@ -1,16 +1,32 @@
+use clap::{arg, Command};
+use compiler::Compiler;
+use std::path::PathBuf;
+use triton_vm::prelude::*;
+
 mod compiler;
 mod parser;
 
-use compiler::*;
-use parser::*;
-
-use triton_vm::prelude::*;
+fn cli() -> Command {
+    Command::new("acc")
+        .about("ashlang compiler")
+        .subcommand_required(false)
+        .arg_required_else_help(true)
+        .arg(arg!(<ASM_PATH> "The source entrypoint"))
+    // .arg(arg!(<INCLUDE_PATH> "The include path (recursive)"))
+}
 
 fn main() {
-    let unparsed_file = std::fs::read_to_string("src/test.ash").expect("cannot read ash file");
-    let ast = parse(&unparsed_file).expect("unsuccessful parse");
-    let asm = compile(ast);
-    // return;
+    let matches = cli().get_matches();
+
+    let source_path = matches
+        .get_one::<String>("ASM_PATH")
+        .expect("Failed to get ASM_PATH");
+    // let include_path = matches.get_one::<String>("INCLUDE_PATH").expect("Failed to get INCLUDE_PATH");
+    let mut compiler = Compiler::new();
+    compiler.include(PathBuf::from(source_path));
+
+    let asm = compiler.compile(&PathBuf::from(source_path));
+
     let instructions = triton_vm::parser::parse(&asm).unwrap();
     let l_instructions = triton_vm::parser::to_labelled_instructions(instructions.as_slice());
     let program = triton_vm::program::Program::new(l_instructions.as_slice());
