@@ -1,0 +1,33 @@
+name: Build and Test
+
+on:
+    push:
+    pull_request:
+        types:
+            - opened
+            - synchronize
+            - reopened
+            - ready_for_review
+
+jobs:
+    # TODO: Add a job to run clippy
+    lint:
+        runs-on: ubuntu-latest
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+        steps:
+            - uses: actions/checkout@v4
+            - name: Check formatting
+              run: cargo fmt --all -- --check
+
+    compile-and-prove:
+        runs-on: ubuntu-latest
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+        steps:
+            - uses: actions/checkout@v4
+            - name: Install Rust toolchain
+              uses: actions-rs/toolchain@v1
+              with:
+                  toolchain: stable
+                  override: true
+            - name: Compile a program and build a STARK
+              run: cargo run
