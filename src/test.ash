@@ -4,12 +4,16 @@
 # system
 (testparam)
 
+const T = 5
+const Z = T
+
+let c = Z * 10000
+
 let a = 10
 let b = 100
-let c = 1000
 
 let z = b - a + c / 2 * 4
 
-c = a * z + c / z * z * z * z
+a = a * z + c / z * z * z * z
 
-return c
+return a

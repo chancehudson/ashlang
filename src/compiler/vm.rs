@@ -14,6 +14,7 @@ pub struct VM {
     // offsets are based on zero so they stay correct
     // as items are pushed/popped on the stack
     pub vars: HashMap<String, usize>,
+    pub consts: HashMap<String, u64>,
     // compiled assembly
     pub asm: Vec<String>,
 }
@@ -24,6 +25,36 @@ impl VM {
             vars: HashMap::new(),
             stack: Vec::new(),
             asm: Vec::new(),
+            consts: HashMap::new(),
+        }
+    }
+
+    pub fn const_var(&mut self, name: String, expr: Expr) {
+        // check for duplicate var names
+        if self.vars.contains_key(&name) || self.consts.contains_key(&name) {
+            panic!("name is not unique");
+        }
+        match expr {
+            Expr::Lit(v) => {
+                self.consts.insert(name, v);
+            }
+            Expr::Val(ref_name) => {
+                if self.consts.contains_key(&ref_name) {
+                    self.consts
+                        .insert(name, *self.consts.get(&ref_name).unwrap());
+                } else if self.vars.contains_key(&ref_name) {
+                    panic!("dynamically evaluated consts not supported");
+                } else {
+                    panic!("unknown variable");
+                }
+            }
+            Expr::NumOp {
+                lhs: _,
+                op: _,
+                rhs: _,
+            } => {
+                panic!("numerical operations in constants is not yet supported");
+            }
         }
     }
 
@@ -33,7 +64,7 @@ impl VM {
     }
 
     pub fn let_var(&mut self, name: String, expr: Expr) {
-        if self.vars.contains_key(&name) {
+        if self.vars.contains_key(&name) || self.consts.contains_key(&name) {
             panic!("var is not unique");
         }
         self.eval(expr);
@@ -42,7 +73,7 @@ impl VM {
 
     pub fn set_var(&mut self, name: String, expr: Expr) {
         if !self.vars.contains_key(&name) {
-            panic!("var does not exist");
+            panic!("var does not exist {name}");
         }
         // new value is on the top of the stack
         self.eval(expr);
@@ -62,8 +93,16 @@ impl VM {
     pub fn eval(&mut self, expr: Expr) {
         let mut asm = match &expr {
             Expr::Val(name) => {
-                self.stack.push(name.clone());
-                vec![format!("dup {}", self.stack_index(name))]
+                // if the val is a constant we push to stack
+                if self.vars.contains_key(name) {
+                    self.stack.push(name.clone());
+                    vec![format!("dup {}", self.stack_index(name))]
+                } else if self.consts.contains_key(name) {
+                    self.stack.push(name.clone());
+                    vec![format!("push {}", self.consts.get(name).unwrap())]
+                } else {
+                    panic!("unknown variable");
+                }
             }
             Expr::Lit(v) => {
                 self.stack.push(v.to_string());

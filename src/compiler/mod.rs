@@ -92,6 +92,13 @@ impl Compiler {
                 AstNode::Rtrn(expr) => {
                     vm.return_expr(expr);
                 }
+                AstNode::Const(name, expr) => {
+                    // we must be able to fully evaluate
+                    // the constant at compile time
+                    // e.g. the expr must contain only
+                    // Expr::Lit and Expr::Val containing other consts
+                    vm.const_var(name, expr);
+                }
             }
         }
         vm.halt();

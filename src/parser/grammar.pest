@@ -3,7 +3,7 @@ COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
 
 program = _{ SOI ~ "\n"* ~ fn_header? ~ "\n"* ~ (stmt ~ "\n"+) * ~ (return_stmt ~ "\n"?)? ~ EOI }
 
-stmt = { var ~ "=" ~ expr }
+stmt = { var_def | const_def }
 
 fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") ~ "\n" }
 
@@ -14,11 +14,16 @@ literal_dec = @{ ASCII_DIGIT+ }
 
 atom = { literal_dec | varname }
 
+// this let_r match is needed to
+// determine if a variable is being
+// declared for the first time
 let_r = { "let " }
-
 var = { let_r? ~ varname }
+var_def = { var ~ "=" ~ expr }
 
 return_stmt = { "return " ~ expr }
+
+const_def = { "const " ~ varname ~ "=" ~ expr }
 
 op = _{ add | sub | mul | inv }
     add = { "+" }

@@ -12,6 +12,7 @@ pub enum AstNode {
     FnVar(Vec<String>),
     Stmt(String, bool, Expr),
     Rtrn(Expr),
+    Const(String, Expr),
 }
 
 #[derive(Debug, Clone)]
@@ -71,26 +72,39 @@ fn build_ast_from_pair(pair: pest::iterators::Pair<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::stmt => {
             let mut pair = pair.into_inner();
-            // get vardef
             let next = pair.next().unwrap();
-            let mut varpair = next.into_inner();
-            let name;
-            let is_let;
-            if varpair.len() == 2 {
-                // it's a let assignment
-                varpair.next();
-                name = varpair.next().unwrap();
-                is_let = true;
-            } else if varpair.len() == 1 {
-                // it's a regular assignment
-                name = varpair.next().unwrap();
-                is_let = false;
-            } else {
-                panic!("invalid varpait");
-            }
+            match next.as_rule() {
+                Rule::var_def => {
+                    // get vardef
+                    let mut pair = next.into_inner();
+                    let next = pair.next().unwrap();
+                    let mut varpair = next.into_inner();
+                    let name;
+                    let is_let;
+                    if varpair.len() == 2 {
+                        // it's a let assignment
+                        varpair.next();
+                        name = varpair.next().unwrap();
+                        is_let = true;
+                    } else if varpair.len() == 1 {
+                        // it's a regular assignment
+                        name = varpair.next().unwrap();
+                        is_let = false;
+                    } else {
+                        panic!("invalid varpait");
+                    }
 
-            let n = pair.next().unwrap();
-            Stmt(name.as_str().to_string(), is_let, build_expr_from_pair(n))
+                    let n = pair.next().unwrap();
+                    Stmt(name.as_str().to_string(), is_let, build_expr_from_pair(n))
+                }
+                Rule::const_def => {
+                    let mut pair = next.into_inner();
+                    let name = pair.next().unwrap();
+                    let expr = pair.next().unwrap();
+                    Const(name.as_str().to_string(), build_expr_from_pair(expr))
+                }
+                unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
+            }
         }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
