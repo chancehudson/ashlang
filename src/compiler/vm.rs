@@ -8,8 +8,13 @@ use std::collections::HashMap;
  * Automatically move vars between memory and stack
  */
 pub struct VM {
+    // represents the contents of the stack
     pub stack: Vec<String>,
+    // name of variable keyed to offset in the stack
+    // offsets are based on zero so they stay correct
+    // as items are pushed/popped on the stack
     pub vars: HashMap<String, usize>,
+    // compiled assembly
     pub asm: Vec<String>,
 }
 
