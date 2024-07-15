@@ -89,6 +89,9 @@ impl Compiler {
                         vm.let_var(v, Expr::Lit(0));
                     }
                 }
+                AstNode::Rtrn(expr) => {
+                    vm.return_expr(expr);
+                }
             }
         }
         vm.halt();

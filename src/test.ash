@@ -10,4 +10,6 @@ let c = 1000
 
 let z = b - a + c / 2 * 4
 
-#return helloworld()
+c = a * z + c / z * z * z * z
+
+return c
