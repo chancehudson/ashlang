@@ -22,6 +22,11 @@ impl VM {
         }
     }
 
+    pub fn return_expr(&mut self, expr: Expr) {
+        self.eval(expr);
+        self.asm.push(format!("write_io 1"));
+    }
+
     pub fn let_var(&mut self, name: String, expr: Expr) {
         if self.vars.contains_key(&name) {
             panic!("var is not unique");

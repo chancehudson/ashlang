@@ -11,6 +11,7 @@ struct AshParser;
 pub enum AstNode {
     FnVar(Vec<String>),
     Stmt(String, bool, Expr),
+    Rtrn(Expr),
 }
 
 #[derive(Debug, Clone)]
@@ -53,6 +54,11 @@ pub fn parse(source: &str) -> Result<Vec<AstNode>, Error<Rule>> {
             }
             Rule::stmt => {
                 ast.push(build_ast_from_pair(pair));
+            }
+            Rule::return_stmt => {
+                let mut pair = pair.into_inner();
+                let next = pair.next().unwrap();
+                ast.push(Rtrn(build_expr_from_pair(next)))
             }
             _ => {}
         }
