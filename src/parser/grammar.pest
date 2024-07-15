@@ -1,7 +1,7 @@
 WHITESPACE = _{ " " }
 COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
 
-program = _{ SOI ~ "\n"* ~ fn_header? ~ "\n"* ~ (stmt ~ "\n"+) * ~ stmt? ~ EOI }
+program = _{ SOI ~ "\n"* ~ fn_header? ~ "\n"* ~ (stmt ~ "\n"+) * ~ (return_stmt ~ "\n"?)? ~ EOI }
 
 stmt = { var ~ "=" ~ expr }
 
@@ -17,6 +17,8 @@ atom = { literal_dec | varname }
 let_r = { "let " }
 
 var = { let_r? ~ varname }
+
+return_stmt = { "return " ~ expr }
 
 op = _{ add | sub | mul | inv }
     add = { "+" }
