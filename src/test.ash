@@ -16,4 +16,6 @@ let z = b - a + c / 2 * 4
 
 a = a * z + c / z * z * z * z
 
-return a
+let out = helloworld()
+
+return out

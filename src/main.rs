@@ -1,6 +1,6 @@
+use camino::Utf8PathBuf;
 use clap::{arg, Command};
 use compiler::Compiler;
-use std::path::PathBuf;
 use triton_vm::prelude::*;
 
 mod compiler;
@@ -13,7 +13,7 @@ fn cli() -> Command {
         .subcommand_required(false)
         .arg_required_else_help(true)
         .arg(arg!(<ASM_PATH> "The source entrypoint"))
-    // .arg(arg!(<INCLUDE_PATH> "The include path (recursive)"))
+        .arg(arg!(<INCLUDE_PATH> "The include path (recursive)"))
 }
 
 fn main() {
@@ -22,11 +22,14 @@ fn main() {
     let source_path = matches
         .get_one::<String>("ASM_PATH")
         .expect("Failed to get ASM_PATH");
-    // let include_path = matches.get_one::<String>("INCLUDE_PATH").expect("Failed to get INCLUDE_PATH");
+    let include_path = matches
+        .get_one::<String>("INCLUDE_PATH")
+        .expect("Failed to get INCLUDE_PATH");
     let mut compiler = Compiler::new();
-    compiler.include(PathBuf::from(source_path));
+    compiler.include(Utf8PathBuf::from(source_path));
+    compiler.include(Utf8PathBuf::from(include_path));
 
-    let asm = compiler.compile(&PathBuf::from(source_path));
+    let asm = compiler.compile(&Utf8PathBuf::from(source_path));
 
     let instructions = triton_vm::parser::parse(&asm).unwrap();
     let l_instructions = triton_vm::parser::to_labelled_instructions(instructions.as_slice());

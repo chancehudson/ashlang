@@ -19,7 +19,7 @@ atom = { literal_dec | varname }
 // declared for the first time
 let_r = { "let " }
 var = { let_r? ~ varname }
-var_def = { var ~ "=" ~ expr }
+var_def = { var ~ "=" ~ (function_call | expr)}
 
 return_stmt = { "return " ~ expr }
 
@@ -32,3 +32,5 @@ op = _{ add | sub | mul | inv }
     inv = { "/" }
 
 expr = { atom ~ (op ~ expr)* }
+
+function_call = { varname ~ "()" }

@@ -17,6 +17,9 @@ pub struct VM {
     pub consts: HashMap<String, u64>,
     // compiled assembly
     pub asm: Vec<String>,
+    // the compiler needs this stat
+    // it's not used in vm
+    pub fn_calls: HashMap<String, u64>,
 }
 
 impl VM {
@@ -26,6 +29,7 @@ impl VM {
             stack: Vec::new(),
             asm: Vec::new(),
             consts: HashMap::new(),
+            fn_calls: HashMap::new(),
         }
     }
 
@@ -54,6 +58,9 @@ impl VM {
                 rhs: _,
             } => {
                 panic!("numerical operations in constants is not yet supported");
+            }
+            Expr::FnCall(_name) => {
+                panic!("constant expression functions not implemented");
             }
         }
     }
@@ -92,6 +99,14 @@ impl VM {
 
     pub fn eval(&mut self, expr: Expr) {
         let mut asm = match &expr {
+            Expr::FnCall(name) => {
+                if let Some(c) = self.fn_calls.get_mut(name) {
+                    *c += 1;
+                } else {
+                    self.fn_calls.insert(name.clone(), 1);
+                }
+                vec![format!("call {name}")]
+            }
             Expr::Val(name) => {
                 // if the val is a constant we push to stack
                 if self.vars.contains_key(name) {
@@ -101,7 +116,7 @@ impl VM {
                     self.stack.push(name.clone());
                     vec![format!("push {}", self.consts.get(name).unwrap())]
                 } else {
-                    panic!("unknown variable");
+                    panic!("unknown variable: {name}");
                 }
             }
             Expr::Lit(v) => {
@@ -137,9 +152,5 @@ impl VM {
             }
         };
         self.asm.append(&mut asm);
-    }
-
-    pub fn halt(&mut self) {
-        self.asm.push("halt".to_string());
     }
 }

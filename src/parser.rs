@@ -19,6 +19,7 @@ pub enum AstNode {
 pub enum Expr {
     Lit(u64),
     Val(String),
+    FnCall(String),
     NumOp {
         lhs: Box<Expr>,
         op: Op,
@@ -107,12 +108,18 @@ fn build_ast_from_pair(pair: pest::iterators::Pair<Rule>) -> AstNode {
 
 fn build_expr_from_pair(pair: pest::iterators::Pair<Rule>) -> Expr {
     match pair.as_rule() {
+        Rule::function_call => {
+            let mut pair = pair.into_inner();
+            let next = pair.next().unwrap();
+            Expr::FnCall(next.as_str().to_string())
+        }
         Rule::atom => {
             let mut pair = pair.into_inner();
             let n = pair.next().unwrap();
             match n.as_rule() {
                 Rule::varname => Expr::Val(n.as_str().to_string()),
                 Rule::literal_dec => Expr::Lit(n.as_str().parse::<u64>().unwrap()),
+                Rule::function_call => Expr::FnCall(n.as_str().to_string()),
                 _ => panic!("invalid atom"),
             }
             // Expr::Val(pair.next().unwrap().as_str().to_string())
