@@ -3,7 +3,6 @@ use camino::Utf8PathBuf;
 use std::{collections::HashMap, fs};
 
 use crate::vm::VM;
-
 pub struct Compiler {
     path_to_fn: HashMap<Utf8PathBuf, String>,
     fn_to_path: HashMap<String, Utf8PathBuf>,
@@ -20,6 +19,12 @@ impl Compiler {
             fn_to_path: HashMap::new(),
             fn_to_ast: HashMap::new(),
         }
+    }
+
+    pub fn builtins() -> HashMap<String, Vec<String>> {
+        let mut out = HashMap::new();
+        out.insert("crash".to_string(), vec!["crash:".to_string()]);
+        out
     }
 
     pub fn include(&mut self, path: Utf8PathBuf) {
@@ -127,6 +132,7 @@ impl Compiler {
         // tracks total number of includes for a fn in all sources
         let mut included_fn: HashMap<String, u64> = HashMap::new();
         let mut written_fn: HashMap<String, bool> = HashMap::new();
+        let builtins = Compiler::builtins();
 
         // step 1: compile the entrypoint to assembly
         let mut asm = self.ast_to_asm(ast, &mut included_fn);
@@ -141,6 +147,9 @@ impl Compiler {
             let mut compiled_fns: Vec<String> = Vec::new();
             let current_fn: Vec<String> = included_fn.keys().cloned().collect();
             for fn_name in current_fn {
+                if builtins.contains_key(&fn_name) {
+                    continue;
+                }
                 let parsed = self.parse_fn(&fn_name);
                 let mut dep_asm = self.ast_to_asm(parsed, &mut included_fn);
                 asm.push("\n".to_string());
@@ -153,7 +162,13 @@ impl Compiler {
                 written_fn.insert(fn_name.clone(), true);
             }
         }
-
+        // function to cause the program to end without
+        // a halt instruction causing a crash
+        for asms in builtins.values() {
+            asm.push("\n".to_string());
+            let mut a = asms.clone();
+            asm.append(&mut a);
+        }
         // prints the assembly
         for l in &asm {
             println!("{}", l);

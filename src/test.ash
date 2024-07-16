@@ -11,4 +11,6 @@ let c = Z * 10000
 
 #let a = helloworld()
 
+#let zzz = crash()
+
 return helloworld()
