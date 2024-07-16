@@ -5,6 +5,7 @@ use triton_vm::prelude::*;
 
 mod compiler;
 mod parser;
+mod vm;
 
 fn cli() -> Command {
     Command::new("acc")

@@ -4,7 +4,7 @@ use pest::Parser;
 use pest_derive::Parser;
 
 #[derive(Parser)]
-#[grammar = "parser/grammar.pest"] // relative to project `src`
+#[grammar = "grammar.pest"] // relative to project `src`
 struct AshParser;
 
 #[derive(Debug, Clone)]

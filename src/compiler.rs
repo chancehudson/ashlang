@@ -2,8 +2,7 @@ use crate::parser::{parse, AstNode, Expr};
 use std::path::PathBuf;
 use std::{collections::HashMap, fs};
 
-mod vm;
-use vm::VM;
+use crate::vm::VM;
 
 pub struct Compiler {
     path_to_fn: HashMap<PathBuf, String>,
