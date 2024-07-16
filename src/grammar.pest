@@ -21,7 +21,7 @@ let_r = { "let " }
 var = { let_r? ~ varname }
 var_def = { var ~ "=" ~ (function_call | expr)}
 
-return_stmt = { "return " ~ expr }
+return_stmt = { "return " ~ (function_call | expr) }
 
 const_def = { "const " ~ varname ~ "=" ~ expr }
 

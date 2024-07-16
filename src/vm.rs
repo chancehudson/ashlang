@@ -66,8 +66,8 @@ impl VM {
     }
 
     pub fn return_expr(&mut self, expr: Expr) {
+        // we leave the returned value on the top of the stack
         self.eval(expr);
-        self.asm.push(format!("write_io 1"));
     }
 
     pub fn let_var(&mut self, name: String, expr: Expr) {
@@ -91,7 +91,7 @@ impl VM {
 
     pub fn stack_index(&self, var_name: &String) -> usize {
         if let Some(var) = self.vars.get(var_name) {
-            (self.stack.len() - var) + 1
+            self.stack.len() - var
         } else {
             panic!("unknown var");
         }
@@ -105,6 +105,7 @@ impl VM {
                 } else {
                     self.fn_calls.insert(name.clone(), 1);
                 }
+                self.stack.push(name.clone());
                 vec![format!("call {name}")]
             }
             Expr::Val(name) => {

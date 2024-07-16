@@ -11,6 +11,8 @@ pub struct Compiler {
     fn_to_ast: HashMap<String, Vec<AstNode>>,
 }
 
+// responsible for transforming an ast
+// into an assembly String using vm
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
@@ -57,13 +59,16 @@ impl Compiler {
         }
     }
 
+    // transforms an ast into compiled assembly
+    // accepts a reference to a map of function names
+    // any functions called in the ast will be added
+    // to the map
     fn ast_to_asm(
         &mut self,
         ast: Vec<AstNode>,
         included_fn: &mut HashMap<String, u64>,
     ) -> Vec<String> {
         let mut vm = VM::new();
-        // stage one, build the
         for v in ast {
             match v {
                 AstNode::Stmt(name, is_let, expr) => {
