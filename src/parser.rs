@@ -13,7 +13,7 @@ pub enum AstNode {
     Stmt(String, bool, Expr),
     Rtrn(Expr),
     Const(String, Expr),
-    If(Expr, BoolOp, Expr, Box<Vec<AstNode>>),
+    If(Expr, Vec<AstNode>),
 }
 
 #[derive(Debug, Clone)]
@@ -24,6 +24,11 @@ pub enum Expr {
     NumOp {
         lhs: Box<Expr>,
         op: Op,
+        rhs: Box<Expr>,
+    },
+    BoolOp {
+        lhs: Box<Expr>,
+        bool_op: BoolOp,
         rhs: Box<Expr>,
     },
 }
@@ -136,7 +141,14 @@ fn build_ast_from_pair(pair: pest::iterators::Pair<Rule>) -> AstNode {
                     _ => panic!("invalid expression in block"),
                 })
                 .collect();
-            If(expr1, bool_op, expr2, Box::new(block_ast))
+            If(
+                Expr::BoolOp {
+                    lhs: Box::new(expr1),
+                    bool_op,
+                    rhs: Box::new(expr2),
+                },
+                block_ast,
+            )
         }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
