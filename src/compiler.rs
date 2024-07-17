@@ -98,6 +98,9 @@ impl Compiler {
                     // Expr::Lit and Expr::Val containing other consts
                     vm.const_var(name, expr);
                 }
+                AstNode::If(expr1, bool_op, expr2, block_ast) => {
+                    println!("not implemented");
+                }
             }
         }
         for (name, count) in vm.fn_calls {

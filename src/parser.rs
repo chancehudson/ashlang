@@ -13,6 +13,7 @@ pub enum AstNode {
     Stmt(String, bool, Expr),
     Rtrn(Expr),
     Const(String, Expr),
+    If(Expr, BoolOp, Expr, Box<Vec<AstNode>>),
 }
 
 #[derive(Debug, Clone)]
@@ -25,6 +26,14 @@ pub enum Expr {
         op: Op,
         rhs: Box<Expr>,
     },
+}
+
+#[derive(Debug, Clone)]
+pub enum BoolOp {
+    Equal,
+    NotEqual,
+    GreaterThan,
+    LessThan,
 }
 
 #[derive(Debug, Clone)]
@@ -101,6 +110,33 @@ fn build_ast_from_pair(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let name = pair.next().unwrap();
             let expr = pair.next().unwrap();
             Const(name.as_str().to_string(), build_expr_from_pair(expr))
+        }
+        Rule::if_stmt => {
+            let mut pair = pair.into_inner();
+            let bool_expr = pair.next().unwrap();
+            let mut bool_expr_pair = bool_expr.into_inner();
+            let expr1 = build_expr_from_pair(bool_expr_pair.next().unwrap());
+            let bool_op = match bool_expr_pair.next().unwrap().as_rule() {
+                Rule::equal => BoolOp::Equal,
+                Rule::not_equal => BoolOp::NotEqual,
+                Rule::gt => BoolOp::GreaterThan,
+                Rule::lt => BoolOp::LessThan,
+                _ => panic!("invalid bool op"),
+            };
+            let expr2 = build_expr_from_pair(bool_expr_pair.next().unwrap());
+            let block = pair.next().unwrap();
+            let block_inner = block.into_inner();
+            let block_ast = block_inner
+                .map(|v| match v.as_rule() {
+                    Rule::stmt => {
+                        let mut pair = v.into_inner();
+                        let next = pair.next().unwrap();
+                        build_ast_from_pair(next)
+                    }
+                    _ => panic!("invalid expression in block"),
+                })
+                .collect();
+            If(expr1, bool_op, expr2, Box::new(block_ast))
         }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
