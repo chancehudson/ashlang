@@ -100,9 +100,14 @@ impl Compiler {
                 }
                 AstNode::If(expr1, bool_op, expr2, block_ast) => {
                     println!("not implemented");
+                    // let block_vm = VM::new();
+                    // fill variables from existing vm?
+
+                    // let asm = ast_to_asm()
                 }
             }
         }
+        vm.return_if_needed();
         for (name, count) in vm.fn_calls {
             if let Some(c) = included_fn.get_mut(&name) {
                 *c += count;

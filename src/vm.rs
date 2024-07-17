@@ -1,4 +1,4 @@
-use crate::parser::{Expr, Op};
+use crate::parser::{AstNode, Expr, Op};
 use std::collections::HashMap;
 
 /**
@@ -20,6 +20,7 @@ pub struct VM {
     // the compiler needs this stat
     // it's not used in vm
     pub fn_calls: HashMap<String, u64>,
+    pub has_returned: bool,
 }
 
 impl VM {
@@ -30,6 +31,7 @@ impl VM {
             asm: Vec::new(),
             consts: HashMap::new(),
             fn_calls: HashMap::new(),
+            has_returned: false,
         }
     }
 
@@ -68,6 +70,26 @@ impl VM {
     pub fn return_expr(&mut self, expr: Expr) {
         // we leave the returned value on the top of the stack
         self.eval(expr);
+        // when we're done executing a block we clear
+        // everything on the stack so that when we return
+        // to the previous position the stack is in a
+        // predictable state
+        if self.vars.len() == 0 {
+            self.has_returned = true;
+            return;
+        }
+        self.asm.push(format!("swap {}", self.vars.len()));
+        self.asm.push(format!("pop {}", self.vars.len()));
+        self.has_returned = true;
+    }
+
+    pub fn return_if_needed(&mut self) {
+        if self.has_returned || self.vars.len() == 0 {
+            return;
+        }
+        self.asm.push(format!("pop {}", self.vars.len()));
+        self.asm.push("push 0".to_string());
+        self.has_returned = true;
     }
 
     pub fn let_var(&mut self, name: String, expr: Expr) {
@@ -105,14 +127,19 @@ impl VM {
                 } else {
                     self.fn_calls.insert(name.clone(), 1);
                 }
+                // we push 1 element onto the virtual stack
+                // this element is the return value of the function
+                // or 0 if the function does not explicitly
+                // return a value
                 self.stack.push(name.clone());
                 vec![format!("call {name}")]
             }
             Expr::Val(name) => {
                 // if the val is a constant we push to stack
                 if self.vars.contains_key(name) {
+                    let out = vec![format!("dup {}", self.stack_index(name))];
                     self.stack.push(name.clone());
-                    vec![format!("dup {}", self.stack_index(name))]
+                    out
                 } else if self.consts.contains_key(name) {
                     self.stack.push(name.clone());
                     vec![format!("push {}", self.consts.get(name).unwrap())]
