@@ -120,6 +120,7 @@ impl Compiler {
                     let mut block_asm: Vec<String> = Vec::new();
                     block_asm.push(format!("{block_name}:"));
                     block_asm.append(&mut block_vm.asm);
+                    block_asm.push("return".to_string());
                     self.block_fn_asm.push(block_asm);
                 }
             }
@@ -156,6 +157,9 @@ impl Compiler {
         let mut included_fn: HashMap<String, u64> = HashMap::new();
         let mut written_fn: HashMap<String, bool> = HashMap::new();
         let builtins = Compiler::builtins();
+        for (name, _v) in builtins.iter() {
+            included_fn.insert(name.clone(), 0);
+        }
 
         // step 1: compile the entrypoint to assembly
         let mut vm = VM::new();

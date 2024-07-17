@@ -13,8 +13,9 @@ let c = Z * 10000
 
 #let zzz = crash()
 
-if c == 50001 {
-    let j = crash()
+if c == 50000 {
+    let j = 1190
+    #let j = crash()
 }
 
 return helloworld()
