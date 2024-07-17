@@ -8,6 +8,8 @@ pub struct Compiler {
     fn_to_path: HashMap<String, Utf8PathBuf>,
     #[allow(unused)]
     fn_to_ast: HashMap<String, Vec<AstNode>>,
+    block_fn_asm: Vec<Vec<String>>,
+    block_counter: usize,
 }
 
 // responsible for transforming an ast
@@ -18,6 +20,8 @@ impl Compiler {
             path_to_fn: HashMap::new(),
             fn_to_path: HashMap::new(),
             fn_to_ast: HashMap::new(),
+            block_fn_asm: Vec::new(),
+            block_counter: 0,
         }
     }
 
@@ -72,8 +76,8 @@ impl Compiler {
         &mut self,
         ast: Vec<AstNode>,
         included_fn: &mut HashMap<String, u64>,
-    ) -> Vec<String> {
-        let mut vm = VM::new();
+        vm: &mut VM,
+    ) {
         for v in ast {
             match v {
                 AstNode::Stmt(name, is_let, expr) => {
@@ -98,16 +102,35 @@ impl Compiler {
                     // Expr::Lit and Expr::Val containing other consts
                     vm.const_var(name, expr);
                 }
+                AstNode::If(expr, block_ast) => {
+                    vm.eval(expr);
+                    let block_name = format!("block_{}", self.block_counter);
+                    self.block_counter += 1;
+                    vm.call_block(&block_name);
+                    // vm.eval(expr1);
+                    // vm.eval(expr2);
+                    // push 0 to the stack based on the bool_op
+                    let mut block_vm = VM::from_vm(&(*vm));
+                    // let block_asm =
+                    block_vm.begin_block();
+                    //
+                    self.ast_to_asm(block_ast, included_fn, &mut block_vm);
+
+                    block_vm.end_block();
+                    let mut block_asm: Vec<String> = Vec::new();
+                    block_asm.push(format!("{block_name}:"));
+                    block_asm.append(&mut block_vm.asm);
+                    self.block_fn_asm.push(block_asm);
+                }
             }
         }
-        for (name, count) in vm.fn_calls {
+        for (name, count) in vm.fn_calls.clone() {
             if let Some(c) = included_fn.get_mut(&name) {
                 *c += count;
             } else {
                 included_fn.insert(name, count);
             }
         }
-        vm.asm
     }
 
     pub fn parse_fn(&self, fn_name: &String) -> Vec<AstNode> {
@@ -135,26 +158,31 @@ impl Compiler {
         let builtins = Compiler::builtins();
 
         // step 1: compile the entrypoint to assembly
-        let mut asm = self.ast_to_asm(ast, &mut included_fn);
+        let mut vm = VM::new();
+        self.ast_to_asm(ast, &mut included_fn, &mut vm);
+        let mut asm = vm.asm.clone();
         asm.push("halt".to_string());
 
         // step 2: compile each dependency function
         // step 2a: calculate function dependence from each file
         loop {
-            if included_fn.len() == written_fn.len() {
+            if (included_fn.len() - builtins.len()) == written_fn.len() {
                 break;
             }
+            println!("{} {}", included_fn.len(), written_fn.len());
             let mut compiled_fns: Vec<String> = Vec::new();
             let current_fn: Vec<String> = included_fn.keys().cloned().collect();
             for fn_name in current_fn {
                 if builtins.contains_key(&fn_name) {
                     continue;
                 }
+                let mut vm = VM::new();
                 let parsed = self.parse_fn(&fn_name);
-                let mut dep_asm = self.ast_to_asm(parsed, &mut included_fn);
+                self.ast_to_asm(parsed, &mut included_fn, &mut vm);
+                vm.return_if_needed();
                 asm.push("\n".to_string());
                 asm.push(format!("{fn_name}:"));
-                asm.append(&mut dep_asm);
+                asm.append(&mut vm.asm);
                 asm.push("return".to_string());
                 compiled_fns.push(fn_name.clone());
             }
@@ -162,6 +190,12 @@ impl Compiler {
                 written_fn.insert(fn_name.clone(), true);
             }
         }
+        for v in self.block_fn_asm.iter() {
+            let mut block_asm = v.clone();
+            asm.push("\n".to_string());
+            asm.append(&mut block_asm);
+        }
+
         // function to cause the program to end without
         // a halt instruction causing a crash
         for asms in builtins.values() {

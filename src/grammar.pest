@@ -3,7 +3,7 @@ COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
 
 program = _{ SOI ~ "\n"* ~ fn_header? ~ "\n"* ~ (stmt ~ "\n"+) * ~ (return_stmt ~ "\n"?)? ~ EOI }
 
-stmt = { var_def | const_def }
+stmt = { var_def | const_def | if_stmt }
 
 fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") ~ "\n" }
 
@@ -34,3 +34,15 @@ op = _{ add | sub | mul | inv }
 expr = { atom ~ (op ~ expr)* }
 
 function_call = { varname ~ "()" }
+
+bool_op = _{ equal | not_equal | gt | lt }
+    equal = { "==" }
+    not_equal = { "!=" }
+    gt = { ">" }
+    lt = { "<" }
+
+bool_expr = { expr ~ bool_op ~ expr }
+
+if_stmt = { "if " ~ bool_expr ~ block }
+
+block = { "{" ~ "\n"* ~ (stmt ~ "\n")* ~ "\n"* ~ "}" ~ "\n" }
