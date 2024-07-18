@@ -78,6 +78,10 @@ impl VM {
             .filter(|(_k, v)| v.block_index == self.block_depth)
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect::<Vec<(String, Var)>>();
+        if entries_to_remove.is_empty() {
+            self.block_depth -= 1;
+            return;
+        }
         self.asm.push(format!("pop {}", entries_to_remove.len()));
         // TODO: don't iterate here
         for _ in 0..entries_to_remove.len() {

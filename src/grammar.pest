@@ -45,4 +45,4 @@ bool_expr = { expr ~ bool_op ~ expr }
 
 if_stmt = { "if " ~ bool_expr ~ block }
 
-block = { "{" ~ "\n"* ~ (stmt ~ "\n")* ~ "\n"* ~ "}" ~ "\n" }
+block = { "{" ~ "\n"* ~ (stmt ~ "\n")* ~ "\n"* ~ "}" }
