@@ -1,5 +1,5 @@
 use camino::Utf8PathBuf;
-use clap::{arg, Command};
+use clap::{arg, Arg, Command};
 use compiler::Compiler;
 use triton_vm::prelude::*;
 
@@ -13,21 +13,33 @@ fn cli() -> Command {
         .subcommand_required(false)
         .arg_required_else_help(true)
         .arg(arg!(<ASM_PATH> "The source entrypoint"))
-        .arg(arg!(<INCLUDE_PATH> "The include path (recursive)"))
+        .arg(
+            Arg::new("include")
+                .short('i')
+                .required(false)
+                .help("specify a path to be recursively included")
+                .action(clap::ArgAction::Append),
+        )
 }
 
 fn main() {
     let matches = cli().get_matches();
-
     let source_path = matches
         .get_one::<String>("ASM_PATH")
         .expect("Failed to get ASM_PATH");
-    let include_path = matches
-        .get_one::<String>("INCLUDE_PATH")
-        .expect("Failed to get INCLUDE_PATH");
+    let include_paths = matches
+        .get_many::<String>("include")
+        .unwrap_or_default()
+        .map(|v| v.as_str())
+        .collect::<Vec<_>>();
     let mut compiler = Compiler::new();
     compiler.include(Utf8PathBuf::from(source_path));
-    compiler.include(Utf8PathBuf::from(include_path));
+    for p in include_paths {
+        if p.is_empty() {
+            continue;
+        }
+        compiler.include(Utf8PathBuf::from(p));
+    }
 
     let asm = compiler.compile(&Utf8PathBuf::from(source_path));
 

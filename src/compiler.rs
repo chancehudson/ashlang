@@ -16,7 +16,7 @@ pub struct Compiler {
  * The Compiler struct handles reading filepaths,
  * parsing files, recursively loading dependencies,
  * and then combining functions to form the final asm.
- * 
+ *
  * Compiler uses many VM instances to compile individual functions.
  * Compiler is responsible for structuring each function asm into
  * a full output file.
