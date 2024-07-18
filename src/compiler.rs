@@ -1,8 +1,8 @@
 use crate::parser::{parse, AstNode};
+use crate::vm::VM;
 use camino::Utf8PathBuf;
 use std::{collections::HashMap, fs};
 
-use crate::vm::VM;
 pub struct Compiler {
     path_to_fn: HashMap<Utf8PathBuf, String>,
     fn_to_path: HashMap<String, Utf8PathBuf>,
@@ -10,6 +10,7 @@ pub struct Compiler {
     fn_to_ast: HashMap<String, Vec<AstNode>>,
     block_fn_asm: Vec<Vec<String>>,
     block_counter: usize,
+    pub print_asm: bool,
 }
 
 /**
@@ -29,6 +30,7 @@ impl Compiler {
             fn_to_ast: HashMap::new(),
             block_fn_asm: Vec::new(),
             block_counter: 0,
+            print_asm: false,
         }
     }
 
@@ -228,9 +230,11 @@ impl Compiler {
             let mut a = asms.clone();
             asm.append(&mut a);
         }
-        // prints the assembly
-        for l in &asm {
-            println!("{}", l);
+        if self.print_asm {
+            // prints the assembly
+            for l in &asm {
+                println!("{}", l);
+            }
         }
         asm.clone().join("\n")
     }

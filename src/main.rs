@@ -16,9 +16,18 @@ fn cli() -> Command {
         .arg(
             Arg::new("include")
                 .short('i')
+                .long("include")
                 .required(false)
                 .help("specify a path to be recursively included")
                 .action(clap::ArgAction::Append),
+        )
+        .arg(
+            Arg::new("print_asm")
+                .short('v')
+                .long("asm")
+                .required(false)
+                .num_args(0)
+                .help("print the compiled asm before proving"),
         )
 }
 
@@ -41,6 +50,7 @@ fn main() {
         compiler.include(Utf8PathBuf::from(p));
     }
 
+    compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
     let asm = compiler.compile(&Utf8PathBuf::from(source_path));
 
     let instructions = triton_vm::parser::parse(&asm).unwrap();
