@@ -29,5 +29,5 @@ jobs:
               with:
                   toolchain: stable
                   override: true
-            - name: Compile a program and build a STARK
-              run: cargo run ./src/test.ash ./src
+            - name: Run test vectors
+              run: sh test.sh
