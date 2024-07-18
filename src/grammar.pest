@@ -1,40 +1,24 @@
-WHITESPACE = _{ " " }
-COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
+/**
+ * This file is organized top to bottom in order
+ * of decreasing specificity. Similar types are
+ * grouped near each other when possible.
+*/
 
 program = _{ SOI ~ "\n"* ~ (fn_header ~ "\n")? ~ "\n"* ~ (stmt ~ "\n"+) * ~ (return_stmt ~ "\n"?)? ~ EOI }
 
+fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
 stmt = { var_def | const_def | if_stmt }
 
-fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
-
-char = _{ ASCII_ALPHANUMERIC | "_" }
-
-varname = @{ char+ }
-literal_dec = @{ ASCII_DIGIT+ }
-
-atom = { literal_dec | varname }
-
-// this let_r match is needed to
-// determine if a variable is being
-// declared for the first time
-let_r = { "let " }
-var = { let_r? ~ varname }
-var_def = { var ~ "=" ~ (function_call | expr)}
-
+expr = { atom ~ (op ~ expr)* }
 return_stmt = { "return " ~ (function_call | expr) }
+function_call = { varname ~ fn_header }
 
-const_def = { "const " ~ varname ~ "=" ~ expr }
 
 op = _{ add | sub | mul | inv }
     add = { "+" }
     sub = { "-" }
     mul = { "*" }
     inv = { "/" }
-
-expr = { atom ~ (op ~ expr)* }
-
-function_call = { varname ~ fn_header }
-
 bool_op = _{ equal | not_equal | gt | lt }
     equal = { "==" }
     not_equal = { "!=" }
@@ -42,7 +26,25 @@ bool_op = _{ equal | not_equal | gt | lt }
     lt = { "<" }
 
 bool_expr = { expr ~ bool_op ~ expr }
-
 if_stmt = { "if " ~ bool_expr ~ block }
-
 block = { "{" ~ "\n"* ~ (stmt ~ "\n")* ~ "\n"* ~ "}" }
+
+// this let_r match is needed to
+// determine if a variable is being
+// declared for the first time
+var_def = { var ~ "=" ~ (function_call | expr)}
+let_r = { "let " }
+const_def = { "const " ~ varname ~ "=" ~ expr }
+
+var = { let_r? ~ varname }
+
+atom = { literal_dec | varname }
+
+literal_dec = @{ ASCII_DIGIT+ }
+
+varname = @{ char+ }
+
+char = _{ ASCII_ALPHANUMERIC | "_" }
+
+WHITESPACE = _{ " " }
+COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
