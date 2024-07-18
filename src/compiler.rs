@@ -1,4 +1,4 @@
-use crate::parser::{parse, AstNode, Expr};
+use crate::parser::{parse, AstNode};
 use camino::Utf8PathBuf;
 use std::{collections::HashMap, fs};
 
@@ -173,7 +173,6 @@ impl Compiler {
             if (included_fn.len() - builtins.len()) == written_fn.len() {
                 break;
             }
-            println!("{} {}", included_fn.len(), written_fn.len());
             let mut compiled_fns: Vec<String> = Vec::new();
             let current_fn: Vec<String> = included_fn.keys().cloned().collect();
             for fn_name in current_fn {
