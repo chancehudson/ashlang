@@ -12,8 +12,15 @@ pub struct Compiler {
     block_counter: usize,
 }
 
-// responsible for transforming an ast
-// into an assembly String using vm
+/**
+ * The Compiler struct handles reading filepaths,
+ * parsing files, recursively loading dependencies,
+ * and then combining functions to form the final asm.
+ * 
+ * Compiler uses many VM instances to compile individual functions.
+ * Compiler is responsible for structuring each function asm into
+ * a full output file.
+ */
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
@@ -25,12 +32,25 @@ impl Compiler {
         }
     }
 
+    // builtin functions that are globally available
+    //
+    // files may not use these strings as names
     pub fn builtins() -> HashMap<String, Vec<String>> {
         let mut out = HashMap::new();
+
+        // cause execution to fall off the bottom without halting
         out.insert("crash".to_string(), vec!["crash:".to_string()]);
+
         out
     }
 
+    // include a path in the build
+    //
+    // if the include is a file, the function name is calculated
+    // and stored in the local instance
+    //
+    // if the include is a directory, the directory is recursively
+    // walked and passed to this function
     pub fn include(&mut self, path: Utf8PathBuf) {
         // first check if it's a directory
         let metadata = fs::metadata(&path)
@@ -134,6 +154,8 @@ impl Compiler {
         }
     }
 
+    // loads, parses, and returns an ashlang function by name
+    // returns the function as an ast
     pub fn parse_fn(&self, fn_name: &String) -> Vec<AstNode> {
         if let Some(file_path) = self.fn_to_path.get(fn_name) {
             let unparsed_file = std::fs::read_to_string(file_path)
@@ -193,14 +215,14 @@ impl Compiler {
                 written_fn.insert(fn_name.clone(), true);
             }
         }
+        // step 3: add blocks to file
         for v in self.block_fn_asm.iter() {
             let mut block_asm = v.clone();
             asm.push("\n".to_string());
             asm.append(&mut block_asm);
         }
 
-        // function to cause the program to end without
-        // a halt instruction causing a crash
+        // step 4: add builtin functions
         for asms in builtins.values() {
             asm.push("\n".to_string());
             let mut a = asms.clone();
