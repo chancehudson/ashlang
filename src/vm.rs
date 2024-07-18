@@ -2,11 +2,19 @@ use crate::parser::{BoolOp, Expr, Op};
 use std::collections::HashMap;
 
 #[derive(Clone)]
+
 pub struct Var {
     stack_index: usize,
     block_index: usize,
 }
 /**
+ * This structure is used to track a simple model
+ * of the VM being executed. An instance of the
+ * top of the stack is stored with variables at fixed
+ * indices
+ *
+ * MISC TODO ITEMS:
+ *
  * Iterate over the AST to see what variables
  * are accessed the most
  *
@@ -19,13 +27,20 @@ pub struct VM {
     // offsets are based on zero so they stay correct
     // as items are pushed/popped on the stack
     pub vars: HashMap<String, Var>,
+    // constants stored keyed to their value
     pub consts: HashMap<String, u64>,
     // compiled assembly
     pub asm: Vec<String>,
+    // map of function name to number of invocations
     // the compiler needs this stat
     // it's not used in vm
     pub fn_calls: HashMap<String, u64>,
+    // track whether the current vm has returned
+    // this means the stack is cleared of variables
     pub has_returned: bool,
+    // tracks the current logic block depth
+    // the executor can see variables in higher blocks
+    // but not lower blocks
     pub block_depth: usize,
 }
 
@@ -55,17 +70,15 @@ impl VM {
     }
 
     // begin execution of a block
-    // we'll track any variables we
-    // create during this block
-    // and clear them at the end
-    //
-    // unlike executing a normal function
-    // we need to be able to access
-    // the existing stack
+    // we'll track any variables created during
+    // execution and remove them from the stack
+    // in `end_block`
     pub fn begin_block(&mut self) {
         self.block_depth += 1;
     }
 
+    // remove variables from the stack and the
+    // local vm
     pub fn end_block(&mut self) {
         if self.block_depth == 0 {
             panic!("cannot exit execution root");
@@ -93,6 +106,8 @@ impl VM {
         self.block_depth -= 1;
     }
 
+    // define a constant that will be available in
+    // the current VM object
     pub fn const_var(&mut self, name: String, expr: Expr) {
         // check for duplicate var names
         if self.vars.contains_key(&name) || self.consts.contains_key(&name) {
@@ -132,6 +147,13 @@ impl VM {
         }
     }
 
+    // return a value to the calling function
+    //
+    // this is not a way to create a public output
+    // this is cross-function communication
+    //
+    // this function does not clean up the local variable
+    // state. e.g. this VM cannot be used after returning
     pub fn return_expr(&mut self, expr: Expr) {
         // we leave the returned value on the top of the stack
         self.eval(expr);
@@ -148,6 +170,11 @@ impl VM {
         self.has_returned = true;
     }
 
+    // if the VM has not yet returned this function
+    // pops any variables managed by the VM off the stack
+    //
+    // this function does not clean up the local variable
+    // state. e.g. this VM cannot be used after returning
     pub fn return_if_needed(&mut self) {
         if self.has_returned || self.vars.is_empty() {
             return;
@@ -157,6 +184,7 @@ impl VM {
         self.has_returned = true;
     }
 
+    // defines a new mutable variable in the current block scope
     pub fn let_var(&mut self, name: String, expr: Expr) {
         if self.vars.contains_key(&name) || self.consts.contains_key(&name) {
             panic!("var is not unique");
@@ -171,6 +199,13 @@ impl VM {
         );
     }
 
+    // defines a new variable that is being passed to a function
+    // such a variable must already exist on the top of the stack
+    // relative to the local stack
+    //
+    // e.g. if the local stack is empty the variable must be on the
+    // top of the stack. If the local stack has 1 entry the variable
+    // must be index 1 in the stark stack.
     pub fn fn_var(&mut self, name: String) {
         if self.vars.contains_key(&name) || self.consts.contains_key(&name) {
             panic!("var is not unique");
@@ -185,6 +220,12 @@ impl VM {
         );
     }
 
+    // assign a variable that already exists
+    //
+    // do this by evaluating the expression on
+    // the top of the stack, then swapping with
+    // the real location on the stack, and popping
+    // the swapped value
     pub fn set_var(&mut self, name: String, expr: Expr) {
         if !self.vars.contains_key(&name) {
             panic!("var does not exist {name}");
@@ -196,6 +237,10 @@ impl VM {
         self.stack.pop();
     }
 
+    // get the index of a variable in the execution stack
+    //
+    // the local stack tracks the relative positions of
+    // variables in the execution stack
     pub fn stack_index(&self, var_name: &String) -> usize {
         if let Some(var) = self.vars.get(var_name) {
             self.stack.len() - var.stack_index
@@ -204,10 +249,17 @@ impl VM {
         }
     }
 
+    // blocks are inserted into the asm as functions
+    // each block has a function name and is accessed
+    // with a jump (call)
     pub fn call_block(&mut self, block_name: &String) {
         self.asm.push(format!("call {block_name}"));
     }
 
+    // evaluate an AST expression
+    //
+    // manipulates the execution stack and tracks
+    // changes in the local stack
     pub fn eval(&mut self, expr: Expr) {
         let mut asm = match &expr {
             Expr::FnCall(name, vars) => {
