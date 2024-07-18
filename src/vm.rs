@@ -119,7 +119,7 @@ impl VM {
             } => {
                 panic!("numerical operations in constants is not yet supported");
             }
-            Expr::FnCall(_name) => {
+            Expr::FnCall(_name, _vars) => {
                 panic!("constant expression functions not implemented");
             }
             Expr::BoolOp {
@@ -171,6 +171,20 @@ impl VM {
         );
     }
 
+    pub fn fn_var(&mut self, name: String) {
+        if self.vars.contains_key(&name) || self.consts.contains_key(&name) {
+            panic!("var is not unique");
+        }
+        self.stack.push(name.clone());
+        self.vars.insert(
+            name,
+            Var {
+                stack_index: self.stack.len(),
+                block_index: self.block_depth,
+            },
+        );
+    }
+
     pub fn set_var(&mut self, name: String, expr: Expr) {
         if !self.vars.contains_key(&name) {
             panic!("var does not exist {name}");
@@ -196,11 +210,21 @@ impl VM {
 
     pub fn eval(&mut self, expr: Expr) {
         let mut asm = match &expr {
-            Expr::FnCall(name) => {
+            Expr::FnCall(name, vars) => {
                 if let Some(c) = self.fn_calls.get_mut(name) {
                     *c += 1;
                 } else {
                     self.fn_calls.insert(name.clone(), 1);
+                }
+                // we push these but don't pop them here
+                // the destination function will handle that
+                for v in vars.iter().rev().collect::<Vec<&String>>() {
+                    self.eval(Expr::Val(v.clone()));
+                }
+                // we pop them off the virtual stack assuming
+                // that the callee will do the _actual_ popping
+                for _ in 0..vars.len() {
+                    self.stack.pop();
                 }
                 // we push 1 element onto the virtual stack
                 // this element is the return value of the function

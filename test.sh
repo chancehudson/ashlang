@@ -4,5 +4,5 @@ set -e
 
 for entry in test-vectors/*
 do
-  cargo run $entry ./src
+  cargo run $entry ./stdlib
 done

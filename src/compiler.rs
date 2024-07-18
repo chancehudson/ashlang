@@ -89,7 +89,7 @@ impl Compiler {
                 }
                 AstNode::FnVar(vars) => {
                     for v in vars {
-                        vm.let_var(v, Expr::Lit(0));
+                        vm.fn_var(v);
                     }
                 }
                 AstNode::Rtrn(expr) => {

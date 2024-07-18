@@ -1,11 +1,11 @@
 WHITESPACE = _{ " " }
 COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
 
-program = _{ SOI ~ "\n"* ~ fn_header? ~ "\n"* ~ (stmt ~ "\n"+) * ~ (return_stmt ~ "\n"?)? ~ EOI }
+program = _{ SOI ~ "\n"* ~ (fn_header ~ "\n")? ~ "\n"* ~ (stmt ~ "\n"+) * ~ (return_stmt ~ "\n"?)? ~ EOI }
 
 stmt = { var_def | const_def | if_stmt }
 
-fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") ~ "\n" }
+fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
 
 char = _{ ASCII_ALPHANUMERIC | "_" }
 
@@ -33,7 +33,7 @@ op = _{ add | sub | mul | inv }
 
 expr = { atom ~ (op ~ expr)* }
 
-function_call = { varname ~ "()" }
+function_call = { varname ~ fn_header }
 
 bool_op = _{ equal | not_equal | gt | lt }
     equal = { "==" }

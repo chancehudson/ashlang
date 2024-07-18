@@ -2,20 +2,13 @@
 # instead argv() should be provided
 # by the implementation for the target
 # system
-(testparam)
+()
 
-const T = 5
-const Z = T
+let a = 10
+let b = 20
 
-let c = Z * 10000
+let c = addv(a, b)
 
-#let a = helloworld()
-
-#let zzz = crash()
-
-if c == 50000 {
-    let j = 1190
-    #let j = crash()
+if c != 30 {
+    let j = crash()
 }
-
-return helloworld()
