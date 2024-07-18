@@ -18,6 +18,8 @@ pub enum AstNode {
 
 #[derive(Debug, Clone)]
 pub enum Expr {
+    VecVec(Vec<Expr>),
+    VecLit(Vec<u64>),
     Lit(u64),
     Val(String),
     FnCall(String, Vec<String>),
@@ -81,6 +83,7 @@ pub fn parse(source: &str) -> Result<Vec<AstNode>, Error<Rule>> {
             _ => {}
         }
     }
+    println!("{:?}", ast);
 
     Ok(ast)
 }
@@ -156,6 +159,26 @@ fn build_ast_from_pair(pair: pest::iterators::Pair<Rule>) -> AstNode {
 
 fn build_expr_from_pair(pair: pest::iterators::Pair<Rule>) -> Expr {
     match pair.as_rule() {
+        Rule::vec => {
+            let mut pair = pair.into_inner();
+            let next = pair.next().unwrap();
+            if next.as_rule() == Rule::vec {
+                let mut out: Vec<Expr> = Vec::new();
+                out.push(build_expr_from_pair(next.clone()));
+                for next in pair {
+                    out.push(build_expr_from_pair(next.clone()));
+                    // next = pair.next().unwrap();
+                }
+                return Expr::VecVec(out);
+            } else {
+                let mut out: Vec<u64> = Vec::new();
+                out.push(next.as_str().parse::<u64>().unwrap());
+                for next in pair {
+                    out.push(next.as_str().parse::<u64>().unwrap());
+                }
+                return Expr::VecLit(out);
+            }
+        }
         Rule::function_call => {
             let mut pair = pair.into_inner();
             let next = pair.next().unwrap();

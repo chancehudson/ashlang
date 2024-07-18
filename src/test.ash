@@ -4,11 +4,9 @@
 # system
 ()
 
-let a = 10
-let b = 20
+let a = [ [20, 11 ], [912, 1204] ]
+let b = [
+    2124900,
+    1110214
+]
 
-let c = addv(a, b)
-
-if c != 30 {
-    let j = crash()
-}

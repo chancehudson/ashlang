@@ -2,10 +2,31 @@ use crate::parser::{BoolOp, Expr, Op};
 use std::collections::HashMap;
 
 #[derive(Clone)]
+enum VarLocation {
+    Stack,
+    Memory,
+}
+#[derive(Clone)]
 
 pub struct Var {
     stack_index: usize,
     block_index: usize,
+    location: VarLocation,
+    memory_index: usize,
+    // e.g. 2x3x4
+    // [
+    //   [
+    //     [[], [], [], []],
+    //     [[], [], [], []],
+    //     [[], [], [], []],
+    //   ],
+    //   [
+    //     [[], [], [], []],
+    //     [[], [], [], []],
+    //     [[], [], [], []],
+    //   ]
+    // ]
+    dimensions: Vec<usize>,
 }
 /**
  * This structure is used to track a simple model
@@ -42,6 +63,7 @@ pub struct VM {
     // the executor can see variables in higher blocks
     // but not lower blocks
     pub block_depth: usize,
+    pub memory_index: usize,
 }
 
 impl VM {
@@ -54,6 +76,7 @@ impl VM {
             fn_calls: HashMap::new(),
             has_returned: false,
             block_depth: 0,
+            memory_index: 0,
         }
     }
 
@@ -66,6 +89,7 @@ impl VM {
             fn_calls: HashMap::new(),
             has_returned: false,
             block_depth: vm.block_depth,
+            memory_index: vm.memory_index,
         }
     }
 
@@ -144,6 +168,8 @@ impl VM {
             } => {
                 panic!("boolean operations in constants is not supported");
             }
+            Expr::VecLit(_v) => panic!("vector literals are not supported in consts"),
+            Expr::VecVec(_v) => panic!("vector literals are not supported in consts"),
         }
     }
 
@@ -189,14 +215,42 @@ impl VM {
         if self.vars.contains_key(&name) || self.consts.contains_key(&name) {
             panic!("var is not unique");
         }
-        self.eval(expr);
-        self.vars.insert(
-            name,
-            Var {
-                stack_index: self.stack.len(),
-                block_index: self.block_depth,
-            },
-        );
+        match &expr {
+            Expr::VecLit(_) | Expr::VecVec(_) => {
+                let (dimensions, vec) = self.build_var_from_ast_vec(expr);
+                let v = Var {
+                    stack_index: 0,
+                    block_index: self.block_depth,
+                    location: VarLocation::Memory,
+                    memory_index: self.memory_index,
+                    dimensions,
+                };
+                self.vars.insert(name, v);
+                // put the variable in memory
+                for vv in vec.clone() {
+                    self.asm.push(format!("push {vv}"))
+                }
+                self.asm.push(format!("push {}", self.memory_index));
+                self.memory_index += vec.len();
+                for _ in vec {
+                    self.asm.push(format!("write_mem 1"))
+                }
+                self.asm.push("pop 1".to_string());
+            }
+            _ => {
+                self.eval(expr);
+                self.vars.insert(
+                    name,
+                    Var {
+                        stack_index: self.stack.len(),
+                        block_index: self.block_depth,
+                        dimensions: vec![1],
+                        location: VarLocation::Stack,
+                        memory_index: 0,
+                    },
+                );
+            }
+        }
     }
 
     // defines a new variable that is being passed to a function
@@ -216,6 +270,9 @@ impl VM {
             Var {
                 stack_index: self.stack.len(),
                 block_index: self.block_depth,
+                dimensions: vec![1],
+                location: VarLocation::Stack,
+                memory_index: 0,
             },
         );
     }
@@ -256,12 +313,58 @@ impl VM {
         self.asm.push(format!("call {block_name}"));
     }
 
+    pub fn extract_literals(&mut self, expr: Expr, out: &mut Vec<u64>) {
+        match expr {
+            Expr::VecVec(v) => {
+                for a in v {
+                    self.extract_literals(a, out);
+                }
+            }
+            Expr::VecLit(v) => {
+                let mut vv = v.clone();
+                out.append(&mut vv);
+            }
+            _ => panic!("asf"),
+        }
+    }
+
+    pub fn build_var_from_ast_vec(&mut self, expr: Expr) -> (Vec<usize>, Vec<u64>) {
+        // first iterate all the way through to the first literal
+        let mut dimensions: Vec<usize> = Vec::new();
+        let mut root_expr = expr.clone();
+        // first calculate the dimensions of the matrix
+        loop {
+            match root_expr {
+                Expr::VecVec(v) => {
+                    dimensions.push(v.len());
+                    root_expr = v[0].clone();
+                }
+                Expr::VecLit(v) => {
+                    dimensions.push(v.len());
+                    break;
+                }
+                _ => {}
+            }
+        }
+        // then pull all the literals into a 1 dimensional vec
+        let mut vec_rep: Vec<u64> = Vec::new();
+        self.extract_literals(expr, &mut vec_rep);
+        (dimensions, vec_rep)
+    }
+
     // evaluate an AST expression
     //
     // manipulates the execution stack and tracks
     // changes in the local stack
     pub fn eval(&mut self, expr: Expr) {
         let mut asm = match &expr {
+            Expr::VecLit(v) => {
+                vec![]
+            }
+            Expr::VecVec(v) => {
+                let (dimensions, vec) = self.build_var_from_ast_vec(expr);
+                vec![]
+            }
             Expr::FnCall(name, vars) => {
                 if let Some(c) = self.fn_calls.get_mut(name) {
                     *c += 1;
@@ -352,6 +455,7 @@ impl VM {
                     _ => panic!("boolean operation not supported"),
                 }
             }
+            _ => panic!("unexpect expression in vm eval"),
         };
         self.asm.append(&mut asm);
     }
