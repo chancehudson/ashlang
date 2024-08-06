@@ -12,7 +12,7 @@ fn cli() -> Command {
         .about("ashlang compiler")
         .subcommand_required(false)
         .arg_required_else_help(true)
-        .arg(arg!(<ASM_PATH> "The source entrypoint"))
+        .arg(arg!(<SRC_PATH> "The source entrypoint"))
         .arg(
             Arg::new("include")
                 .short('i')
@@ -34,8 +34,8 @@ fn cli() -> Command {
 fn main() {
     let matches = cli().get_matches();
     let source_path = matches
-        .get_one::<String>("ASM_PATH")
-        .expect("Failed to get ASM_PATH");
+        .get_one::<String>("SRC_PATH")
+        .expect("Failed to get SRC_PATH");
     let include_paths = matches
         .get_many::<String>("include")
         .unwrap_or_default()
