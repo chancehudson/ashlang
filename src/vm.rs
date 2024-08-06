@@ -225,6 +225,7 @@ impl VM {
                     memory_index: self.memory_index,
                     dimensions,
                 };
+                // println!("{}", vec);
                 self.vars.insert(name, v);
                 // put the variable in memory
                 for vv in vec.clone() {
@@ -237,12 +238,25 @@ impl VM {
                     self.asm.push(format!("write_mem 1"))
                 }
                 // pop the updated ram pointer
-                // track it in this VM
+                // track memory index in this VM instead
                 self.asm.push("pop 1".to_string());
             }
             _ => {
                 let out = self.eval(expr);
-                if !out.is_none() {
+                if out.is_none() {
+                    // stack based variable
+                    self.vars.insert(
+                        name,
+                        Var {
+                            stack_index: self.stack.len(),
+                            block_index: self.block_depth,
+                            location: VarLocation::Stack,
+                            memory_index: 0,
+                            dimensions: vec![],
+                        },
+                    );
+                } else {
+                    // memory based variable
                     self.vars.insert(name, out.unwrap());
                 }
             }
@@ -448,30 +462,58 @@ impl VM {
                         dimensions: lvu.dimensions.clone(),
                     };
                     self.memory_index += total_len;
-                    match op {
-                        Op::Add => {
-                            let mut lvu_mem_offset = lvu.memory_index;
-                            let mut rvu_mem_offset = rvu.memory_index;
-                            let mut out_mem_offset = out_v.memory_index;
-                            for x in 0..lvu.dimensions.len() {
-                                for _ in 0..lvu.dimensions[x] {
-                                    self.asm.push(format!("push {}", lvu_mem_offset));
-                                    self.asm.push(format!("read_mem 1"));
-                                    self.asm.push(format!("pop 1"));
-                                    self.asm.push(format!("push {}", rvu_mem_offset));
-                                    self.asm.push(format!("read_mem 1"));
-                                    self.asm.push(format!("pop 1"));
-                                    self.asm.push(format!("add"));
-                                    self.asm.push(format!("push {}", out_mem_offset));
-                                    self.asm.push(format!("write_mem 1"));
-                                    self.asm.push(format!("pop 1"));
-                                    lvu_mem_offset += 1;
-                                    rvu_mem_offset += 1;
-                                    out_mem_offset += 1;
-                                }
+                    // operate on elements in a vector stored in memory
+                    // store the result in memory
+                    // TODO: batch memory read/write operations
+                    let mut op_elements = |v1: &Var, v2: &Var, out: &Var, ops: &mut Vec<String>| {
+                        let mut v1_mem_offset = v1.memory_index;
+                        let mut v2_mem_offset = v2.memory_index;
+                        let mut out_mem_offset = out.memory_index;
+                        for x in 0..lvu.dimensions.len() {
+                            for _ in 0..lvu.dimensions[x] {
+                                self.asm.push(format!("push {}", v1_mem_offset));
+                                self.asm.push(format!("read_mem 1"));
+                                self.asm.push(format!("pop 1"));
+                                // make sure the RHS is read second so the inv operation
+                                // is applied to the correct operand
+                                self.asm.push(format!("push {}", v2_mem_offset));
+                                self.asm.push(format!("read_mem 1"));
+                                self.asm.push(format!("pop 1"));
+
+                                self.asm.append(&mut ops.clone());
+
+                                self.asm.push(format!("push {}", out_mem_offset));
+                                self.asm.push(format!("write_mem 1"));
+                                self.asm.push(format!("pop 1"));
+                                v1_mem_offset += 1;
+                                v2_mem_offset += 1;
+                                out_mem_offset += 1;
                             }
                         }
-                        _ => panic!("only memory based addition is supported"),
+                    };
+                    match op {
+                        Op::Add => {
+                            op_elements(&lvu, &rvu, &out_v, &mut vec![format!("add")]);
+                        }
+                        Op::Mul => {
+                            op_elements(&lvu, &rvu, &out_v, &mut vec![format!("mul")]);
+                        }
+                        Op::Sub => {
+                            op_elements(
+                                &lvu,
+                                &rvu,
+                                &out_v,
+                                &mut vec![format!("push -1"), format!("mul"), format!("add")],
+                            );
+                        }
+                        Op::Inv => {
+                            op_elements(
+                                &lvu,
+                                &rvu,
+                                &out_v,
+                                &mut vec![format!("invert"), format!("mul")],
+                            );
+                        }
                     }
 
                     return Some(out_v);
@@ -530,5 +572,9 @@ impl VM {
             }
             _ => panic!("unexpect expression in vm eval"),
         };
+    }
+
+    fn stack_num_op() -> Option<Var> {
+        None
     }
 }
