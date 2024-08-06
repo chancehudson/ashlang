@@ -36,7 +36,7 @@ vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec 
 // declared for the first time
 var_def = { var ~ "=" ~ (function_call | expr | vec)}
 let_r = { "let " }
-const_def = { "const " ~ varname ~ "=" ~ expr }
+const_def = { "const " ~ varname ~ "=" ~ (expr | vec) }
 
 var = { let_r? ~ varname }
 

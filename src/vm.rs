@@ -5,6 +5,7 @@ use std::collections::HashMap;
 enum VarLocation {
     Stack,
     Memory,
+    Const,
 }
 #[derive(Clone)]
 
@@ -27,6 +28,7 @@ pub struct Var {
     //   ]
     // ]
     dimensions: Vec<usize>,
+    value: Vec<u64>,
 }
 /**
  * This structure is used to track a simple model
@@ -48,8 +50,6 @@ pub struct VM {
     // offsets are based on zero so they stay correct
     // as items are pushed/popped on the stack
     pub vars: HashMap<String, Var>,
-    // constants stored keyed to their value
-    pub consts: HashMap<String, u64>,
     // compiled assembly
     pub asm: Vec<String>,
     // map of function name to number of invocations
@@ -72,7 +72,6 @@ impl VM {
             vars: HashMap::new(),
             stack: Vec::new(),
             asm: Vec::new(),
-            consts: HashMap::new(),
             fn_calls: HashMap::new(),
             has_returned: false,
             block_depth: 0,
@@ -85,7 +84,6 @@ impl VM {
             vars: vm.vars.clone(),
             stack: vm.stack.clone(),
             asm: Vec::new(),
-            consts: vm.consts.clone(),
             fn_calls: HashMap::new(),
             has_returned: false,
             block_depth: vm.block_depth,
@@ -134,19 +132,31 @@ impl VM {
     // the current VM object
     pub fn const_var(&mut self, name: String, expr: Expr) {
         // check for duplicate var names
-        if self.vars.contains_key(&name) || self.consts.contains_key(&name) {
+        if self.vars.contains_key(&name) {
             panic!("name is not unique");
         }
         match expr {
             Expr::Lit(v) => {
-                self.consts.insert(name, v);
+                self.vars.insert(
+                    name,
+                    Var {
+                        stack_index: 0,
+                        block_index: self.block_depth,
+                        location: VarLocation::Const,
+                        memory_index: 0,
+                        dimensions: vec![],
+                        value: vec![v],
+                    },
+                );
             }
             Expr::Val(ref_name) => {
-                if self.consts.contains_key(&ref_name) {
-                    self.consts
-                        .insert(name, *self.consts.get(&ref_name).unwrap());
-                } else if self.vars.contains_key(&ref_name) {
-                    panic!("dynamically evaluated consts not supported");
+                if let Some(v) = self.vars.get(&ref_name) {
+                    match v.location {
+                        VarLocation::Const => {
+                            self.vars.insert(name, v.clone());
+                        }
+                        _ => panic!("dynamically evaluated consts not supported"),
+                    }
                 } else {
                     panic!("unknown variable");
                 }
@@ -168,8 +178,20 @@ impl VM {
             } => {
                 panic!("boolean operations in constants is not supported");
             }
-            Expr::VecLit(_v) => panic!("vector literals are not supported in consts"),
-            Expr::VecVec(_v) => panic!("vector literals are not supported in consts"),
+            Expr::VecVec(_) | Expr::VecLit(_) => {
+                let (dimensions, vec) = self.build_var_from_ast_vec(expr);
+                self.vars.insert(
+                    name,
+                    Var {
+                        stack_index: 0,
+                        block_index: self.block_depth,
+                        location: VarLocation::Const,
+                        memory_index: self.memory_index,
+                        dimensions,
+                        value: vec,
+                    },
+                );
+            }
         }
     }
 
@@ -212,7 +234,7 @@ impl VM {
 
     // defines a new mutable variable in the current block scope
     pub fn let_var(&mut self, name: String, expr: Expr) {
-        if self.vars.contains_key(&name) || self.consts.contains_key(&name) {
+        if self.vars.contains_key(&name) {
             panic!("var is not unique");
         }
         match &expr {
@@ -224,6 +246,7 @@ impl VM {
                     location: VarLocation::Memory,
                     memory_index: self.memory_index,
                     dimensions,
+                    value: vec![],
                 };
                 // println!("{}", vec);
                 self.vars.insert(name, v);
@@ -253,6 +276,7 @@ impl VM {
                             location: VarLocation::Stack,
                             memory_index: 0,
                             dimensions: vec![],
+                            value: vec![],
                         },
                     );
                 } else {
@@ -271,7 +295,7 @@ impl VM {
     // top of the stack. If the local stack has 1 entry the variable
     // must be index 1 in the stark stack.
     pub fn fn_var(&mut self, name: String) {
-        if self.vars.contains_key(&name) || self.consts.contains_key(&name) {
+        if self.vars.contains_key(&name) {
             panic!("var is not unique");
         }
         self.stack.push(name.clone());
@@ -283,6 +307,7 @@ impl VM {
                 dimensions: vec![1],
                 location: VarLocation::Stack,
                 memory_index: 0,
+                value: vec![],
             },
         );
     }
@@ -386,7 +411,10 @@ impl VM {
                 // we push these but don't pop them here
                 // the destination function will handle that
                 for v in vars.iter().rev().collect::<Vec<&String>>() {
-                    self.eval(Expr::Val(v.clone()));
+                    let o = self.eval(Expr::Val(v.clone()));
+                    if o.is_some() {
+                        panic!("function calls may only pass stack based variables");
+                    }
                 }
                 // we pop them off the virtual stack assuming
                 // that the callee will do the _actual_ popping
@@ -403,8 +431,7 @@ impl VM {
             }
             Expr::Val(name) => {
                 // if the val is a constant we push to stack
-                if self.vars.contains_key(name) {
-                    let v = self.vars.get(name).unwrap();
+                if let Some(v) = self.vars.get(name) {
                     match v.location {
                         VarLocation::Stack => {
                             let mut out = vec![format!("dup {}", self.stack_index(name))];
@@ -413,15 +440,19 @@ impl VM {
                             return None;
                         }
                         VarLocation::Memory => {
-                            let v = self.vars.get(name).unwrap();
                             return Some(v.clone());
                         }
+                        VarLocation::Const => {
+                            if v.value.len() == 1 {
+                                // a constant that can be represented on the stack
+                                self.stack.push(name.clone());
+                                self.asm.push(format!("push {}", v.value[0]));
+                                return None;
+                            } else {
+                                return Some(v.clone());
+                            }
+                        }
                     }
-                } else if self.consts.contains_key(name) {
-                    self.stack.push(name.clone());
-                    self.asm
-                        .push(format!("push {}", self.consts.get(name).unwrap()));
-                    return None;
                 } else {
                     panic!("unknown variable: {name}");
                 }
@@ -460,6 +491,7 @@ impl VM {
                         location: VarLocation::Memory,
                         memory_index: self.memory_index,
                         dimensions: lvu.dimensions.clone(),
+                        value: vec![],
                     };
                     self.memory_index += total_len;
                     // operate on elements in a vector stored in memory
@@ -471,14 +503,30 @@ impl VM {
                         let mut out_mem_offset = out.memory_index;
                         for x in 0..lvu.dimensions.len() {
                             for _ in 0..lvu.dimensions[x] {
-                                self.asm.push(format!("push {}", v1_mem_offset));
-                                self.asm.push(format!("read_mem 1"));
-                                self.asm.push(format!("pop 1"));
+                                match v1.location {
+                                    VarLocation::Memory => {
+                                        self.asm.push(format!("push {}", v1_mem_offset));
+                                        self.asm.push(format!("read_mem 1"));
+                                        self.asm.push(format!("pop 1"));
+                                    }
+                                    VarLocation::Const => {
+                                        self.asm.push(format!("push {}", v1.value[v1_mem_offset]));
+                                    }
+                                    _ => panic!("lhs operand not const or memory"),
+                                }
                                 // make sure the RHS is read second so the inv operation
                                 // is applied to the correct operand
-                                self.asm.push(format!("push {}", v2_mem_offset));
-                                self.asm.push(format!("read_mem 1"));
-                                self.asm.push(format!("pop 1"));
+                                match v2.location {
+                                    VarLocation::Memory => {
+                                        self.asm.push(format!("push {}", v2_mem_offset));
+                                        self.asm.push(format!("read_mem 1"));
+                                        self.asm.push(format!("pop 1"));
+                                    }
+                                    VarLocation::Const => {
+                                        self.asm.push(format!("push {}", v2.value[v2_mem_offset]));
+                                    }
+                                    _ => panic!("rhs operand not const or memory"),
+                                }
 
                                 self.asm.append(&mut ops.clone());
 
@@ -548,9 +596,15 @@ impl VM {
             }
             Expr::BoolOp { lhs, bool_op, rhs } => {
                 let l = (*lhs).clone();
-                self.eval(*l);
+                let lv = self.eval(*l);
                 let r = (*rhs).clone();
-                self.eval(*r);
+                let rv = self.eval(*r);
+                if lv.is_none() != rv.is_none() {
+                    panic!("cannot apply boolean operation to stack and memory vars");
+                }
+                if !lv.is_none() {
+                    panic!("cannot apply boolean operation to memory vars");
+                }
                 match bool_op {
                     BoolOp::Equal => {
                         self.stack.pop();
@@ -572,9 +626,5 @@ impl VM {
             }
             _ => panic!("unexpect expression in vm eval"),
         };
-    }
-
-    fn stack_num_op() -> Option<Var> {
-        None
     }
 }
