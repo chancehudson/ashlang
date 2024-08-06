@@ -9,4 +9,4 @@ clap = { version = "4.5.9", features = ["derive"] }
 lazy_static = "1.5.0"
 pest = "2.7.11"
 pest_derive = "2.7.11"
-triton-vm = "0.41.0"
+triton-vm = "=0.41.0"
