@@ -29,7 +29,7 @@ bool_expr = { expr ~ bool_op ~ expr }
 if_stmt = { "if " ~ bool_expr ~ block }
 block = { "{" ~ "\n"* ~ (stmt ~ "\n")* ~ "\n"* ~ "}" }
 
-vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec | literal_dec)) ~ "\n"* ~ "]"}
+vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec | literal_dec))* ~ "\n"* ~ "]"}
 
 // this let_r match is needed to
 // determine if a variable is being

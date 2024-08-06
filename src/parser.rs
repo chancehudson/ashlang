@@ -9,7 +9,9 @@ struct AshParser;
 
 #[derive(Debug, Clone)]
 pub enum AstNode {
+    // a variable argument to a function call
     FnVar(Vec<String>),
+    // a let defintion, const definition, or if statement
     Stmt(String, bool, Expr),
     Rtrn(Expr),
     Const(String, Expr),

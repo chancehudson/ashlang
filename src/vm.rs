@@ -232,23 +232,19 @@ impl VM {
                 }
                 self.asm.push(format!("push {}", self.memory_index));
                 self.memory_index += vec.len();
-                for _ in vec {
+                // TODO: batch insertion
+                for _ in vec.iter().rev() {
                     self.asm.push(format!("write_mem 1"))
                 }
+                // pop the updated ram pointer
+                // track it in this VM
                 self.asm.push("pop 1".to_string());
             }
             _ => {
-                self.eval(expr);
-                self.vars.insert(
-                    name,
-                    Var {
-                        stack_index: self.stack.len(),
-                        block_index: self.block_depth,
-                        dimensions: vec![1],
-                        location: VarLocation::Stack,
-                        memory_index: 0,
-                    },
-                );
+                let out = self.eval(expr);
+                if !out.is_none() {
+                    self.vars.insert(name, out.unwrap());
+                }
             }
         }
     }
@@ -356,14 +352,16 @@ impl VM {
     //
     // manipulates the execution stack and tracks
     // changes in the local stack
-    pub fn eval(&mut self, expr: Expr) {
-        let mut asm = match &expr {
-            Expr::VecLit(v) => {
-                vec![]
+    //
+    // Optionally returns a variable reference to be used by the caller
+    // if the return value is non-null the asm has not been mutated
+    pub fn eval(&mut self, expr: Expr) -> Option<Var> {
+        match &expr {
+            Expr::VecLit(_v) => {
+                panic!("vector literals must be assigned before operation");
             }
-            Expr::VecVec(v) => {
-                let (dimensions, vec) = self.build_var_from_ast_vec(expr);
-                vec![]
+            Expr::VecVec(_v) => {
+                panic!("matrix literals must be assigned before operation");
             }
             Expr::FnCall(name, vars) => {
                 if let Some(c) = self.fn_calls.get_mut(name) {
@@ -386,51 +384,125 @@ impl VM {
                 // or 0 if the function does not explicitly
                 // return a value
                 self.stack.push(name.clone());
-                vec![format!("call {name}")]
+                self.asm.push(format!("call {name}"));
+                return None;
             }
             Expr::Val(name) => {
                 // if the val is a constant we push to stack
                 if self.vars.contains_key(name) {
-                    let out = vec![format!("dup {}", self.stack_index(name))];
-                    self.stack.push(name.clone());
-                    out
+                    let v = self.vars.get(name).unwrap();
+                    match v.location {
+                        VarLocation::Stack => {
+                            let mut out = vec![format!("dup {}", self.stack_index(name))];
+                            self.stack.push(name.clone());
+                            self.asm.append(&mut out);
+                            return None;
+                        }
+                        VarLocation::Memory => {
+                            let v = self.vars.get(name).unwrap();
+                            return Some(v.clone());
+                        }
+                    }
                 } else if self.consts.contains_key(name) {
                     self.stack.push(name.clone());
-                    vec![format!("push {}", self.consts.get(name).unwrap())]
+                    self.asm
+                        .push(format!("push {}", self.consts.get(name).unwrap()));
+                    return None;
                 } else {
                     panic!("unknown variable: {name}");
                 }
             }
             Expr::Lit(v) => {
                 self.stack.push(v.to_string());
-                vec![format!("push {}", v)]
+                self.asm.push(format!("push {}", v));
+                return None;
             }
             Expr::NumOp { lhs, op, rhs } => {
+                // only allow variables of same dimensions
+                // for now
                 let l = (*lhs).clone();
-                self.eval(*l);
+                let lv = self.eval(*l);
                 let r = (*rhs).clone();
-                self.eval(*r);
+                let rv = self.eval(*r);
+                if lv.is_none() != rv.is_none() {
+                    panic!("cannot operate on stack types and memory types");
+                }
+                if !lv.is_none() {
+                    let lvu = lv.unwrap();
+                    let rvu = rv.unwrap();
+                    if lvu.dimensions.len() != rvu.dimensions.len() {
+                        panic!("attempting to operate on variables of mismatched width");
+                    }
+                    let mut total_len = 0;
+                    for x in 0..lvu.dimensions.len() {
+                        if lvu.dimensions[x] != rvu.dimensions[x] {
+                            panic!("attempting to operate on variables of mismatched height");
+                        }
+                        total_len += lvu.dimensions[x];
+                    }
+                    let out_v = Var {
+                        stack_index: 0,
+                        block_index: self.block_depth,
+                        location: VarLocation::Memory,
+                        memory_index: self.memory_index,
+                        dimensions: lvu.dimensions.clone(),
+                    };
+                    self.memory_index += total_len;
+                    match op {
+                        Op::Add => {
+                            let mut lvu_mem_offset = lvu.memory_index;
+                            let mut rvu_mem_offset = rvu.memory_index;
+                            let mut out_mem_offset = out_v.memory_index;
+                            for x in 0..lvu.dimensions.len() {
+                                for _ in 0..lvu.dimensions[x] {
+                                    self.asm.push(format!("push {}", lvu_mem_offset));
+                                    self.asm.push(format!("read_mem 1"));
+                                    self.asm.push(format!("pop 1"));
+                                    self.asm.push(format!("push {}", rvu_mem_offset));
+                                    self.asm.push(format!("read_mem 1"));
+                                    self.asm.push(format!("pop 1"));
+                                    self.asm.push(format!("add"));
+                                    self.asm.push(format!("push {}", out_mem_offset));
+                                    self.asm.push(format!("write_mem 1"));
+                                    self.asm.push(format!("pop 1"));
+                                    lvu_mem_offset += 1;
+                                    rvu_mem_offset += 1;
+                                    out_mem_offset += 1;
+                                }
+                            }
+                        }
+                        _ => panic!("only memory based addition is supported"),
+                    }
+
+                    return Some(out_v);
+                }
                 match op {
                     // each one of these removes two elements and
                     // adds 1
                     // so we have a net effect of a single pop
                     Op::Add => {
                         self.stack.pop();
-                        vec![format!("add")]
+                        self.asm.push(format!("add"));
                     }
                     Op::Sub => {
                         self.stack.pop();
-                        vec![format!("push -1"), format!("mul"), format!("add")]
+                        self.asm.append(&mut vec![
+                            format!("push -1"),
+                            format!("mul"),
+                            format!("add"),
+                        ]);
                     }
                     Op::Mul => {
                         self.stack.pop();
-                        vec![format!("mul")]
+                        self.asm.push(format!("mul"));
                     }
                     Op::Inv => {
                         self.stack.pop();
-                        vec![format!("invert"), format!("mul")]
+                        self.asm
+                            .append(&mut vec![format!("invert"), format!("mul")]);
                     }
                 }
+                return None;
             }
             Expr::BoolOp { lhs, bool_op, rhs } => {
                 let l = (*lhs).clone();
@@ -440,23 +512,23 @@ impl VM {
                 match bool_op {
                     BoolOp::Equal => {
                         self.stack.pop();
-                        vec![format!("eq"), format!("skiz")]
+                        self.asm.append(&mut vec![format!("eq"), format!("skiz")]);
                     }
                     BoolOp::NotEqual => {
                         // TODO: possibly use the eq instruction
                         self.stack.pop();
-                        vec![
+                        self.asm.append(&mut vec![
                             format!("push -1"),
                             format!("mul"),
                             format!("add"),
                             format!("skiz"),
-                        ]
+                        ]);
                     }
                     _ => panic!("boolean operation not supported"),
                 }
+                return None;
             }
             _ => panic!("unexpect expression in vm eval"),
         };
-        self.asm.append(&mut asm);
     }
 }
