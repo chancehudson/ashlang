@@ -149,7 +149,10 @@ impl VM {
                     },
                 );
             }
-            Expr::Val(ref_name) => {
+            Expr::Val(ref_name, indices) => {
+                if indices.len() > 0 {
+                    panic!("const var index assignment not supported");
+                }
                 if let Some(v) = self.vars.get(&ref_name) {
                     match v.location {
                         VarLocation::Const => {
@@ -248,16 +251,15 @@ impl VM {
                     dimensions,
                     value: vec![],
                 };
-                // println!("{}", vec);
                 self.vars.insert(name, v);
                 // put the variable in memory
-                for vv in vec.clone() {
+                for vv in vec.clone().iter().rev() {
                     self.asm.push(format!("push {vv}"))
                 }
                 self.asm.push(format!("push {}", self.memory_index));
                 self.memory_index += vec.len();
                 // TODO: batch insertion
-                for _ in vec.iter().rev() {
+                for _ in vec.iter() {
                     self.asm.push(format!("write_mem 1"))
                 }
                 // pop the updated ram pointer
@@ -387,6 +389,27 @@ impl VM {
         (dimensions, vec_rep)
     }
 
+    pub fn calc_vec_offset(dimensions: &Vec<usize>, indices: &Vec<u64>) -> usize {
+        let sum = |vec: &Vec<usize>, start: usize| -> usize {
+            let mut out = 0;
+            for x in start..vec.len() {
+                out += vec[x];
+            }
+            out
+        };
+        let mut offset = 0;
+        for x in 0..indices.len() {
+            // for each index we sum the deeper dimensions
+            // to determine how far to move in the array storage
+            if x == indices.len() - 1 && indices.len() == dimensions.len() {
+                offset += usize::try_from(indices[x]).unwrap();
+            } else {
+                offset += usize::try_from(indices[x]).unwrap() * sum(dimensions, x + 1);
+            }
+        }
+        offset
+    }
+
     // evaluate an AST expression
     //
     // manipulates the execution stack and tracks
@@ -411,7 +434,7 @@ impl VM {
                 // we push these but don't pop them here
                 // the destination function will handle that
                 for v in vars.iter().rev().collect::<Vec<&String>>() {
-                    let o = self.eval(Expr::Val(v.clone()));
+                    let o = self.eval(Expr::Val(v.clone(), vec![]));
                     if o.is_some() {
                         panic!("function calls may only pass stack based variables");
                     }
@@ -429,18 +452,49 @@ impl VM {
                 self.asm.push(format!("call {name}"));
                 return None;
             }
-            Expr::Val(name) => {
+            Expr::Val(name, indices) => {
                 // if the val is a constant we push to stack
                 if let Some(v) = self.vars.get(name) {
                     match v.location {
                         VarLocation::Stack => {
+                            if indices.len() > 0 {
+                                panic!("stack variables may not be accessed be index");
+                            }
                             let mut out = vec![format!("dup {}", self.stack_index(name))];
                             self.stack.push(name.clone());
                             self.asm.append(&mut out);
                             return None;
                         }
                         VarLocation::Memory => {
-                            return Some(v.clone());
+                            // return a subset of the original variable based on the
+                            // requested indices
+                            //
+                            // let a
+                            // accessing as a[1]
+                            // dimensions: [3, 2]
+                            // dimensions_fin: [2]
+                            //
+                            // if we're operating on two scalars (length 1 vector)
+                            // we should move the value to the stack
+                            let offset = VM::calc_vec_offset(&v.dimensions, indices);
+                            if indices.len() == v.dimensions.len() {
+                                // we're accessing a scalar, move it to the stack
+                                self.stack.push(name.clone());
+                                self.asm.push(format!("push {}", v.memory_index + offset));
+                                self.asm.push(format!("read_mem 1"));
+                                self.asm.push(format!("pop 1"));
+                                return None;
+                            } else {
+                                // we're accessing a vec/mat, leave it in memory
+                                return Some(Var {
+                                    stack_index: v.stack_index,
+                                    block_index: v.block_index,
+                                    location: v.location.clone(),
+                                    memory_index: v.memory_index + offset,
+                                    dimensions: v.dimensions[indices.len()..].to_vec(),
+                                    value: vec![],
+                                });
+                            }
                         }
                         VarLocation::Const => {
                             if v.value.len() == 1 {
@@ -448,9 +502,25 @@ impl VM {
                                 self.stack.push(name.clone());
                                 self.asm.push(format!("push {}", v.value[0]));
                                 return None;
-                            } else {
-                                return Some(v.clone());
                             }
+                            let offset = VM::calc_vec_offset(&v.dimensions, indices);
+                            if indices.len() == v.dimensions.len() {
+                                // we're accessing a scalar, move it to the stack
+                                self.stack.push(name.clone());
+                                self.asm
+                                    .push(format!("push {}", v.value[v.memory_index + offset]));
+                                return None;
+                            }
+                            // we're accessing a vec/mat, leave it in memory
+                            // or in this case (const) in the VM value array
+                            return Some(Var {
+                                stack_index: v.stack_index,
+                                block_index: v.block_index,
+                                location: v.location.clone(),
+                                memory_index: v.memory_index,
+                                dimensions: v.dimensions[indices.len()..].to_vec(),
+                                value: v.value[offset..].to_vec(),
+                            });
                         }
                     }
                 } else {

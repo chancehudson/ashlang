@@ -23,7 +23,7 @@ pub enum Expr {
     VecVec(Vec<Expr>),
     VecLit(Vec<u64>),
     Lit(u64),
-    Val(String),
+    Val(String, Vec<u64>),
     FnCall(String, Vec<String>),
     NumOp {
         lhs: Box<Expr>,
@@ -85,7 +85,6 @@ pub fn parse(source: &str) -> Result<Vec<AstNode>, Error<Rule>> {
             _ => {}
         }
     }
-    println!("{:?}", ast);
 
     Ok(ast)
 }
@@ -195,7 +194,17 @@ fn build_expr_from_pair(pair: pest::iterators::Pair<Rule>) -> Expr {
             let mut pair = pair.into_inner();
             let n = pair.next().unwrap();
             match n.as_rule() {
-                Rule::varname => Expr::Val(n.as_str().to_string()),
+                Rule::varname => {
+                    let name = n.as_str().to_string();
+                    let mut indices: Vec<u64> = Vec::new();
+                    while let Some(v) = pair.next() {
+                        match v.as_rule() {
+                            Rule::literal_dec => indices.push(v.as_str().parse::<u64>().unwrap()),
+                            _ => panic!("unexpected rule in atom"),
+                        }
+                    }
+                    Expr::Val(name, indices)
+                }
                 Rule::literal_dec => Expr::Lit(n.as_str().parse::<u64>().unwrap()),
                 _ => panic!("invalid atom"),
             }

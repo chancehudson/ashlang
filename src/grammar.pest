@@ -39,8 +39,9 @@ let_r = { "let " }
 const_def = { "const " ~ varname ~ "=" ~ (expr | vec) }
 
 var = { let_r? ~ varname }
+var_index = _{ "[" ~ literal_dec ~ "]" }
 
-atom = { literal_dec | varname }
+atom = { literal_dec | varname ~ var_index* }
 
 literal_dec = @{ ASCII_DIGIT+ }
 
