@@ -29,16 +29,19 @@ bool_expr = { expr ~ bool_op ~ expr }
 if_stmt = { "if " ~ bool_expr ~ block }
 block = { "{" ~ "\n"* ~ (stmt ~ "\n")* ~ "\n"* ~ "}" }
 
+vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec | literal_dec))* ~ "\n"* ~ "]"}
+
 // this let_r match is needed to
 // determine if a variable is being
 // declared for the first time
-var_def = { var ~ "=" ~ (function_call | expr)}
+var_def = { var ~ "=" ~ (function_call | expr | vec)}
 let_r = { "let " }
-const_def = { "const " ~ varname ~ "=" ~ expr }
+const_def = { "const " ~ varname ~ "=" ~ (expr | vec) }
 
 var = { let_r? ~ varname }
+var_index = _{ "[" ~ literal_dec ~ "]" }
 
-atom = { literal_dec | varname }
+atom = { literal_dec | varname ~ var_index* }
 
 literal_dec = @{ ASCII_DIGIT+ }
 

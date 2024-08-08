@@ -9,7 +9,9 @@ struct AshParser;
 
 #[derive(Debug, Clone)]
 pub enum AstNode {
+    // a variable argument to a function call
     FnVar(Vec<String>),
+    // a let defintion, const definition, or if statement
     Stmt(String, bool, Expr),
     Rtrn(Expr),
     Const(String, Expr),
@@ -18,8 +20,10 @@ pub enum AstNode {
 
 #[derive(Debug, Clone)]
 pub enum Expr {
+    VecVec(Vec<Expr>),
+    VecLit(Vec<u64>),
     Lit(u64),
-    Val(String),
+    Val(String, Vec<u64>),
     FnCall(String, Vec<String>),
     NumOp {
         lhs: Box<Expr>,
@@ -156,6 +160,26 @@ fn build_ast_from_pair(pair: pest::iterators::Pair<Rule>) -> AstNode {
 
 fn build_expr_from_pair(pair: pest::iterators::Pair<Rule>) -> Expr {
     match pair.as_rule() {
+        Rule::vec => {
+            let mut pair = pair.into_inner();
+            let next = pair.next().unwrap();
+            if next.as_rule() == Rule::vec {
+                let mut out: Vec<Expr> = Vec::new();
+                out.push(build_expr_from_pair(next.clone()));
+                for next in pair {
+                    out.push(build_expr_from_pair(next.clone()));
+                    // next = pair.next().unwrap();
+                }
+                return Expr::VecVec(out);
+            } else {
+                let mut out: Vec<u64> = Vec::new();
+                out.push(next.as_str().parse::<u64>().unwrap());
+                for next in pair {
+                    out.push(next.as_str().parse::<u64>().unwrap());
+                }
+                return Expr::VecLit(out);
+            }
+        }
         Rule::function_call => {
             let mut pair = pair.into_inner();
             let next = pair.next().unwrap();
@@ -170,7 +194,17 @@ fn build_expr_from_pair(pair: pest::iterators::Pair<Rule>) -> Expr {
             let mut pair = pair.into_inner();
             let n = pair.next().unwrap();
             match n.as_rule() {
-                Rule::varname => Expr::Val(n.as_str().to_string()),
+                Rule::varname => {
+                    let name = n.as_str().to_string();
+                    let mut indices: Vec<u64> = Vec::new();
+                    while let Some(v) = pair.next() {
+                        match v.as_rule() {
+                            Rule::literal_dec => indices.push(v.as_str().parse::<u64>().unwrap()),
+                            _ => panic!("unexpected rule in atom"),
+                        }
+                    }
+                    Expr::Val(name, indices)
+                }
                 Rule::literal_dec => Expr::Lit(n.as_str().parse::<u64>().unwrap()),
                 _ => panic!("invalid atom"),
             }
