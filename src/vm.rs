@@ -377,6 +377,12 @@ impl VM {
     // variables in the execution stack
     pub fn stack_index(&self, var_name: &String) -> usize {
         if let Some(var) = self.vars.get(var_name) {
+            if var.location == VarLocation::Memory {
+                panic!("cannot get stack index of memory based variable");
+            }
+            if var.location == VarLocation::Const {
+                panic!("cannot get stack index of constant variable");
+            }
             self.stack.len() - var.stack_index
         } else {
             panic!("unknown var");
