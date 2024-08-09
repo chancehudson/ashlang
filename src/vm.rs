@@ -1,7 +1,7 @@
 use crate::parser::{BoolOp, Expr, Op};
 use std::collections::HashMap;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 enum VarLocation {
     Stack,
     Memory,
@@ -63,11 +63,16 @@ pub struct VM {
     // the executor can see variables in higher blocks
     // but not lower blocks
     pub block_depth: usize,
+    // the absolute position where our memory region begins
+    pub memory_start: usize,
+    // the current free memory index, relative to memory_start
     pub memory_index: usize,
 }
 
 impl VM {
-    pub fn new() -> Self {
+    pub fn new(mem_offset: &mut usize) -> Self {
+        let memory_start = mem_offset.clone();
+        *mem_offset += 2_usize.pow(32);
         VM {
             vars: HashMap::new(),
             stack: Vec::new(),
@@ -76,6 +81,7 @@ impl VM {
             has_returned: false,
             block_depth: 0,
             memory_index: 0,
+            memory_start,
         }
     }
 
@@ -88,6 +94,7 @@ impl VM {
             has_returned: false,
             block_depth: vm.block_depth,
             memory_index: vm.memory_index,
+            memory_start: vm.memory_start,
         }
     }
 
@@ -110,14 +117,16 @@ impl VM {
         let entries_to_remove = self
             .vars
             .iter()
-            .filter(|(_k, v)| v.block_index == self.block_depth)
+            .filter(|(_k, v)| v.block_index == self.block_depth && v.location == VarLocation::Stack)
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect::<Vec<(String, Var)>>();
         if entries_to_remove.is_empty() {
             self.block_depth -= 1;
             return;
         }
-        self.asm.push(format!("pop {}", entries_to_remove.len()));
+        for _ in 0..entries_to_remove.len() {
+            self.asm.push(format!("pop 1"));
+        }
         // TODO: don't iterate here
         for _ in 0..entries_to_remove.len() {
             self.stack.pop();
@@ -189,7 +198,7 @@ impl VM {
                         stack_index: 0,
                         block_index: self.block_depth,
                         location: VarLocation::Const,
-                        memory_index: self.memory_index,
+                        memory_index: self.memory_start + self.memory_index,
                         dimensions,
                         value: vec,
                     },
@@ -217,7 +226,15 @@ impl VM {
             return;
         }
         self.asm.push(format!("swap {}", self.vars.len()));
-        self.asm.push(format!("pop {}", self.vars.len()));
+        for _ in 0..self
+            .vars
+            .iter()
+            .filter(|(_k, v)| v.location == VarLocation::Stack)
+            .collect::<Vec<(&String, &Var)>>()
+            .len()
+        {
+            self.asm.push(format!("pop 1"));
+        }
         self.has_returned = true;
     }
 
@@ -230,7 +247,15 @@ impl VM {
         if self.has_returned || self.vars.is_empty() {
             return;
         }
-        self.asm.push(format!("pop {}", self.vars.len()));
+        for _ in 0..self
+            .vars
+            .iter()
+            .filter(|(_k, v)| v.location == VarLocation::Stack)
+            .collect::<Vec<(&String, &Var)>>()
+            .len()
+        {
+            self.asm.push(format!("pop 1"));
+        }
         self.asm.push("push 0".to_string());
         self.has_returned = true;
     }
@@ -247,7 +272,7 @@ impl VM {
                     stack_index: 0,
                     block_index: self.block_depth,
                     location: VarLocation::Memory,
-                    memory_index: self.memory_index,
+                    memory_index: self.memory_start + self.memory_index,
                     dimensions,
                     value: vec![],
                 };
@@ -256,7 +281,8 @@ impl VM {
                 for vv in vec.clone().iter().rev() {
                     self.asm.push(format!("push {vv}"))
                 }
-                self.asm.push(format!("push {}", self.memory_index));
+                self.asm
+                    .push(format!("push {}", self.memory_start + self.memory_index));
                 self.memory_index += vec.len();
                 // TODO: batch insertion
                 for _ in vec.iter() {
@@ -507,8 +533,10 @@ impl VM {
                             if indices.len() == v.dimensions.len() {
                                 // we're accessing a scalar, move it to the stack
                                 self.stack.push(name.clone());
-                                self.asm
-                                    .push(format!("push {}", v.value[v.memory_index + offset]));
+                                self.asm.push(format!(
+                                    "push {}",
+                                    v.value[v.memory_index + offset - self.memory_start]
+                                ));
                                 return None;
                             }
                             // we're accessing a vec/mat, leave it in memory
@@ -559,7 +587,7 @@ impl VM {
                         stack_index: 0,
                         block_index: self.block_depth,
                         location: VarLocation::Memory,
-                        memory_index: self.memory_index,
+                        memory_index: self.memory_start + self.memory_index,
                         dimensions: lvu.dimensions.clone(),
                         value: vec![],
                     };
@@ -580,7 +608,10 @@ impl VM {
                                         self.asm.push(format!("pop 1"));
                                     }
                                     VarLocation::Const => {
-                                        self.asm.push(format!("push {}", v1.value[v1_mem_offset]));
+                                        self.asm.push(format!(
+                                            "push {}",
+                                            v1.value[v1_mem_offset - self.memory_start]
+                                        ));
                                     }
                                     _ => panic!("lhs operand not const or memory"),
                                 }
@@ -593,7 +624,10 @@ impl VM {
                                         self.asm.push(format!("pop 1"));
                                     }
                                     VarLocation::Const => {
-                                        self.asm.push(format!("push {}", v2.value[v2_mem_offset]));
+                                        self.asm.push(format!(
+                                            "push {}",
+                                            v2.value[v2_mem_offset - self.memory_start]
+                                        ));
                                     }
                                     _ => panic!("rhs operand not const or memory"),
                                 }

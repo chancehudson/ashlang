@@ -175,6 +175,9 @@ impl Compiler {
     pub fn compile(&mut self, entry: &Utf8PathBuf) -> String {
         let entry_fn_name = entry.file_stem().unwrap().to_string();
 
+        // each function gets it's own memory space
+        // track where in the memory we're at
+        let mut mem_offset = 0;
         let ast = self.parse_fn(&entry_fn_name);
 
         // tracks total number of includes for a fn in all sources
@@ -186,7 +189,7 @@ impl Compiler {
         }
 
         // step 1: compile the entrypoint to assembly
-        let mut vm = VM::new();
+        let mut vm = VM::new(&mut mem_offset);
         self.ast_to_asm(ast, &mut included_fn, &mut vm);
         let mut asm = vm.asm.clone();
         asm.push("halt".to_string());
@@ -203,7 +206,7 @@ impl Compiler {
                 if builtins.contains_key(&fn_name) {
                     continue;
                 }
-                let mut vm = VM::new();
+                let mut vm = VM::new(&mut mem_offset);
                 let parsed = self.parse_fn(&fn_name);
                 self.ast_to_asm(parsed, &mut included_fn, &mut vm);
                 vm.return_if_needed();
