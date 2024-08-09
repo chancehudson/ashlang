@@ -216,7 +216,10 @@ impl VM {
     // state. e.g. this VM cannot be used after returning
     pub fn return_expr(&mut self, expr: Expr) {
         // we leave the returned value on the top of the stack
-        self.eval(expr);
+        let out = self.eval(expr);
+        if out.is_some() {
+            panic!("cannot return memory based variable");
+        }
         // when we're done executing a block we clear
         // everything on the stack so that when we return
         // to the previous position the stack is in a
