@@ -350,8 +350,22 @@ impl VM {
         if !self.vars.contains_key(&name) {
             panic!("var does not exist {name}");
         }
+        let v = self.vars.get(&name).unwrap();
+        if v.location == VarLocation::Const {
+            panic!("cannot set constant variable");
+        }
+        if v.location == VarLocation::Memory {
+            // TODO: allow assigning memory based variable
+            // partially or entirely
+            // e.g. v[0] = [1, 2, 3]
+            // or v = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+            panic!("cannot set memory based variable");
+        }
         // new value is on the top of the stack
-        self.eval(expr);
+        let v = self.eval(expr);
+        if v.is_some() {
+            panic!("cannot set memory based variable");
+        }
         self.asm.push(format!("swap {}", self.stack_index(&name)));
         self.asm.push("pop 1".to_string());
         self.stack.pop();
