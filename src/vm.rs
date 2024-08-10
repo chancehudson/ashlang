@@ -2,13 +2,13 @@ use crate::parser::{BoolOp, Expr, Op};
 use std::collections::HashMap;
 
 #[derive(Clone, PartialEq)]
-enum VarLocation {
+pub enum VarLocation {
     Stack,
     Memory,
     Const,
 }
-#[derive(Clone)]
 
+#[derive(Clone)]
 pub struct Var {
     stack_index: usize,
     block_index: usize,
@@ -30,6 +30,14 @@ pub struct Var {
     dimensions: Vec<usize>,
     value: Vec<u64>,
 }
+
+#[derive(Clone)]
+pub struct VarType {
+    pub location: VarLocation,
+    pub memory_index: usize,
+    pub dimensions: Vec<usize>,
+}
+
 /**
  * This structure is used to track a simple model
  * of the VM being executed. An instance of the
