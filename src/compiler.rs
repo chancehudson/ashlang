@@ -1,5 +1,5 @@
 use crate::parser::{AshParser, AstNode};
-use crate::vm::VM;
+use crate::vm::{ArgType, FnCall, VM};
 use camino::Utf8PathBuf;
 use std::{collections::HashMap, fs};
 
@@ -10,6 +10,11 @@ pub struct Compiler {
     block_fn_asm: Vec<Vec<String>>,
     block_counter: usize,
     pub print_asm: bool,
+    // each function gets it's own memory space
+    // track where in the memory we're at
+    memory_offset: usize,
+    called_fn: HashMap<FnCall, u64>,
+    written_fn: HashMap<FnCall, bool>,
 }
 
 /**
@@ -30,6 +35,9 @@ impl Compiler {
             block_fn_asm: Vec::new(),
             block_counter: 0,
             print_asm: false,
+            memory_offset: 0,
+            called_fn: HashMap::new(),
+            written_fn: HashMap::new(),
         }
     }
 
@@ -93,7 +101,14 @@ impl Compiler {
     // accepts a reference to a map of function names
     // any functions called in the ast will be added
     // to the map
-    fn ast_to_asm(&mut self, ast: Vec<AstNode>, vm: &mut VM) {
+    fn ast_to_asm(
+        &mut self,
+        ast: Vec<AstNode>,
+        vm_opt: Option<&mut VM>,
+        arg_types: Vec<ArgType>,
+    ) -> Vec<String> {
+        let mut default_vm = VM::new(&mut self.memory_offset, &self.fn_to_ast);
+        let vm = vm_opt.unwrap_or(&mut default_vm);
         for v in ast {
             match v {
                 AstNode::Stmt(name, is_let, expr) => {
@@ -104,8 +119,15 @@ impl Compiler {
                     }
                 }
                 AstNode::FnVar(vars) => {
+                    if arg_types.len() != vars.len() {
+                        panic!(
+                            "function argument count mismatch: expected {}, got {}",
+                            arg_types.len(),
+                            vars.len()
+                        );
+                    }
                     for x in 0..vars.len() {
-                        vm.fn_var(vars[x].clone());
+                        vm.fn_var(vars[x].clone(), arg_types[x].clone());
                     }
                 }
                 AstNode::Rtrn(expr) => {
@@ -130,7 +152,7 @@ impl Compiler {
                     // let block_asm =
                     block_vm.begin_block();
                     //
-                    self.ast_to_asm(block_ast, &mut block_vm);
+                    self.ast_to_asm(block_ast, Some(&mut block_vm), vec![]);
 
                     block_vm.end_block();
                     let mut block_asm: Vec<String> = Vec::new();
@@ -141,6 +163,16 @@ impl Compiler {
                 }
             }
         }
+        for (call, count) in &vm.fn_calls {
+            if !self.called_fn.contains_key(call) {
+                self.called_fn.insert(call.clone(), count.clone());
+            } else {
+                self.called_fn
+                    .entry(call.clone())
+                    .and_modify(|v| *v += count);
+            }
+        }
+        vm.asm.clone()
     }
 
     // loads, parses, and returns an ashlang function by name
@@ -162,19 +194,19 @@ impl Compiler {
     pub fn compile(&mut self, entry: &Utf8PathBuf) -> String {
         let entry_fn_name = entry.file_stem().unwrap().to_string();
 
-        // each function gets it's own memory space
-        // track where in the memory we're at
-        let mut mem_offset = 0;
         let parser = self.parse_fn(&entry_fn_name);
 
         // tracks total number of includes for a fn in all sources
         let mut included_fn: HashMap<String, u64> = parser.fn_names.clone();
+        // let mut fn_arg_types: HashMap<String, Vec<ArgType>> = HashMap::new();
         let builtins = Compiler::builtins();
         for (name, _v) in builtins.iter() {
             included_fn.insert(name.clone(), 0);
             self.fn_to_ast.insert(name.clone(), vec![]);
         }
         // step 1: build ast for all functions
+        // each function has a single ast, but multiple implementations
+        // based on argument types it is called with
         loop {
             if included_fn.len() == self.fn_to_ast.len() {
                 break;
@@ -196,23 +228,34 @@ impl Compiler {
         }
 
         // step 1: compile the entrypoint to assembly
-        let mut vm = VM::new(&mut mem_offset);
-        self.ast_to_asm(parser.ast, &mut vm);
-        let mut asm = vm.asm.clone();
+        let mut asm = self.ast_to_asm(parser.ast, None, vec![]);
         asm.push("halt".to_string());
 
-        // step 2: compile each function and insert into the asm
-        for (name, ast) in self.fn_to_ast.clone() {
-            if builtins.contains_key(&name) {
-                continue;
+        // step 2: compile each function variant and insert into the asm
+        loop {
+            for (fn_call, _) in self.called_fn.clone() {
+                if builtins.contains_key(&fn_call.name) {
+                    self.written_fn.insert(fn_call, true);
+                    continue;
+                }
+                if self.written_fn.contains_key(&fn_call) {
+                    continue;
+                }
+                // otherwise iterate over the invocation argument configurations
+                let mut vm = VM::new(&mut self.memory_offset, &self.fn_to_ast);
+                let ast = self.fn_to_ast.get(&fn_call.name).unwrap();
+                self.ast_to_asm(ast.clone(), Some(&mut vm), fn_call.arg_types.clone());
+                vm.return_if_needed();
+                asm.push("\n".to_string());
+                // build the custom fn name
+                asm.push(format!("{}:", fn_call.typed_name()));
+                asm.append(&mut vm.asm);
+                asm.push("return".to_string());
+                self.written_fn.insert(fn_call, true);
             }
-            let mut vm = VM::new(&mut mem_offset);
-            self.ast_to_asm(ast.clone(), &mut vm);
-            vm.return_if_needed();
-            asm.push("\n".to_string());
-            asm.push(format!("{name}:"));
-            asm.append(&mut vm.asm);
-            asm.push("return".to_string());
+            if self.called_fn.len() == self.written_fn.len() {
+                break;
+            }
         }
         // step 3: add blocks to file
         for v in self.block_fn_asm.iter() {

@@ -13,6 +13,9 @@ let z = 88
 let zz = 8888
 a = addv(z, zz)
 
-if a != z + zz {
+if a == z + zz {
+    let zzzz = crash()
+}
+if a != 8976 {
     let zzzz = crash()
 }

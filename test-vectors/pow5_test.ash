@@ -1,4 +1,5 @@
 let v = 2
+let c = 99
 
 let v5 = pow5(v)
 
