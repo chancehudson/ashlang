@@ -576,6 +576,7 @@ impl VM {
                         // 1 stack element we don't need to mutate
                         // the virtual stack
                         if let Some(mem_index) = v.memory_index {
+                            self.stack.push(name.clone());
                             self.asm.push(format!("push {mem_index}"));
                         } else if let Some(stack_index) = v.stack_index {
                             // give a copy of the stack memory index or value
@@ -583,6 +584,7 @@ impl VM {
                             // the function will pop the value off the stack
                             self.asm
                                 .push(format!("dup {}", self.stack.len() - stack_index));
+                            self.stack.push(name.clone());
                         } else {
                             panic!("unexpected: variable has no memory or stack index")
                         }
@@ -592,6 +594,9 @@ impl VM {
                             dimensions: vec![1],
                         });
                     }
+                }
+                for _ in 0..vars.len() {
+                    self.stack.pop();
                 }
                 // track function invocations for the compiler
                 let call = FnCall {
