@@ -7,7 +7,7 @@
 program = _{ SOI ~ "\n"* ~ (fn_header ~ "\n")? ~ "\n"* ~ (stmt ~ "\n"+) * ~ (return_stmt ~ "\n"?)? ~ EOI }
 
 fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
-stmt = { var_def | const_def | if_stmt }
+stmt = { var_def | const_def | if_stmt | function_call }
 
 expr = { atom ~ (op ~ expr)* }
 return_stmt = { "return " ~ (function_call | expr) }

@@ -9,6 +9,7 @@ pub enum AstNode {
     FnVar(Vec<String>),
     // a let defintion, const definition, or if statement
     Stmt(String, bool, Expr),
+    ExprUnassigned(Expr),
     Rtrn(Expr),
     Const(String, Expr),
     If(Expr, Vec<AstNode>),
@@ -106,6 +107,7 @@ impl AshParser {
 
     fn build_ast_from_pair(&mut self, pair: pest::iterators::Pair<Rule>) -> AstNode {
         match pair.as_rule() {
+            Rule::function_call => ExprUnassigned(self.build_expr_from_pair(pair)),
             Rule::var_def => {
                 // get vardef
                 let mut pair = pair.into_inner();

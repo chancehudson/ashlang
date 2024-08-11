@@ -60,13 +60,51 @@ impl Compiler {
     // builtin functions that are globally available
     //
     // files may not use these strings as names
-    pub fn builtins() -> HashMap<String, Vec<String>> {
+    pub fn builtins() -> HashMap<String, (Vec<String>, FnCall)> {
         let mut out = HashMap::new();
 
         // cause execution to halt by popping too many items
         out.insert(
             "crash".to_string(),
-            vec!["push 0".to_string(), "assert".to_string()],
+            (
+                vec!["push 0".to_string(), "assert".to_string()],
+                FnCall {
+                    name: "crash".to_string(),
+                    arg_types: vec![],
+                    return_type: Some(ArgType {
+                        location: VarLocation::Stack,
+                        dimensions: vec![],
+                    }),
+                },
+            ),
+        );
+        out.insert(
+            "assert_eq".to_string(),
+            (
+                vec![
+                    "pop 1".to_string(),
+                    "eq".to_string(),
+                    "assert".to_string(),
+                    "push 0".to_string(),
+                ],
+                FnCall {
+                    name: "assert_eq".to_string(),
+                    arg_types: vec![
+                        ArgType {
+                            location: VarLocation::Stack,
+                            dimensions: vec![],
+                        },
+                        ArgType {
+                            location: VarLocation::Stack,
+                            dimensions: vec![],
+                        },
+                    ],
+                    return_type: Some(ArgType {
+                        location: VarLocation::Stack,
+                        dimensions: vec![],
+                    }),
+                },
+            ),
         );
 
         out
@@ -140,32 +178,15 @@ impl Compiler {
         // tracks total number of includes for a fn in all sources
         let mut included_fn: HashMap<String, u64> = parser.fn_names.clone();
         let builtins = Compiler::builtins();
-        for (name, asm) in builtins.iter() {
+        for (name, (asm, call)) in builtins.iter() {
             included_fn.insert(name.clone(), 0);
             self.state.fn_to_ast.insert(name.clone(), vec![]);
-            self.state.fn_return_types.insert(
-                FnCall {
-                    name: name.clone(),
-                    arg_types: vec![],
-                    return_type: None,
-                },
-                FnCall {
-                    name: name.clone(),
-                    arg_types: vec![],
-                    return_type: Some(ArgType {
-                        location: VarLocation::Stack,
-                        dimensions: vec![],
-                    }),
-                },
-            );
-            self.state.compiled_fn.insert(
-                FnCall {
-                    name: name.clone(),
-                    arg_types: vec![],
-                    return_type: None,
-                },
-                asm.clone(),
-            );
+            let mut call_no_return = call.clone();
+            call_no_return.return_type = None;
+            self.state
+                .fn_return_types
+                .insert(call_no_return.clone(), call.clone());
+            self.state.compiled_fn.insert(call_no_return, asm.clone());
         }
         // step 1: build ast for all functions
         // each function has a single ast, but multiple implementations

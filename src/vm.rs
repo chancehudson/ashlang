@@ -56,6 +56,9 @@ impl FnCall {
         }
         for arg in &self.arg_types {
             out.push_str("_");
+            if arg.dimensions.len() == 0 {
+                out.push_str("1");
+            }
             for d_index in 0..arg.dimensions.len() {
                 if d_index > 0 {
                     out.push_str("x");
@@ -587,7 +590,7 @@ impl<'a> VM<'a> {
                     } else {
                         arg_types.push(ArgType {
                             location: VarLocation::Stack,
-                            dimensions: vec![1],
+                            dimensions: vec![],
                         });
                     }
                 }
@@ -654,18 +657,36 @@ impl<'a> VM<'a> {
                     }
                     VarLocation::Memory => {
                         self.asm.push(format!("call {}", call.typed_name()));
-                        let len =
-                            VM::dimensions_to_len(call.clone().return_type.unwrap().dimensions);
-                        let memory_index = self.memory_start + self.memory_index;
-                        self.memory_index += len;
-                        return Some(Var {
-                            stack_index: None,
-                            location: VarLocation::Memory,
-                            dimensions: call.return_type.unwrap().dimensions.clone(),
-                            memory_index: Some(memory_index),
-                            block_index: self.block_depth,
-                            value: None,
-                        });
+                        if is_returning {
+                            // TODO: test this code, it's currently only used
+                            // in the return function above
+                            // the stack index calculated below is likely wrong
+                            if let Some(v) = self.vars.get(RETURN_VAR) {
+                                return Some(Var {
+                                    stack_index: Some(self.stack.len() - v.stack_index.unwrap()),
+                                    location: VarLocation::Memory,
+                                    dimensions: call.return_type.unwrap().dimensions.clone(),
+                                    memory_index: None,
+                                    block_index: self.block_depth,
+                                    value: None,
+                                });
+                            } else {
+                                panic!("no return memory address");
+                            }
+                        } else {
+                            let len =
+                                VM::dimensions_to_len(call.clone().return_type.unwrap().dimensions);
+                            let memory_index = self.memory_start + self.memory_index;
+                            self.memory_index += len;
+                            return Some(Var {
+                                stack_index: None,
+                                location: VarLocation::Memory,
+                                dimensions: call.return_type.unwrap().dimensions.clone(),
+                                memory_index: Some(memory_index),
+                                block_index: self.block_depth,
+                                value: None,
+                            });
+                        }
                     }
                 }
             }
@@ -1019,6 +1040,18 @@ impl<'a> VM<'a> {
                         self.let_var(name, expr);
                     } else {
                         self.set_var(name, expr)
+                    }
+                }
+                AstNode::ExprUnassigned(expr) => {
+                    let o = self.eval(expr, false);
+                    if let Some(v) = o {
+                        if let Some(_) = v.stack_index {
+                            self.stack.pop();
+                            self.asm.push("pop 1".to_string());
+                        }
+                    } else {
+                        self.stack.pop();
+                        self.asm.push("pop 1".to_string());
                     }
                 }
                 AstNode::FnVar(vars) => {
