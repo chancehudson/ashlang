@@ -2,7 +2,7 @@ use crate::{
     compiler::CompilerState,
     parser::{AstNode, BoolOp, Expr, Op},
 };
-use std::{collections::HashMap, fmt::format};
+use std::collections::HashMap;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum VarLocation {
@@ -1049,6 +1049,57 @@ impl<'a> VM<'a> {
     pub fn eval_ast(&mut self, ast: Vec<AstNode>, arg_types: Vec<ArgType>) {
         for v in ast {
             match v {
+                AstNode::AssignVec(name, indices, expr) => {
+                    if !self.vars.contains_key(&name) {
+                        panic!("var not found unique");
+                    }
+                    let o = self.eval(expr, false);
+                    let v = self.vars.get(&name).unwrap();
+                    let offset = VM::calc_vec_offset(&v.dimensions, &indices);
+                    if indices.len() == v.dimensions.len() {
+                        if o.is_some() {
+                            panic!("cannot assign memory var to scalar");
+                        }
+                        // push the expr to the stack then into memory
+                        // we're accessing a scalar, move it to the stack
+                        if let Some(mem_index) = v.memory_index {
+                            self.stack.push(name.clone());
+                            self.asm.push(format!("push {}", mem_index + offset));
+                            self.asm.push(format!("write_mem 1"));
+                            self.asm.push(format!("pop 1"));
+                            self.stack.pop();
+                        } else if let Some(stack_index) = v.stack_index {
+                            self.asm
+                                .push(format!("dup {}", self.stack.len() - stack_index));
+                            self.stack.push(name.clone());
+                            self.asm.push(format!("read_mem 1"));
+                            self.asm.push(format!("pop 1"));
+                            self.stack.pop();
+                        } else {
+                            panic!("unexpected: variable has no memory or stack index");
+                        }
+                    } else {
+                        panic!("cannot assign vec");
+                    }
+                }
+                AstNode::EmptyVecDef(name, dimensions) => {
+                    if self.vars.contains_key(&name) {
+                        panic!("var is not unique");
+                    }
+                    let len = VM::dimensions_to_len(dimensions.clone());
+                    self.vars.insert(
+                        name.clone(),
+                        Var {
+                            stack_index: None,
+                            block_index: self.block_depth,
+                            location: VarLocation::Memory,
+                            memory_index: Some(self.memory_start + self.memory_index),
+                            dimensions,
+                            value: None,
+                        },
+                    );
+                    self.memory_index += len;
+                }
                 AstNode::Stmt(name, is_let, expr) => {
                     if is_let {
                         self.let_var(name, expr);

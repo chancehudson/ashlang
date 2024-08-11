@@ -14,6 +14,8 @@ pub enum AstNode {
     Const(String, Expr),
     If(Expr, Vec<AstNode>),
     Loop(Expr, Vec<AstNode>),
+    EmptyVecDef(String, Vec<usize>),
+    AssignVec(String, Vec<u64>, Expr),
 }
 
 #[derive(Debug, Clone)]
@@ -108,6 +110,38 @@ impl AshParser {
 
     fn build_ast_from_pair(&mut self, pair: pest::iterators::Pair<Rule>) -> AstNode {
         match pair.as_rule() {
+            Rule::var_index_assign => {
+                let mut pair = pair.into_inner();
+                let name = pair.next().unwrap();
+                let mut indices: Vec<u64> = Vec::new();
+                let mut expr = None;
+                while let Some(v) = pair.next() {
+                    match v.as_rule() {
+                        Rule::literal_dec => indices.push(v.as_str().parse::<u64>().unwrap()),
+                        Rule::expr => {
+                            expr = Some(self.build_expr_from_pair(v));
+                        }
+                        _ => panic!("unexpected rule in var_index_assign"),
+                    }
+                }
+                if expr.is_none() {
+                    panic!("no expression found in var_index_assign");
+                }
+                AssignVec(name.as_str().to_string(), indices, expr.unwrap())
+            }
+            Rule::var_vec_def => {
+                let mut pair = pair.into_inner();
+                let _ = pair.next().unwrap();
+                let name = pair.next().unwrap();
+                let mut indices: Vec<usize> = Vec::new();
+                while let Some(v) = pair.next() {
+                    match v.as_rule() {
+                        Rule::literal_dec => indices.push(v.as_str().parse::<usize>().unwrap()),
+                        _ => panic!("unexpected rule in var_vec_def"),
+                    }
+                }
+                EmptyVecDef(name.as_str().to_string(), indices)
+            }
             Rule::loop_stmt => {
                 let mut pair = pair.into_inner();
                 let iter_count = pair.next().unwrap();

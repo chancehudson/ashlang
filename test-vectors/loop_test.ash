@@ -1,4 +1,5 @@
 let v = 0
+
 loop 10 {
   let z = 1000
   v = v + 1

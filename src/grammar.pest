@@ -7,7 +7,7 @@
 program = _{ SOI ~ "\n"* ~ (fn_header ~ "\n")? ~ "\n"* ~ (stmt ~ "\n"+) * ~ (return_stmt ~ "\n"?)? ~ EOI }
 
 fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
-stmt = { var_def | const_def | if_stmt | function_call | loop_stmt }
+stmt = { var_def | const_def | if_stmt | function_call | loop_stmt | var_index_assign | var_vec_def }
 
 expr = { atom ~ (op ~ expr)* }
 return_stmt = { "return " ~ (function_call | expr) }
@@ -41,11 +41,13 @@ vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec 
 var_def = { var ~ "=" ~ (function_call | expr | vec) }
 let_r = { "let " }
 const_def = { "const " ~ varname ~ "=" ~ (expr | vec) }
+var_vec_def = { let_r ~ varname ~ var_index* }
+var_index_assign = { varname ~ var_index+ ~ "=" ~ expr }
 
 var = { let_r? ~ varname }
 var_index = _{ "[" ~ literal_dec ~ "]" }
 
-atom = { literal_dec | varname ~ var_index* }
+atom = { literal_dec | (varname ~ var_index*) }
 
 literal_dec = @{ ASCII_DIGIT+ }
 
