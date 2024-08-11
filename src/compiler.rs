@@ -66,7 +66,7 @@ impl Compiler {
         // cause execution to halt by popping too many items
         out.insert(
             "crash".to_string(),
-            vec!["crash:".to_string(), "pop 99".to_string()],
+            vec!["push 0".to_string(), "assert".to_string()],
         );
 
         out
@@ -140,7 +140,7 @@ impl Compiler {
         // tracks total number of includes for a fn in all sources
         let mut included_fn: HashMap<String, u64> = parser.fn_names.clone();
         let builtins = Compiler::builtins();
-        for (name, _v) in builtins.iter() {
+        for (name, asm) in builtins.iter() {
             included_fn.insert(name.clone(), 0);
             self.state.fn_to_ast.insert(name.clone(), vec![]);
             self.state.fn_return_types.insert(
@@ -164,7 +164,7 @@ impl Compiler {
                     arg_types: vec![],
                     return_type: None,
                 },
-                vec![],
+                asm.clone(),
             );
         }
         // step 1: build ast for all functions

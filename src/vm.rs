@@ -250,7 +250,7 @@ impl<'a> VM<'a> {
     pub fn return_expr(&mut self, expr: Expr) {
         // we leave the returned value on the top of the stack
         // without registering is in self.vars
-        let out = self.eval(expr);
+        let out = self.eval(expr, true);
         if let Some(v) = out {
             self.return_type = Some(ArgType {
                 location: v.location.clone(),
@@ -271,7 +271,7 @@ impl<'a> VM<'a> {
         for _ in 0..self
             .vars
             .iter()
-            .filter(|(_k, v)| v.location == VarLocation::Stack)
+            .filter(|(_k, v)| v.stack_index.is_some())
             .collect::<Vec<(&String, &Var)>>()
             .len()
         {
@@ -296,7 +296,7 @@ impl<'a> VM<'a> {
         for _ in 0..self
             .vars
             .iter()
-            .filter(|(_k, v)| v.location == VarLocation::Stack)
+            .filter(|(_k, v)| v.stack_index.is_some())
             .collect::<Vec<(&String, &Var)>>()
             .len()
         {
@@ -338,7 +338,7 @@ impl<'a> VM<'a> {
                 self.asm.push("pop 1".to_string());
             }
             _ => {
-                let out = self.eval(expr);
+                let out = self.eval(expr, false);
                 if out.is_none() {
                     // stack based variable
                     self.vars.insert(
@@ -428,7 +428,7 @@ impl<'a> VM<'a> {
             panic!("cannot set memory based variable");
         }
         // new value is on the top of the stack
-        let v = self.eval(expr);
+        let v = self.eval(expr, false);
         if v.is_some() {
             panic!("cannot set memory based variable");
         }
@@ -541,7 +541,7 @@ impl<'a> VM<'a> {
     //
     // Optionally returns a variable reference to be used by the caller
     // if the return value is non-null the asm has not been mutated
-    pub fn eval(&mut self, expr: Expr) -> Option<Var> {
+    pub fn eval(&mut self, expr: Expr, is_returning: bool) -> Option<Var> {
         match &expr {
             Expr::VecLit(_v) => {
                 panic!("vector literals must be assigned before operation");
@@ -555,7 +555,7 @@ impl<'a> VM<'a> {
                 // the destination function will handle that
                 for v in vars {
                     // if it's a stack variable the asm will be modified as needed
-                    let o = self.eval(*(*v).clone());
+                    let o = self.eval(*(*v).clone(), false);
                     // let o = self.eval(Expr::Val(v.clone(), vec![]));
                     // if it's not a stack variable we'll get a return from self.eval
                     // and can add it to the arg_types. We'll then push the absolute
@@ -590,9 +590,6 @@ impl<'a> VM<'a> {
                             dimensions: vec![1],
                         });
                     }
-                }
-                for _ in 0..vars.len() {
-                    self.stack.pop();
                 }
 
                 // build functions as needed
@@ -629,8 +626,21 @@ impl<'a> VM<'a> {
                     .or_insert_with(|| 1);
                 // we push the return memory index for every call
                 // it's not used if the return type is stack
-                self.asm
-                    .push(format!("push {}", self.memory_start + self.memory_index));
+                if is_returning {
+                    if let Some(v) = self.vars.get(RETURN_VAR) {
+                        self.asm
+                            .push(format!("dup {}", self.stack.len() - v.stack_index.unwrap()));
+                    } else {
+                        panic!("no return memory address");
+                    }
+                } else {
+                    self.asm
+                        .push(format!("push {}", self.memory_start + self.memory_index));
+                }
+                // the function pops all arguments off the stack before it returns
+                for _ in 0..vars.len() {
+                    self.stack.pop();
+                }
                 match call.return_type.clone().unwrap().location {
                     VarLocation::Const => {
                         panic!("cannot return constant from function");
@@ -777,9 +787,9 @@ impl<'a> VM<'a> {
                 // only allow variables of same dimensions
                 // for now
                 let l = (*lhs).clone();
-                let lv = self.eval(*l);
+                let lv = self.eval(*l, false);
                 let r = (*rhs).clone();
-                let rv = self.eval(*r);
+                let rv = self.eval(*r, false);
                 if lv.is_none() != rv.is_none() {
                     panic!("cannot operate on stack types and memory types");
                 }
@@ -795,15 +805,28 @@ impl<'a> VM<'a> {
                         }
                     }
                     let total_len = VM::dimensions_to_len(lvu.dimensions.clone());
-                    let out_v = Var {
-                        stack_index: None,
-                        block_index: self.block_depth,
-                        location: VarLocation::Memory,
-                        memory_index: Some(self.memory_start + self.memory_index),
-                        dimensions: lvu.dimensions.clone(),
-                        value: None,
-                    };
-                    self.memory_index += total_len;
+                    let out_v;
+                    if is_returning {
+                        let return_var = self.vars.get(RETURN_VAR).unwrap();
+                        out_v = Var {
+                            stack_index: Some(return_var.stack_index.unwrap()),
+                            block_index: self.block_depth,
+                            location: VarLocation::Memory,
+                            memory_index: None,
+                            dimensions: lvu.dimensions.clone(),
+                            value: None,
+                        };
+                    } else {
+                        out_v = Var {
+                            stack_index: None,
+                            block_index: self.block_depth,
+                            location: VarLocation::Memory,
+                            memory_index: Some(self.memory_start + self.memory_index),
+                            dimensions: lvu.dimensions.clone(),
+                            value: None,
+                        };
+                        self.memory_index += total_len;
+                    }
                     // operate on elements in a vector stored in memory
                     // store the result in memory
                     // TODO: batch memory read/write operations
@@ -879,14 +902,20 @@ impl<'a> VM<'a> {
                             // v1 and v2 are operated on and a single output
                             // remains
                             self.stack.pop();
-                            // the final output is written to memory below and
-                            // removed from the stack
-                            self.stack.pop();
 
                             self.asm.append(&mut ops.clone());
 
-                            self.asm
-                                .push(format!("push {}", out.memory_index.unwrap() + x));
+                            if let Some(memory_index) = out.memory_index {
+                                self.asm.push(format!("push {}", memory_index + x));
+                            } else if let Some(stack_index) = out.stack_index {
+                                self.asm
+                                    .push(format!("dup {}", self.stack.len() - stack_index));
+                                self.asm.push(format!("push {x}"));
+                                self.asm.push("add".to_string());
+                            }
+                            // the final output is written to memory below and
+                            // removed from the stack
+                            self.stack.pop();
                             self.asm.push(format!("write_mem 1"));
                             self.asm.push(format!("pop 1"));
                         }
@@ -948,9 +977,9 @@ impl<'a> VM<'a> {
             }
             Expr::BoolOp { lhs, bool_op, rhs } => {
                 let l = (*lhs).clone();
-                let lv = self.eval(*l);
+                let lv = self.eval(*l, false);
                 let r = (*rhs).clone();
-                let rv = self.eval(*r);
+                let rv = self.eval(*r, false);
                 if lv.is_none() != rv.is_none() {
                     panic!("cannot apply boolean operation to stack and memory vars");
                 }
@@ -1000,6 +1029,9 @@ impl<'a> VM<'a> {
                             vars.len()
                         );
                     }
+                    for x in 0..vars.len() {
+                        self.fn_var(vars[x].clone(), arg_types[x].clone());
+                    }
                     self.fn_var(
                         RETURN_VAR.to_string(),
                         ArgType {
@@ -1007,9 +1039,6 @@ impl<'a> VM<'a> {
                             dimensions: vec![],
                         },
                     );
-                    for x in 0..vars.len() {
-                        self.fn_var(vars[x].clone(), arg_types[x].clone());
-                    }
                 }
                 AstNode::Rtrn(expr) => {
                     self.return_expr(expr);
@@ -1022,7 +1051,7 @@ impl<'a> VM<'a> {
                     self.const_var(name, expr);
                 }
                 AstNode::If(expr, block_ast) => {
-                    self.eval(expr);
+                    self.eval(expr, false);
                     let block_name = format!("block_____{}", self.compiler_state.block_counter);
                     self.compiler_state.block_counter += 1;
                     self.call_block(&block_name);
