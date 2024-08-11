@@ -11,8 +11,10 @@ stmt = { var_def | const_def | if_stmt }
 
 expr = { atom ~ (op ~ expr)* }
 return_stmt = { "return " ~ (function_call | expr) }
-function_call = { varname ~ fn_header }
 
+// this is distinct from fn_header because it accepts an expr or a var
+fn_args = { "(" ~ (((function_call | expr) ~ ("," | ")"))+ | ")") }
+function_call = { varname ~ fn_args }
 
 op = _{ add | sub | mul | inv }
     add = { "+" }
@@ -34,7 +36,7 @@ vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec 
 // this let_r match is needed to
 // determine if a variable is being
 // declared for the first time
-var_def = { var ~ "=" ~ (function_call | expr | vec)}
+var_def = { var ~ "=" ~ (function_call | expr | vec) }
 let_r = { "let " }
 const_def = { "const " ~ varname ~ "=" ~ (expr | vec) }
 

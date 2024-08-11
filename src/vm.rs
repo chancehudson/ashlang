@@ -555,7 +555,8 @@ impl<'a> VM<'a> {
                 // the destination function will handle that
                 for v in vars {
                     // if it's a stack variable the asm will be modified as needed
-                    let o = self.eval(Expr::Val(v.clone(), vec![]));
+                    let o = self.eval(*(*v).clone());
+                    // let o = self.eval(Expr::Val(v.clone(), vec![]));
                     // if it's not a stack variable we'll get a return from self.eval
                     // and can add it to the arg_types. We'll then push the absolute
                     // position of the memory variable onto the stack

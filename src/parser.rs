@@ -20,7 +20,7 @@ pub enum Expr {
     VecLit(Vec<u64>),
     Lit(u64),
     Val(String, Vec<u64>),
-    FnCall(String, Vec<String>),
+    FnCall(String, Vec<Box<Expr>>),
     NumOp {
         lhs: Box<Expr>,
         op: Op,
@@ -203,9 +203,9 @@ impl AshParser {
                 let mut pair = pair.into_inner();
                 let next = pair.next().unwrap();
                 let arg_pair = pair.next().unwrap().into_inner();
-                let mut vars: Vec<String> = Vec::new();
+                let mut vars: Vec<Box<Expr>> = Vec::new();
                 for v in arg_pair {
-                    vars.push(v.as_str().to_string());
+                    vars.push(Box::new(self.build_expr_from_pair(v)));
                 }
                 let fn_name = next.as_str().to_string();
                 self.mark_fn_call(fn_name.clone());
