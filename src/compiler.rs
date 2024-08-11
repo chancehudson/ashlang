@@ -207,6 +207,7 @@ impl Compiler {
             asm.push("\n".to_string());
             asm.append(&mut block_asm);
         }
+        asm.push("\n".to_string());
 
         if self.print_asm {
             // prints the assembly

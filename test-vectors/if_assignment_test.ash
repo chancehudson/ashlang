@@ -11,7 +11,7 @@ if a == b - 1 {
 
 let z = 88
 let zz = 8888
-a = addv(z, zz)
+a = add(z, zz)
 
 if a != z + zz {
     let zzzz = crash()

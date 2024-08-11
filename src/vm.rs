@@ -67,6 +67,8 @@ impl FnCall {
     }
 }
 
+static RETURN_VAR: &str = "_____return_____";
+
 /**
  * This structure is used to track a simple model
  * of the VM being executed. An instance of the
@@ -247,6 +249,7 @@ impl<'a> VM<'a> {
     // state. e.g. this VM cannot be used after returning
     pub fn return_expr(&mut self, expr: Expr) {
         // we leave the returned value on the top of the stack
+        // without registering is in self.vars
         let out = self.eval(expr);
         if let Some(v) = out {
             self.return_type = Some(ArgType {
@@ -254,6 +257,8 @@ impl<'a> VM<'a> {
                 dimensions: v.dimensions.clone(),
             });
         } else {
+            // put the top of the stack at the bottom
+            self.asm.push(format!("swap {}", self.vars.len()));
             self.return_type = Some(ArgType {
                 location: VarLocation::Stack,
                 dimensions: vec![],
@@ -263,11 +268,6 @@ impl<'a> VM<'a> {
         // everything on the stack so that when we return
         // to the previous position the stack is in a
         // predictable state
-        if self.vars.is_empty() {
-            self.has_returned = true;
-            return;
-        }
-        self.asm.push(format!("swap {}", self.vars.len()));
         for _ in 0..self
             .vars
             .iter()
@@ -290,7 +290,7 @@ impl<'a> VM<'a> {
             return;
         }
         self.return_type = Some(ArgType {
-            location: VarLocation::Stack,
+            location: VarLocation::Memory,
             dimensions: vec![],
         });
         for _ in 0..self
@@ -302,7 +302,6 @@ impl<'a> VM<'a> {
         {
             self.asm.push(format!("pop 1"));
         }
-        self.asm.push("push 0".to_string());
         self.has_returned = true;
     }
 
@@ -627,13 +626,37 @@ impl<'a> VM<'a> {
                         *call_count += 1;
                     })
                     .or_insert_with(|| 1);
-                // we push 1 element onto the virtual stack
-                // this element is the return value of the function
-                // or 0 if the function does not explicitly
-                // return a value
-                self.stack.push(name.clone());
-                self.asm.push(format!("call {}", call.typed_name()));
-                return None;
+                // we push the return memory index for every call
+                // it's not used if the return type is stack
+                self.asm
+                    .push(format!("push {}", self.memory_start + self.memory_index));
+                match call.return_type.clone().unwrap().location {
+                    VarLocation::Const => {
+                        panic!("cannot return constant from function");
+                    }
+                    VarLocation::Stack => {
+                        // if the return value is a stack variable
+                        // we need to increment the virtual stack
+                        self.stack.push(name.clone());
+                        self.asm.push(format!("call {}", call.typed_name()));
+                        return None;
+                    }
+                    VarLocation::Memory => {
+                        self.asm.push(format!("call {}", call.typed_name()));
+                        let len =
+                            VM::dimensions_to_len(call.clone().return_type.unwrap().dimensions);
+                        let memory_index = self.memory_start + self.memory_index;
+                        self.memory_index += len;
+                        return Some(Var {
+                            stack_index: None,
+                            location: VarLocation::Memory,
+                            dimensions: call.return_type.unwrap().dimensions.clone(),
+                            memory_index: Some(memory_index),
+                            block_index: self.block_depth,
+                            value: None,
+                        });
+                    }
+                }
             }
             Expr::Val(name, indices) => {
                 // if the val is a constant we push to stack
@@ -976,6 +999,13 @@ impl<'a> VM<'a> {
                             vars.len()
                         );
                     }
+                    self.fn_var(
+                        RETURN_VAR.to_string(),
+                        ArgType {
+                            location: VarLocation::Stack,
+                            dimensions: vec![],
+                        },
+                    );
                     for x in 0..vars.len() {
                         self.fn_var(vars[x].clone(), arg_types[x].clone());
                     }
