@@ -1,5 +1,6 @@
 use crate::{
     compiler::CompilerState,
+    log,
     parser::{AstNode, BoolOp, Expr, Op},
 };
 use std::collections::HashMap;
@@ -220,7 +221,8 @@ impl<'a> VM<'a> {
                         _ => panic!("dynamically evaluated consts not supported"),
                     }
                 } else {
-                    panic!("unknown variable");
+                    log::compile_error("unknown variable", None);
+                    unreachable!();
                 }
             }
             Expr::NumOp {
@@ -472,7 +474,8 @@ impl<'a> VM<'a> {
                 panic!("var does not have a stack index");
             }
         } else {
-            panic!("unknown var");
+            log::compile_error("unknown variable", None);
+            unreachable!();
         }
     }
 
@@ -810,7 +813,8 @@ impl<'a> VM<'a> {
                         }
                     }
                 } else {
-                    panic!("unknown variable: {name}");
+                    log::compile_error(format!("unknown variable: {name}").as_str(), None);
+                    unreachable!();
                 }
             }
             Expr::Lit(v) => {
@@ -1057,6 +1061,7 @@ impl<'a> VM<'a> {
                     let v = self.vars.get(&name).unwrap();
                     let offset = VM::calc_vec_offset(&v.dimensions, &indices);
                     if indices.len() == v.dimensions.len() {
+                        // assigning a scalar into a specific index in a vec
                         if o.is_some() {
                             panic!("cannot assign memory var to scalar");
                         }
@@ -1076,8 +1081,15 @@ impl<'a> VM<'a> {
                             self.asm.push(format!("pop 1"));
                             self.stack.pop();
                         } else {
-                            panic!("unexpected: variable has no memory or stack index");
+                            log::compile_error(
+                                "unexpected: variable has no memory or stack index",
+                                None,
+                            );
+                            unreachable!();
                         }
+                    } else if indices.len() > v.dimensions.len() {
+                        log::compile_error("var dimension is too low for assignment", Some("you're accessing an index on a scalar, or an n+1 dimension on a vector of n dimensions"));
+                        unreachable!();
                     } else {
                         panic!("cannot assign vec");
                     }

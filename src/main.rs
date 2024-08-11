@@ -4,6 +4,7 @@ use compiler::Compiler;
 use triton_vm::prelude::*;
 
 mod compiler;
+mod log;
 mod parser;
 mod vm;
 
