@@ -1,4 +1,7 @@
-use crate::parser::{AstNode, BoolOp, Expr, Op};
+use crate::{
+    compiler::CompilerState,
+    parser::{AstNode, BoolOp, Expr, Op},
+};
 use std::collections::HashMap;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -76,7 +79,7 @@ impl FnCall {
  *
  * Automatically move vars between memory and stack
  */
-pub struct VM {
+pub struct VM<'a> {
     // represents the contents of the stack
     pub stack: Vec<String>,
 
@@ -103,21 +106,13 @@ pub struct VM {
     // the current free memory index, relative to memory_start
     pub memory_index: usize,
 
-    // a map of function names to their respective ASTs
-    pub fn_to_ast: HashMap<String, Vec<AstNode>>,
-
-    // a map of function names to each distinct set of arguments
-    // they have been invoked with
-    //
-    // we will use this to compile different variants based on
-    // the variables they accept
-    pub fn_calls: HashMap<FnCall, u64>,
+    pub compiler_state: &'a mut CompilerState,
 }
 
-impl VM {
-    pub fn new(mem_offset: &mut usize, fn_to_ast: &HashMap<String, Vec<AstNode>>) -> Self {
-        let memory_start = mem_offset.clone();
-        *mem_offset += 2_usize.pow(32);
+impl<'a> VM<'a> {
+    pub fn new(compiler_state: &'a mut CompilerState) -> Self {
+        let memory_start = compiler_state.memory_offset.clone();
+        compiler_state.memory_offset += 2_usize.pow(32);
         VM {
             vars: HashMap::new(),
             stack: Vec::new(),
@@ -126,22 +121,7 @@ impl VM {
             block_depth: 0,
             memory_index: 0,
             memory_start,
-            fn_to_ast: fn_to_ast.clone(),
-            fn_calls: HashMap::new(),
-        }
-    }
-
-    pub fn from_vm(vm: &Self) -> Self {
-        VM {
-            vars: vm.vars.clone(),
-            stack: vm.stack.clone(),
-            asm: Vec::new(),
-            has_returned: false,
-            block_depth: vm.block_depth,
-            memory_index: vm.memory_index,
-            memory_start: vm.memory_start,
-            fn_to_ast: vm.fn_to_ast.clone(),
-            fn_calls: vm.fn_calls.clone(),
+            compiler_state,
         }
     }
 
@@ -603,7 +583,8 @@ impl VM {
                     name: name.clone(),
                     arg_types,
                 };
-                self.fn_calls
+                self.compiler_state
+                    .called_fn
                     .entry(call.clone())
                     .and_modify(|call_count| {
                         *call_count += 1;
@@ -938,5 +919,60 @@ impl VM {
                 return None;
             }
         };
+    }
+
+    pub fn eval_ast(&mut self, ast: Vec<AstNode>, arg_types: Vec<ArgType>) {
+        for v in ast {
+            match v {
+                AstNode::Stmt(name, is_let, expr) => {
+                    if is_let {
+                        self.let_var(name, expr);
+                    } else {
+                        self.set_var(name, expr)
+                    }
+                }
+                AstNode::FnVar(vars) => {
+                    if arg_types.len() != vars.len() {
+                        panic!(
+                            "function argument count mismatch: expected {}, got {}",
+                            arg_types.len(),
+                            vars.len()
+                        );
+                    }
+                    for x in 0..vars.len() {
+                        self.fn_var(vars[x].clone(), arg_types[x].clone());
+                    }
+                }
+                AstNode::Rtrn(expr) => {
+                    self.return_expr(expr);
+                }
+                AstNode::Const(name, expr) => {
+                    // we must be able to fully evaluate
+                    // the constant at compile time
+                    // e.g. the expr must contain only
+                    // Expr::Lit and Expr::Val containing other consts
+                    self.const_var(name, expr);
+                }
+                AstNode::If(expr, block_ast) => {
+                    self.eval(expr);
+                    let block_name = format!("block_{}", self.compiler_state.block_counter);
+                    self.compiler_state.block_counter += 1;
+                    self.call_block(&block_name);
+                    // vm.eval(expr1);
+                    // vm.eval(expr2);
+                    // push 0 to the stack based on the bool_op
+                    let start_asm_len = self.asm.len();
+                    self.begin_block();
+                    // blocks can't take args
+                    self.eval_ast(block_ast, vec![]);
+                    self.end_block();
+                    // pull the resulting asm as the block asm
+                    let mut block_asm = self.asm.drain(start_asm_len..).collect::<Vec<String>>();
+                    block_asm.insert(0, format!("{block_name}:"));
+                    block_asm.push("return".to_string());
+                    self.compiler_state.block_fn_asm.push(block_asm);
+                }
+            }
+        }
     }
 }
