@@ -2,7 +2,7 @@ use crate::{
     compiler::CompilerState,
     parser::{AstNode, BoolOp, Expr, Op},
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::format};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum VarLocation {
@@ -144,7 +144,7 @@ impl<'a> VM<'a> {
 
     // remove variables from the stack and the
     // local vm
-    pub fn end_block(&mut self) {
+    pub fn end_block(&mut self, keep_var: Option<String>) {
         if self.block_depth == 0 {
             panic!("cannot exit execution root");
         }
@@ -160,15 +160,29 @@ impl<'a> VM<'a> {
             self.block_depth -= 1;
             return;
         }
-        for _ in 0..entries_to_remove.len() {
-            self.asm.push(format!("pop 1"));
-        }
         // TODO: don't iterate here
-        for _ in 0..entries_to_remove.len() {
-            self.stack.pop();
+        let keep_name;
+        if let Some(name) = &keep_var {
+            if let Some(_) = self.eval(Expr::Val(name.clone(), vec![]), false) {
+                panic!("non-stack variable cannot be kept on the stack");
+            } else {
+                let target_stack_depth = entries_to_remove.len();
+                self.asm.push(format!("swap {}", target_stack_depth));
+                self.asm.push("pop 1".to_string());
+                self.stack.pop();
+            }
+            keep_name = name.clone();
+        } else {
+            keep_name = String::new();
         }
-        for (k, _v) in entries_to_remove {
-            self.vars.remove(&k);
+        for (k, _) in &entries_to_remove {
+            // swap with the bottom of the stack
+            if &keep_name == k {
+                continue;
+            }
+            self.stack.pop();
+            self.asm.push(format!("pop 1"));
+            self.vars.remove(k);
         }
         self.block_depth -= 1;
     }
@@ -1095,11 +1109,62 @@ impl<'a> VM<'a> {
                     self.begin_block();
                     // blocks can't take args
                     self.eval_ast(block_ast, vec![]);
-                    self.end_block();
+                    self.end_block(None);
                     // pull the resulting asm as the block asm
                     let mut block_asm = self.asm.drain(start_asm_len..).collect::<Vec<String>>();
                     block_asm.insert(0, format!("{block_name}:"));
                     block_asm.push("return".to_string());
+                    self.compiler_state.block_fn_asm.push(block_asm);
+                }
+                AstNode::Loop(expr, block_ast) => {
+                    if let Some(_) = self.eval(expr, false) {
+                        panic!("loop condition must be a stack variable");
+                    }
+                    let block_counter_name =
+                        format!("block_____{}_counter", self.compiler_state.block_counter);
+                    let block_name = format!("loop_____{}", self.compiler_state.block_counter);
+                    self.compiler_state.block_counter += 1;
+                    self.call_block(&block_name);
+                    // push 0 to the stack based on the bool_op
+                    let start_asm_len = self.asm.len();
+                    self.begin_block();
+                    self.vars.insert(
+                        block_counter_name.clone(),
+                        Var {
+                            stack_index: Some(self.stack.len()),
+                            block_index: self.block_depth,
+                            location: VarLocation::Stack,
+                            memory_index: None,
+                            dimensions: vec![],
+                            value: None,
+                        },
+                    );
+                    // blocks can't take args
+                    self.asm.push(format!("{block_name}:"));
+                    self.eval_ast(block_ast, vec![]);
+                    if let Some(_) = self.eval(Expr::Val(block_counter_name.clone(), vec![]), false)
+                    {
+                        panic!("loop counter is not scalar");
+                    }
+                    // pull the resulting asm as the block asm
+                    self.asm.push("push -1".to_string());
+                    self.asm.push("add".to_string());
+
+                    self.asm.push("dup 0".to_string());
+                    self.stack.push("dup".to_string());
+                    self.asm
+                        .push(format!("swap {}", self.stack_index(&block_counter_name)));
+                    self.asm.push("pop 1".to_string());
+                    self.stack.pop();
+                    self.end_block(Some(block_counter_name.clone()));
+                    self.asm.push("skiz".to_string());
+                    self.stack.pop();
+                    self.asm.push("recurse".to_string());
+                    self.stack.pop();
+                    self.vars.remove(&block_counter_name);
+                    self.asm.push("pop 1".to_string()); // pop the loop counter
+                    self.asm.push("return".to_string());
+                    let block_asm = self.asm.drain(start_asm_len..).collect::<Vec<String>>();
                     self.compiler_state.block_fn_asm.push(block_asm);
                 }
             }

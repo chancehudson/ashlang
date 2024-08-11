@@ -13,6 +13,7 @@ pub enum AstNode {
     Rtrn(Expr),
     Const(String, Expr),
     If(Expr, Vec<AstNode>),
+    Loop(Expr, Vec<AstNode>),
 }
 
 #[derive(Debug, Clone)]
@@ -107,6 +108,24 @@ impl AshParser {
 
     fn build_ast_from_pair(&mut self, pair: pest::iterators::Pair<Rule>) -> AstNode {
         match pair.as_rule() {
+            Rule::loop_stmt => {
+                let mut pair = pair.into_inner();
+                let iter_count = pair.next().unwrap();
+                let iter_count_expr = self.build_expr_from_pair(iter_count);
+                let block = pair.next().unwrap();
+                let block_inner = block.into_inner();
+                let block_ast = block_inner
+                    .map(|v| match v.as_rule() {
+                        Rule::stmt => {
+                            let mut pair = v.into_inner();
+                            let next = pair.next().unwrap();
+                            self.build_ast_from_pair(next)
+                        }
+                        _ => panic!("invalid expression in block"),
+                    })
+                    .collect();
+                Loop(iter_count_expr, block_ast)
+            }
             Rule::function_call => ExprUnassigned(self.build_expr_from_pair(pair)),
             Rule::var_def => {
                 // get vardef

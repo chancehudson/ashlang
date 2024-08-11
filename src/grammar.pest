@@ -7,7 +7,7 @@
 program = _{ SOI ~ "\n"* ~ (fn_header ~ "\n")? ~ "\n"* ~ (stmt ~ "\n"+) * ~ (return_stmt ~ "\n"?)? ~ EOI }
 
 fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
-stmt = { var_def | const_def | if_stmt | function_call }
+stmt = { var_def | const_def | if_stmt | function_call | loop_stmt }
 
 expr = { atom ~ (op ~ expr)* }
 return_stmt = { "return " ~ (function_call | expr) }
@@ -15,6 +15,8 @@ return_stmt = { "return " ~ (function_call | expr) }
 // this is distinct from fn_header because it accepts an expr or a var
 fn_args = { "(" ~ (((function_call | expr) ~ ("," | ")"))+ | ")") }
 function_call = { varname ~ fn_args }
+
+loop_stmt = { "loop" ~ (function_call | expr) ~ block }
 
 op = _{ add | sub | mul | inv }
     add = { "+" }
