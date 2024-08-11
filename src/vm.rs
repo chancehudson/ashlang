@@ -1023,7 +1023,7 @@ impl<'a> VM<'a> {
                 }
                 AstNode::If(expr, block_ast) => {
                     self.eval(expr);
-                    let block_name = format!("block_{}", self.compiler_state.block_counter);
+                    let block_name = format!("block_____{}", self.compiler_state.block_counter);
                     self.compiler_state.block_counter += 1;
                     self.call_block(&block_name);
                     // vm.eval(expr1);
