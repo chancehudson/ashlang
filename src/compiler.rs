@@ -1,5 +1,5 @@
 use crate::parser::{AshParser, AstNode};
-use crate::vm::{FnCall, VM};
+use crate::vm::{ArgType, FnCall, VarLocation, VM};
 use camino::Utf8PathBuf;
 use std::{collections::HashMap, fs};
 
@@ -10,7 +10,8 @@ pub struct CompilerState {
     // track where in the memory we're at
     pub memory_offset: usize,
     pub called_fn: HashMap<FnCall, u64>,
-    pub written_fn: HashMap<FnCall, bool>,
+    pub fn_return_types: HashMap<FnCall, FnCall>,
+    pub compiled_fn: HashMap<FnCall, Vec<String>>,
     pub fn_to_ast: HashMap<String, Vec<AstNode>>,
     pub block_counter: usize,
     pub block_fn_asm: Vec<Vec<String>>,
@@ -21,7 +22,8 @@ impl CompilerState {
         CompilerState {
             memory_offset: 0,
             called_fn: HashMap::new(),
-            written_fn: HashMap::new(),
+            fn_return_types: HashMap::new(),
+            compiled_fn: HashMap::new(),
             fn_to_ast: HashMap::new(),
             block_counter: 0,
             block_fn_asm: vec![],
@@ -134,11 +136,33 @@ impl Compiler {
 
         // tracks total number of includes for a fn in all sources
         let mut included_fn: HashMap<String, u64> = parser.fn_names.clone();
-        // let mut fn_arg_types: HashMap<String, Vec<ArgType>> = HashMap::new();
         let builtins = Compiler::builtins();
         for (name, _v) in builtins.iter() {
             included_fn.insert(name.clone(), 0);
             self.state.fn_to_ast.insert(name.clone(), vec![]);
+            self.state.fn_return_types.insert(
+                FnCall {
+                    name: name.clone(),
+                    arg_types: vec![],
+                    return_type: None,
+                },
+                FnCall {
+                    name: name.clone(),
+                    arg_types: vec![],
+                    return_type: Some(ArgType {
+                        location: VarLocation::Stack,
+                        dimensions: vec![],
+                    }),
+                },
+            );
+            self.state.compiled_fn.insert(
+                FnCall {
+                    name: name.clone(),
+                    arg_types: vec![],
+                    return_type: None,
+                },
+                vec![],
+            );
         }
         // step 1: build ast for all functions
         // each function has a single ast, but multiple implementations
@@ -169,32 +193,14 @@ impl Compiler {
         let mut asm = vm.asm.clone();
         asm.push("halt".to_string());
 
-        // step 2: compile each function variant and insert into the asm
-        loop {
-            for (fn_call, _) in self.state.called_fn.clone() {
-                if builtins.contains_key(&fn_call.name) {
-                    self.state.written_fn.insert(fn_call, true);
-                    continue;
-                }
-                if self.state.written_fn.contains_key(&fn_call) {
-                    continue;
-                }
-                // otherwise iterate over the invocation argument configurations
-                let ast = self.state.fn_to_ast.get(&fn_call.name).unwrap().clone();
-                let mut vm = VM::new(&mut self.state);
-                vm.eval_ast(ast.clone(), fn_call.arg_types.clone());
-                vm.return_if_needed();
-                asm.push("\n".to_string());
-                // build the custom fn name
-                asm.push(format!("{}:", fn_call.typed_name()));
-                asm.append(&mut vm.asm);
-                asm.push("return".to_string());
-                self.state.written_fn.insert(fn_call, true);
-            }
-            if self.state.called_fn.len() == self.state.written_fn.len() {
-                break;
-            }
+        // step 2: add functions to file
+        for (fn_call, fn_asm) in &self.state.compiled_fn {
+            asm.push("\n".to_string());
+            asm.push(format!("{}:", fn_call.typed_name()));
+            asm.append(&mut fn_asm.clone());
+            asm.push("return".to_string());
         }
+
         // step 3: add blocks to file
         for v in self.state.block_fn_asm.iter() {
             let mut block_asm = v.clone();
@@ -202,12 +208,6 @@ impl Compiler {
             asm.append(&mut block_asm);
         }
 
-        // step 4: add builtin functions
-        for asms in builtins.values() {
-            asm.push("\n".to_string());
-            let mut a = asms.clone();
-            asm.append(&mut a);
-        }
         if self.print_asm {
             // prints the assembly
             for l in &asm {

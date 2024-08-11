@@ -45,6 +45,7 @@ pub struct ArgType {
 pub struct FnCall {
     pub name: String,
     pub arg_types: Vec<ArgType>,
+    pub return_type: Option<ArgType>,
 }
 
 impl FnCall {
@@ -106,6 +107,8 @@ pub struct VM<'a> {
     // the current free memory index, relative to memory_start
     pub memory_index: usize,
 
+    pub return_type: Option<ArgType>,
+
     pub compiler_state: &'a mut CompilerState,
 }
 
@@ -122,6 +125,7 @@ impl<'a> VM<'a> {
             memory_index: 0,
             memory_start,
             compiler_state,
+            return_type: None,
         }
     }
 
@@ -244,8 +248,16 @@ impl<'a> VM<'a> {
     pub fn return_expr(&mut self, expr: Expr) {
         // we leave the returned value on the top of the stack
         let out = self.eval(expr);
-        if out.is_some() {
-            panic!("cannot return memory based variable");
+        if let Some(v) = out {
+            self.return_type = Some(ArgType {
+                location: v.location.clone(),
+                dimensions: v.dimensions.clone(),
+            });
+        } else {
+            self.return_type = Some(ArgType {
+                location: VarLocation::Stack,
+                dimensions: vec![],
+            });
         }
         // when we're done executing a block we clear
         // everything on the stack so that when we return
@@ -277,6 +289,10 @@ impl<'a> VM<'a> {
         if self.has_returned || self.vars.is_empty() {
             return;
         }
+        self.return_type = Some(ArgType {
+            location: VarLocation::Stack,
+            dimensions: vec![],
+        });
         for _ in 0..self
             .vars
             .iter()
@@ -578,11 +594,32 @@ impl<'a> VM<'a> {
                 for _ in 0..vars.len() {
                     self.stack.pop();
                 }
-                // track function invocations for the compiler
-                let call = FnCall {
+
+                // build functions as needed
+                let mut call = FnCall {
                     name: name.clone(),
-                    arg_types,
+                    arg_types: arg_types.clone(),
+                    return_type: None,
                 };
+                if let Some(call_type) = self.compiler_state.fn_return_types.get(&call) {
+                    call.return_type = Some(call_type.return_type.as_ref().unwrap().clone());
+                } else {
+                    let fn_ast = self.compiler_state.fn_to_ast.get(name).unwrap().clone();
+                    let mut vm = VM::new(&mut self.compiler_state);
+                    vm.eval_ast(fn_ast, arg_types.clone());
+                    vm.return_if_needed();
+                    let asm = vm.asm.clone();
+                    let no_return_call = call.clone();
+                    if let Some(return_type) = vm.return_type {
+                        call.return_type = Some(return_type);
+                    } else {
+                        panic!("return_type not set for function {name}");
+                    }
+                    self.compiler_state.compiled_fn.insert(call.clone(), asm);
+                    self.compiler_state
+                        .fn_return_types
+                        .insert(no_return_call.clone(), call.clone());
+                }
                 self.compiler_state
                     .called_fn
                     .entry(call.clone())
