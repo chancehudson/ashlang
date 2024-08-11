@@ -20,5 +20,3 @@ if o2[2][1] != 1174398792 {
 }
 
 let _ = mem_fn2(in0, in1)
-
-return 0

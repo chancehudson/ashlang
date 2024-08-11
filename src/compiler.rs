@@ -63,7 +63,6 @@ impl Compiler {
     pub fn builtins() -> HashMap<String, (Vec<String>, FnCall)> {
         let mut out = HashMap::new();
 
-        // cause execution to halt by popping too many items
         out.insert(
             "crash".to_string(),
             (

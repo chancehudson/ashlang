@@ -4,28 +4,16 @@ let b = [[2, 24],[2, 1],[4, 41]]
 
 let cc = a[1] * b[0]
 
-if cc[0] != 483896 {
-  let _ = crash()
-}
-
-if cc[1] != 29784 {
-  let _ = crash()
-}
+assert_eq(cc[0], 483896)
+assert_eq(cc[1], 29784)
 
 let dd = a[2][1] * b[0][1]
 
-if dd != 1006627536 {
-  let _ = crash()
-}
+assert_eq(dd, 1006627536)
 
 let z = ca[0] * b[2]
 
-if z[0] != 856496 {
-  let _ = crash()
-}
+assert_eq(z[0], 856496)
+assert_eq(z[1], 98974)
 
-if z[1] != 98974 {
-  let _ = crash()
-}
-
-let _ = mem_alloc()
+mem_alloc()
