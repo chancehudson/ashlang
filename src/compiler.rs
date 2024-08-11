@@ -63,8 +63,11 @@ impl Compiler {
     pub fn builtins() -> HashMap<String, Vec<String>> {
         let mut out = HashMap::new();
 
-        // cause execution to fall off the bottom without halting
-        out.insert("crash".to_string(), vec!["crash:".to_string()]);
+        // cause execution to halt by popping too many items
+        out.insert(
+            "crash".to_string(),
+            vec!["crash:".to_string(), "pop 99".to_string()],
+        );
 
         out
     }
