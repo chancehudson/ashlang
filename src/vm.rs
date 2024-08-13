@@ -58,7 +58,7 @@ impl FnCall {
         for arg in &self.arg_types {
             out.push_str("_");
             if arg.dimensions.len() == 0 {
-                out.push_str("1");
+                out.push_str("s");
             }
             for d_index in 0..arg.dimensions.len() {
                 if d_index > 0 {
