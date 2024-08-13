@@ -79,6 +79,68 @@ impl Compiler {
             ),
         );
         out.insert(
+            "write_output".to_string(),
+            (
+                vec![
+                    // pop the memory out argument first
+                    "pop 1".to_string(),
+                    // write the first argument to the function
+                    "write_io 1".to_string(),
+                    // push a dummy return value
+                    "push 0".to_string(),
+                ],
+                FnCall {
+                    name: "write_output".to_string(),
+                    arg_types: vec![ArgType {
+                        location: VarLocation::Stack,
+                        dimensions: vec![],
+                    }],
+                    return_type: Some(ArgType {
+                        location: VarLocation::Stack,
+                        dimensions: vec![],
+                    }),
+                },
+            ),
+        );
+        out.insert(
+            "read_secret_input".to_string(),
+            (
+                vec![
+                    // pop the memory out argument first
+                    "pop 1".to_string(),
+                    // read the next secret input
+                    "divine 1".to_string(),
+                ],
+                FnCall {
+                    name: "read_secret_input".to_string(),
+                    arg_types: vec![],
+                    return_type: Some(ArgType {
+                        location: VarLocation::Stack,
+                        dimensions: vec![],
+                    }),
+                },
+            ),
+        );
+        out.insert(
+            "read_public_input".to_string(),
+            (
+                vec![
+                    // pop the memory out argument first
+                    "pop 1".to_string(),
+                    // read the next public input
+                    "read_io 1".to_string(),
+                ],
+                FnCall {
+                    name: "read_public_input".to_string(),
+                    arg_types: vec![],
+                    return_type: Some(ArgType {
+                        location: VarLocation::Stack,
+                        dimensions: vec![],
+                    }),
+                },
+            ),
+        );
+        out.insert(
             "assert_eq".to_string(),
             (
                 vec![

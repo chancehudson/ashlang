@@ -5,7 +5,7 @@ use crate::{
 };
 use std::collections::HashMap;
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum VarLocation {
     Stack,
     Memory,
@@ -36,7 +36,7 @@ pub struct Var {
 }
 
 // represents the type of an argument to a function
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct ArgType {
     pub location: VarLocation,
     pub dimensions: Vec<usize>,
@@ -632,7 +632,6 @@ impl<'a> VM<'a> {
                         });
                     }
                 }
-
                 // build functions as needed
                 let mut call = FnCall {
                     name: name.clone(),

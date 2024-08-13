@@ -6,6 +6,6 @@ for entry in test-vectors/*
 do
   if echo $entry | grep "_test.ash"
   then
-    cargo run --release -- $entry -i ./stdlib -i ./test-vectors --asm
+    cargo run --release -- $entry -i ./stdlib -i ./test-vectors --asm -p 1 -s 1
   fi
 done
