@@ -62,7 +62,7 @@ pub enum Op {
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"] // relative to project `src`
-pub struct PestParser;
+pub struct AshPestParser;
 
 pub struct AshParser {
     pub ast: Vec<AstNode>,
@@ -70,20 +70,20 @@ pub struct AshParser {
 }
 
 impl AshParser {
-    pub fn parse(source: &str) -> Self {
+    pub fn parse(source: &str, name: &str) -> Self {
         let mut out = Self {
             ast: Vec::new(),
             fn_names: HashMap::new(),
         };
 
-        match PestParser::parse(Rule::program, source) {
+        match AshPestParser::parse(Rule::program, source) {
             Ok(pairs) => {
                 out.build_ast_from_lines(pairs).unwrap_or_else(|e| {
                     error!(&format!("error building program ast: {e}"));
                 });
             }
             Err(e) => {
-                log::parse_error(e);
+                log::parse_error(e, name);
                 unreachable!();
             }
         }

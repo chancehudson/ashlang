@@ -3,6 +3,7 @@ use clap::{arg, Arg, Command};
 use compiler::Compiler;
 use triton_vm::prelude::*;
 
+mod asm_parser;
 mod compiler;
 mod log;
 mod parser;
@@ -13,7 +14,7 @@ fn cli() -> Command {
         .about("ashlang compiler")
         .subcommand_required(false)
         .arg_required_else_help(true)
-        .arg(arg!(<SRC_PATH> "The source entrypoint"))
+        .arg(arg!(<ENTRY_FN> "The entrypoint function name"))
         .arg(
             Arg::new("include")
                 .short('i')
@@ -59,9 +60,9 @@ fn parse_inputs(inputs: Option<&String>) -> Vec<BFieldElement> {
 
 fn main() {
     let matches = cli().get_matches();
-    let source_path = matches
-        .get_one::<String>("SRC_PATH")
-        .expect("Failed to get SRC_PATH");
+    let entry_fn = matches
+        .get_one::<String>("ENTRY_FN")
+        .expect("Failed to get ENTRY_FN");
     let include_paths = matches
         .get_many::<String>("include")
         .unwrap_or_default()
@@ -70,7 +71,6 @@ fn main() {
     let public_inputs = matches.get_one::<String>("public_inputs");
     let secret_inputs = matches.get_one::<String>("secret_inputs");
     let mut compiler = Compiler::new();
-    compiler.include(Utf8PathBuf::from(source_path));
     for p in include_paths {
         if p.is_empty() {
             continue;
@@ -79,7 +79,7 @@ fn main() {
     }
 
     compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
-    let asm = compiler.compile(&Utf8PathBuf::from(source_path));
+    let asm = compiler.compile(entry_fn);
 
     let instructions = triton_vm::parser::parse(&asm).unwrap();
     let l_instructions = triton_vm::parser::to_labelled_instructions(instructions.as_slice());
@@ -87,8 +87,14 @@ fn main() {
 
     let public_inputs = PublicInput::from(parse_inputs(public_inputs));
     let secret_inputs = NonDeterminism::from(parse_inputs(secret_inputs));
-    let (_stark, _claim, _proof) =
-        triton_vm::prove_program(&program, public_inputs, secret_inputs).unwrap();
-    println!("{:?}", _stark);
-    println!("{:?}", _claim);
+    match triton_vm::prove_program(&program, public_inputs, secret_inputs) {
+        Ok((_stark, _claim, _proof)) => {
+            println!("{:?}", _stark);
+            println!("{:?}", _claim);
+        }
+        Err(e) => {
+            println!("Triton VM errored");
+            println!("{e}");
+        }
+    }
 }

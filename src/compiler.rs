@@ -1,6 +1,7 @@
+use crate::asm_parser::AsmParser;
 use crate::log;
 use crate::parser::{AshParser, AstNode};
-use crate::vm::{ArgType, FnCall, VarLocation, VM};
+use crate::vm::{FnCall, VM};
 use camino::Utf8PathBuf;
 use std::{collections::HashMap, fs};
 
@@ -58,120 +59,6 @@ impl Compiler {
         }
     }
 
-    // builtin functions that are globally available
-    //
-    // files may not use these strings as names
-    pub fn builtins() -> HashMap<String, (Vec<String>, FnCall)> {
-        let mut out = HashMap::new();
-
-        out.insert(
-            "crash".to_string(),
-            (
-                vec!["push 0".to_string(), "assert".to_string()],
-                FnCall {
-                    name: "crash".to_string(),
-                    arg_types: vec![],
-                    return_type: Some(ArgType {
-                        location: VarLocation::Stack,
-                        dimensions: vec![],
-                    }),
-                },
-            ),
-        );
-        out.insert(
-            "write_output".to_string(),
-            (
-                vec![
-                    // pop the memory out argument first
-                    "pop 1".to_string(),
-                    // write the first argument to the function
-                    "write_io 1".to_string(),
-                    // push a dummy return value
-                    "push 0".to_string(),
-                ],
-                FnCall {
-                    name: "write_output".to_string(),
-                    arg_types: vec![ArgType {
-                        location: VarLocation::Stack,
-                        dimensions: vec![],
-                    }],
-                    return_type: Some(ArgType {
-                        location: VarLocation::Stack,
-                        dimensions: vec![],
-                    }),
-                },
-            ),
-        );
-        out.insert(
-            "read_secret_input".to_string(),
-            (
-                vec![
-                    // pop the memory out argument first
-                    "pop 1".to_string(),
-                    // read the next secret input
-                    "divine 1".to_string(),
-                ],
-                FnCall {
-                    name: "read_secret_input".to_string(),
-                    arg_types: vec![],
-                    return_type: Some(ArgType {
-                        location: VarLocation::Stack,
-                        dimensions: vec![],
-                    }),
-                },
-            ),
-        );
-        out.insert(
-            "read_public_input".to_string(),
-            (
-                vec![
-                    // pop the memory out argument first
-                    "pop 1".to_string(),
-                    // read the next public input
-                    "read_io 1".to_string(),
-                ],
-                FnCall {
-                    name: "read_public_input".to_string(),
-                    arg_types: vec![],
-                    return_type: Some(ArgType {
-                        location: VarLocation::Stack,
-                        dimensions: vec![],
-                    }),
-                },
-            ),
-        );
-        out.insert(
-            "assert_eq".to_string(),
-            (
-                vec![
-                    "pop 1".to_string(),
-                    "eq".to_string(),
-                    "assert".to_string(),
-                    "push 0".to_string(),
-                ],
-                FnCall {
-                    name: "assert_eq".to_string(),
-                    arg_types: vec![
-                        ArgType {
-                            location: VarLocation::Stack,
-                            dimensions: vec![],
-                        },
-                        ArgType {
-                            location: VarLocation::Stack,
-                            dimensions: vec![],
-                        },
-                    ],
-                    return_type: Some(ArgType {
-                        location: VarLocation::Stack,
-                        dimensions: vec![],
-                    }),
-                },
-            ),
-        );
-
-        out
-    }
-
     // include a path in the build
     //
     // if the include is a file, the function name is calculated
@@ -187,20 +74,21 @@ impl Compiler {
             let ext = path
                 .extension()
                 .unwrap_or_else(|| panic!("Failed to get extension for path: {:?}", path));
-            if ext != "ash" {
+            if ext != "ash" && ext != "tasm" {
                 return;
             }
             let name_str = path
                 .file_stem()
                 .unwrap_or_else(|| panic!("Failed to parse file stem for include path: {:?}", path))
                 .to_string();
-            // if self.fn_to_path.contains_key(&name_str) {
-            //     // skip for now
-            //     println!("Duplicate file/function names detected: {name_str}");
-            //     println!("Path 1: {:?}", &path);
-            //     println!("Path 2: {:?}", self.fn_to_path.get(&name_str).unwrap());
-            //     std::process::exit(1);
-            // } else {
+            if self.fn_to_path.contains_key(&name_str) {
+                log::error!(&format!(
+                    "{}\n{}\n{}",
+                    format!("Duplicate file/function names detected: {name_str}"),
+                    format!("Path 1: {:?}", &path),
+                    format!("Path 2: {:?}", self.fn_to_path.get(&name_str).unwrap())
+                ));
+            }
             self.fn_to_path.insert(name_str.clone(), path.clone());
             self.path_to_fn.insert(path, name_str);
             // }
@@ -218,12 +106,15 @@ impl Compiler {
 
     // loads, parses, and returns an ashlang function by name
     // returns the function as an ast
-    pub fn parse_fn(&self, fn_name: &String) -> AshParser {
+    pub fn parse_fn(&self, fn_name: &str) -> (String, String) {
         if let Some(file_path) = self.fn_to_path.get(fn_name) {
-            let unparsed_file = std::fs::read_to_string(file_path)
-                .unwrap_or_else(|_| panic!("Failed to read source file: {:?}", file_path));
-            // let the parser throw it's error to stderr/out
-            AshParser::parse(&unparsed_file)
+            if let Some(ext) = file_path.extension() {
+                let unparsed_file = std::fs::read_to_string(file_path)
+                    .unwrap_or_else(|_| panic!("Failed to read source file: {:?}", file_path));
+                (unparsed_file, ext.to_string())
+            } else {
+                panic!("unexpected: cannot get file extension");
+            }
         } else {
             log::error!(
                 &format!("function is not present in sources: {fn_name}"),
@@ -235,24 +126,11 @@ impl Compiler {
     // start at the entry file
     // parse it and determine what other files are needed
     // repeat until all files have been parsed
-    pub fn compile(&mut self, entry: &Utf8PathBuf) -> String {
-        let entry_fn_name = entry.file_stem().unwrap().to_string();
-
-        let parser = self.parse_fn(&entry_fn_name);
+    pub fn compile(&mut self, entry_fn_name: &str) -> String {
+        let parser = AshParser::parse(&self.parse_fn(entry_fn_name).0, entry_fn_name);
 
         // tracks total number of includes for a fn in all sources
         let mut included_fn: HashMap<String, u64> = parser.fn_names.clone();
-        let builtins = Compiler::builtins();
-        for (name, (asm, call)) in builtins.iter() {
-            included_fn.insert(name.clone(), 0);
-            self.state.fn_to_ast.insert(name.clone(), vec![]);
-            let mut call_no_return = call.clone();
-            call_no_return.return_type = None;
-            self.state
-                .fn_return_types
-                .insert(call_no_return.clone(), call.clone());
-            self.state.compiled_fn.insert(call_no_return, asm.clone());
-        }
         // step 1: build ast for all functions
         // each function has a single ast, but multiple implementations
         // based on argument types it is called with
@@ -264,15 +142,31 @@ impl Compiler {
                 if self.state.fn_to_ast.contains_key(&fn_name) {
                     continue;
                 }
-                let parser = self.parse_fn(&fn_name);
-                for (fn_name, count) in parser.fn_names {
-                    if let Some(x) = included_fn.get_mut(&fn_name) {
-                        *x += count;
-                    } else {
-                        included_fn.insert(fn_name, count);
+                let (text, ext) = self.parse_fn(&fn_name);
+                if ext == "ash" {
+                    let parser = AshParser::parse(&text, &fn_name);
+                    for (fn_name, count) in parser.fn_names {
+                        if let Some(x) = included_fn.get_mut(&fn_name) {
+                            *x += count;
+                        } else {
+                            included_fn.insert(fn_name, count);
+                        }
                     }
+                    self.state.fn_to_ast.insert(fn_name, parser.ast);
+                } else if ext == "tasm" {
+                    let parser = AsmParser::parse(&text, &fn_name);
+                    self.state.fn_to_ast.insert(fn_name.clone(), vec![]);
+                    let mut call_no_return = parser.call_type.clone();
+                    call_no_return.return_type = None;
+                    self.state
+                        .fn_return_types
+                        .insert(call_no_return.clone(), parser.call_type.clone());
+                    self.state
+                        .compiled_fn
+                        .insert(call_no_return, parser.asm.clone());
+                } else {
+                    panic!("unexpected: unknown file extension {ext}");
                 }
-                self.state.fn_to_ast.insert(fn_name, parser.ast);
             }
         }
 

@@ -1,0 +1,13 @@
+(_, _) -> _
+
+pop 1
+swap 1
+lt
+
+# not impl
+push 4294967295
+xor
+push 1
+add
+split
+pop 1

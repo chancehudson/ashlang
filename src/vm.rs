@@ -42,7 +42,7 @@ pub struct ArgType {
     pub dimensions: Vec<usize>,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct FnCall {
     pub name: String,
     pub arg_types: Vec<ArgType>,
@@ -331,7 +331,7 @@ impl<'a> VM<'a> {
     // defines a new mutable variable in the current block scope
     pub fn let_var(&mut self, name: String, expr: Expr) {
         if self.vars.contains_key(&name) {
-            panic!("var is not unique");
+            log::error!(&format!("var is not unique {name}"));
         }
         match &expr {
             Expr::VecLit(_) | Expr::VecVec(_) => {
@@ -650,7 +650,10 @@ impl<'a> VM<'a> {
                     if let Some(return_type) = vm.return_type {
                         call.return_type = Some(return_type);
                     } else {
-                        panic!("return_type not set for function {name}");
+                        log::error!(&format!(
+                            "unable to determine return type for function \"{}\"",
+                            name
+                        ), &format!("you may be calling a tasm function with the wrong number or type of arguments"));
                     }
                     self.compiler_state.compiled_fn.insert(call.clone(), asm);
                     self.compiler_state

@@ -17,3 +17,6 @@ assert_eq(z[0], 856496)
 assert_eq(z[1], 98974)
 
 mem_alloc()
+
+let v = [[1]]
+let zz = asm_mem_fn(v)

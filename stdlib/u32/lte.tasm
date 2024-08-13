@@ -1,0 +1,12 @@
+(_, _) -> _
+
+# use memory out argument as swap space
+swap 2
+dup 1
+dup 1
+eq
+swap 3
+pop 1
+lt
+add
+pop_count

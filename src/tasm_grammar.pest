@@ -1,0 +1,17 @@
+program = _{ SOI ~ type_header ~ "\n"* ~ stmt+ ~ EOI }
+
+stmt = { instruction ~ COMMENT? ~ "\n" }
+instruction = { char* }
+
+type_header = { "(" ~ ((type_ ~ ("," | ")"))+ | ")") ~ "->" ~ type_ ~ "\n" }
+type_ = _{ dimension | scalar }
+scalar = { "_" }
+dimension = { var_index+ }
+var_index = _{ "[" ~ literal_dec ~ "]" }
+
+literal_dec = @{ ASCII_DIGIT+ }
+COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
+
+char = { ASCII_ALPHANUMERIC | "_" | "-" | ":" | " " }
+
+WHITESPACE = _{ " " }

@@ -13,8 +13,12 @@
 # assert_eq(T, len(inputs) + 1)
 
 let state[T]
-state[0] = 0 # unnecessary, added for clarity
-state[1..T] = inputs
+state[0] = 0 # this is necessary, vectors are not zeroed by default
+let i = 0
+loop T {
+  state[i + 1] = inputs[i]
+  i = i + 1
+}
 
 # these constants are pre-calculated
 # according to the current field
@@ -38,6 +42,30 @@ let mix_i
 # this function must be invoked at least
 # (N_F + N_P) times, subsequent invocations
 # are a no-op
+loop N_F + N_P {
+  state = state * C[c_i]
+
+  c_i = c_i + T
+
+    if round_i < N_F / 2 || round_i >= N_F / 2 + N_P
+        # for x in 0..state.len()
+        #   state[x] = pow5(state[x])
+        #
+        # below is doing the above
+        state = pow5(state)
+    else
+        state[0] = pow5(state[0])
+
+    mix_i = 0
+
+    loop T {
+        state[mix_i] = sum(M[mix_i] * state)
+        mix_i = mix_i + 1
+    }
+
+  round_i = round_i + 1
+
+}
 : full_round N_F + N_P
 
     # this is muliplying state by the range
@@ -64,7 +92,7 @@ let mix_i
         state[mix_i] = sum(M[mix_i] * state)
         mix_i = mix_i + 1
         mix_inner()
-      
+
     round_i = round_i + 1
 
     full_round()

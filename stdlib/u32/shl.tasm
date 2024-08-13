@@ -1,0 +1,9 @@
+(_, _) -> _
+
+pop 1
+push 2
+pow
+mul
+split
+swap 1
+pop 1

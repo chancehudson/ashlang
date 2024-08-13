@@ -1,0 +1,20 @@
+(_, _) -> _
+
+# lte impl
+swap 2
+dup 1
+dup 1
+eq
+swap 3
+pop 1
+lt
+add
+pop_count
+
+# not impl
+push 4294967295
+xor
+push 1
+add
+split
+pop 1
