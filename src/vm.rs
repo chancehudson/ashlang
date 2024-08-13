@@ -193,7 +193,10 @@ impl<'a> VM<'a> {
     pub fn const_var(&mut self, name: String, expr: Expr) {
         // check for duplicate var names
         if self.vars.contains_key(&name) {
-            panic!("name is not unique");
+            log::error!(
+                &format!("variable name \"{name}\" is already in use"),
+                &format!("you're attempting to define a constant variable with the same name as another variable")
+            );
         }
         match expr {
             Expr::Lit(v) => {
@@ -211,14 +214,16 @@ impl<'a> VM<'a> {
             }
             Expr::Val(ref_name, indices) => {
                 if indices.len() > 0 {
-                    panic!("const var index assignment not supported");
+                    log::error!("const var index assignment not supported");
                 }
                 if let Some(v) = self.vars.get(&ref_name) {
                     match v.location {
                         VarLocation::Const => {
                             self.vars.insert(name, v.clone());
                         }
-                        _ => panic!("dynamically evaluated consts not supported"),
+                        _ => {
+                            log::error!("dynamically evaluated consts not supported");
+                        }
                     }
                 } else {
                     log::error!(&format!("unknown variable {ref_name}"));
@@ -229,17 +234,17 @@ impl<'a> VM<'a> {
                 op: _,
                 rhs: _,
             } => {
-                panic!("numerical operations in constants is not yet supported");
+                log::error!("numerical operations in constants is not yet supported");
             }
             Expr::FnCall(_name, _vars) => {
-                panic!("constant expression functions not implemented");
+                log::error!("constant expression functions not implemented");
             }
             Expr::BoolOp {
                 lhs: _,
                 bool_op: _,
                 rhs: _,
             } => {
-                panic!("boolean operations in constants is not supported");
+                log::error!("boolean operations in constants is not supported");
             }
             Expr::VecVec(_) | Expr::VecLit(_) => {
                 let (dimensions, vec) = self.build_var_from_ast_vec(expr);
@@ -387,11 +392,16 @@ impl<'a> VM<'a> {
     // must be index 1 in the stark stack.
     pub fn fn_var(&mut self, name: String, t: ArgType) {
         if self.vars.contains_key(&name) {
-            panic!("var is not unique");
+            log::error!(&format!(
+                "function argument variable \"{name}\" is not unique"
+            ));
         }
         match t.location {
             VarLocation::Const => {
-                panic!("cannot pass constant to function");
+                log::error!(
+                    &format!("function argument variable \"{name}\" is a constant"),
+                    "calling functions with constant arguments is not supported yet"
+                );
             }
             VarLocation::Stack => {
                 self.stack.push(name.clone());
@@ -432,23 +442,32 @@ impl<'a> VM<'a> {
     // the swapped value
     pub fn set_var(&mut self, name: String, expr: Expr) {
         if !self.vars.contains_key(&name) {
-            panic!("var does not exist {name}");
+            log::error!(
+                &format!("var does not exist \"{name}\""),
+                "you're attempting to assign a value to a variable that is not in scope"
+            );
         }
         let v = self.vars.get(&name).unwrap();
         if v.location == VarLocation::Const {
-            panic!("cannot set constant variable");
+            log::error!(
+                &format!("cannot assign constant var \"{name}\""),
+                "you're attempting to assign a value to variable that is a constant"
+            );
         }
         if v.location == VarLocation::Memory {
             // TODO: allow assigning memory based variable
             // partially or entirely
             // e.g. v[0] = [1, 2, 3]
             // or v = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
-            panic!("cannot set memory based variable");
+            log::error!(&format!("cannot assign memory var \"{name}\""), "you're attempting to re-assign a vector or matrix variable directly. This is not yet supported.");
         }
         // new value is on the top of the stack
         let v = self.eval(expr, false);
         if v.is_some() {
-            panic!("cannot set memory based variable");
+            log::error!(
+                &format!("cannot assign memory value to stack var \"{name}\""),
+                "you're attempting to assign a vector to a scalar variable"
+            );
         }
         self.asm.push(format!("swap {}", self.stack_index(&name)));
         self.asm.push("pop 1".to_string());
@@ -462,10 +481,14 @@ impl<'a> VM<'a> {
     pub fn stack_index(&self, var_name: &String) -> usize {
         if let Some(var) = self.vars.get(var_name) {
             if var.location == VarLocation::Memory {
-                panic!("cannot get stack index of memory based variable");
+                log::error!(&format!(
+                    "cannot get stack index of memory variable \"{var_name}\""
+                ));
             }
             if var.location == VarLocation::Const {
-                panic!("cannot get stack index of constant variable");
+                log::error!(&format!(
+                    "cannot get stack index of constant variable \"{var_name}\""
+                ));
             }
             if let Some(stack_index) = var.stack_index {
                 self.stack.len() - stack_index
@@ -473,7 +496,7 @@ impl<'a> VM<'a> {
                 panic!("var does not have a stack index");
             }
         } else {
-            log::error!(&format!("unknown variable {var_name}"));
+            log::error!(&format!("unknown variable \"{var_name}\""));
         }
     }
 
@@ -711,7 +734,9 @@ impl<'a> VM<'a> {
                     match v.location {
                         VarLocation::Stack => {
                             if indices.len() > 0 {
-                                panic!("stack variables may not be accessed be index");
+                                log::error!(&format!(
+                                    "attempting to access stack variable \"{name}\" by index"
+                                ));
                             }
                             let mut out = vec![format!("dup {}", self.stack_index(name))];
                             self.stack.push(name.clone());
@@ -827,17 +852,19 @@ impl<'a> VM<'a> {
                 let r = (*rhs).clone();
                 let rv = self.eval(*r, false);
                 if lv.is_none() != rv.is_none() {
-                    panic!("cannot operate on stack types and memory types");
+                    log::error!("type mismatch in numeric operation");
                 }
                 if lv.is_some() {
                     let lvu = lv.unwrap();
                     let rvu = rv.unwrap();
                     if lvu.dimensions.len() != rvu.dimensions.len() {
-                        panic!("attempting to operate on variables of mismatched width");
+                        log::error!("type mismatch in numeric operation, vector width mismatch");
                     }
                     for x in 0..lvu.dimensions.len() {
                         if lvu.dimensions[x] != rvu.dimensions[x] {
-                            panic!("attempting to operate on variables of mismatched height");
+                            log::error!(
+                                "type mismatch in numeric operation, vector height mismatch"
+                            );
                         }
                     }
                     let total_len = VM::dimensions_to_len(lvu.dimensions.clone());
@@ -1017,10 +1044,10 @@ impl<'a> VM<'a> {
                 let r = (*rhs).clone();
                 let rv = self.eval(*r, false);
                 if lv.is_none() != rv.is_none() {
-                    panic!("cannot apply boolean operation to stack and memory vars");
+                    log::error!("cannot apply boolean operation to stack and memory vars");
                 }
                 if !lv.is_none() {
-                    panic!("cannot apply boolean operation to memory vars");
+                    log::error!("cannot apply boolean operation to memory vars");
                 }
                 match bool_op {
                     BoolOp::Equal => {
@@ -1052,7 +1079,9 @@ impl<'a> VM<'a> {
             match v {
                 AstNode::AssignVec(name, indices, expr) => {
                     if !self.vars.contains_key(&name) {
-                        panic!("var not found unique");
+                        log::error!(&format!(
+                            "attempting to assign to undeclared variable \"{name}\""
+                        ));
                     }
                     let o = self.eval(expr, false);
                     let v = self.vars.get(&name).unwrap();
@@ -1060,7 +1089,9 @@ impl<'a> VM<'a> {
                     if indices.len() == v.dimensions.len() {
                         // assigning a scalar into a specific index in a vec
                         if o.is_some() {
-                            panic!("cannot assign memory var to scalar");
+                            log::error!(&format!(
+                                "attempting to assign memory value to scalar \"{name}\""
+                            ));
                         }
                         // push the expr to the stack then into memory
                         // we're accessing a scalar, move it to the stack
@@ -1088,7 +1119,9 @@ impl<'a> VM<'a> {
                 }
                 AstNode::EmptyVecDef(name, dimensions) => {
                     if self.vars.contains_key(&name) {
-                        panic!("var is not unique");
+                        log::error!(&format!(
+                            "attempting to define a variable that already exists \"{name}\""
+                        ));
                     }
                     let len = VM::dimensions_to_len(dimensions.clone());
                     self.vars.insert(
@@ -1125,11 +1158,11 @@ impl<'a> VM<'a> {
                 }
                 AstNode::FnVar(vars) => {
                     if arg_types.len() != vars.len() {
-                        panic!(
+                        log::error!(&format!(
                             "function argument count mismatch: expected {}, got {}",
                             arg_types.len(),
                             vars.len()
-                        );
+                        ));
                     }
                     for x in 0..vars.len() {
                         self.fn_var(vars[x].clone(), arg_types[x].clone());
@@ -1173,7 +1206,7 @@ impl<'a> VM<'a> {
                 }
                 AstNode::Loop(expr, block_ast) => {
                     if let Some(_) = self.eval(expr, false) {
-                        panic!("loop condition must be a stack variable");
+                        log::error!("loop condition must be a stack variable");
                     }
                     let block_counter_name =
                         format!("block_____{}_counter", self.compiler_state.block_counter);
@@ -1199,7 +1232,7 @@ impl<'a> VM<'a> {
                     self.eval_ast(block_ast, vec![]);
                     if let Some(_) = self.eval(Expr::Val(block_counter_name.clone(), vec![]), false)
                     {
-                        panic!("loop counter is not scalar");
+                        panic!("unexpected: loop counter is not scalar");
                     }
                     // pull the resulting asm as the block asm
                     self.asm.push("push -1".to_string());
