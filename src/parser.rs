@@ -2,6 +2,7 @@ use crate::log;
 
 use self::AstNode::*;
 use anyhow::Result;
+use log::error;
 use pest::iterators::Pair;
 use pest::iterators::Pairs;
 use pest::Parser;
@@ -78,8 +79,7 @@ impl AshParser {
         match PestParser::parse(Rule::program, source) {
             Ok(pairs) => {
                 out.build_ast_from_lines(pairs).unwrap_or_else(|e| {
-                    log::compile_error(format!("error building program ast: {e}").as_str(), None);
-                    std::process::exit(1);
+                    error!(&format!("error building program ast: {e}"));
                 });
             }
             Err(e) => {

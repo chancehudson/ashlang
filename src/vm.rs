@@ -221,8 +221,7 @@ impl<'a> VM<'a> {
                         _ => panic!("dynamically evaluated consts not supported"),
                     }
                 } else {
-                    log::compile_error("unknown variable", None);
-                    unreachable!();
+                    log::error!(&format!("unknown variable {ref_name}"));
                 }
             }
             Expr::NumOp {
@@ -474,8 +473,7 @@ impl<'a> VM<'a> {
                 panic!("var does not have a stack index");
             }
         } else {
-            log::compile_error("unknown variable", None);
-            unreachable!();
+            log::error!(&format!("unknown variable {var_name}"));
         }
     }
 
@@ -813,8 +811,7 @@ impl<'a> VM<'a> {
                         }
                     }
                 } else {
-                    log::compile_error(format!("unknown variable: {name}").as_str(), None);
-                    unreachable!();
+                    log::error!(&format!("unknown variable: {name}"));
                 }
             }
             Expr::Lit(v) => {
@@ -1081,15 +1078,10 @@ impl<'a> VM<'a> {
                             self.asm.push(format!("pop 1"));
                             self.stack.pop();
                         } else {
-                            log::compile_error(
-                                "unexpected: variable has no memory or stack index",
-                                None,
-                            );
-                            unreachable!();
+                            log::error!("unexpected: variable has no memory or stack index");
                         }
                     } else if indices.len() > v.dimensions.len() {
-                        log::compile_error("var dimension is too low for assignment", Some("you're accessing an index on a scalar, or an n+1 dimension on a vector of n dimensions"));
-                        unreachable!();
+                        log::error!("var dimension is too low for assignment", "you're accessing an index on a scalar, or an n+1 dimension on a vector of n dimensions");
                     } else {
                         panic!("cannot assign vec");
                     }

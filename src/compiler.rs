@@ -163,13 +163,10 @@ impl Compiler {
             // let the parser throw it's error to stderr/out
             AshParser::parse(&unparsed_file)
         } else {
-            log::compile_error(
-                format!("function is not present in sources: {fn_name}").as_str(),
-                Some(
-                    format!("unable to find a file {fn_name}.ash in your include paths after searching recursively\n\nmake sure you have specified an include path containing this file").as_str(),
-                ),
+            log::error!(
+                &format!("function is not present in sources: {fn_name}"),
+                &format!("unable to find a file {fn_name}.ash in your include paths after searching recursively\n\nmake sure you have specified an include path containing this file")
             );
-            unreachable!();
         }
     }
 

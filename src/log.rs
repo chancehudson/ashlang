@@ -1,5 +1,17 @@
 use colored::Colorize;
 
+macro_rules! error {
+    ($msg:expr) => {
+        crate::log::compile_error($msg, None);
+        unreachable!();
+    };
+    ($msg:expr, $details:expr) => {
+        crate::log::compile_error($msg, Some($details));
+        unreachable!();
+    };
+}
+pub(crate) use error;
+
 // compiler errors always halt the program
 pub fn compile_error(msg: &str, details: Option<&str>) {
     println!("{}", "Compile error".red().bold());
