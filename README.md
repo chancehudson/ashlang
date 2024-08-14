@@ -4,7 +4,7 @@ A language designed to run on any computer that can exist.
 
 ## What is the name?
 
-I didn't choose the name ashlang copmpletely randomly.
+I didn't choose the name ashlang completely randomly.
 
 If I did would the file extension stand for "arithmetic symbol hierarchy"?
 
