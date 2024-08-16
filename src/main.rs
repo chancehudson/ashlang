@@ -95,6 +95,7 @@ fn main() {
         Err(e) => {
             println!("Triton VM errored");
             println!("{e}");
+            std::process::exit(1);
         }
     }
 }
