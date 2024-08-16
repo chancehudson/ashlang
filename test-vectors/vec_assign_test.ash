@@ -29,3 +29,11 @@ let vec_dyn2[100]
 vec_dyn2[vec_dyn[5]] = 99
 assert_eq(vec_dyn2[5], 99)
 assert_eq(vec_dyn2[vec_dyn[5]], 99)
+
+# test expr in function call
+assert_eq(vec_dyn[5] * vec_dyn[5], 25)
+# test expr in assignment
+let x = vec_dyn[5] * vec_dyn[5]
+assert_eq(x, 25)
+
+vec_dyn[5] = 99
