@@ -555,7 +555,14 @@ impl<'a> VM<'a> {
     }
 
     // output a single stack element
-    pub fn calc_vec_offset(&mut self, _dimensions: &Vec<usize>, indices: &Vec<Expr>) {
+    pub fn calc_vec_offset(&mut self, dimensions: &Vec<usize>, indices: &Vec<Expr>) {
+        let sum = |vec: &Vec<usize>, start: usize| -> usize {
+            let mut out = 1;
+            for x in start..vec.len() {
+                out *= vec[x];
+            }
+            out
+        };
         // if all values are literals we can calculate statically and push that to the stack
         let mut is_static = true;
         for i in indices {
@@ -568,25 +575,36 @@ impl<'a> VM<'a> {
             }
         }
         if is_static {
-            let offset = Self::calc_vec_offset_static(_dimensions, indices);
+            let offset = Self::calc_vec_offset_static(dimensions, indices);
             self.stack.push("vec_offset".to_string());
             self.asm.push(format!("push {offset}"));
             return;
         }
-        if indices.len() != 1 {
-            log::error!("only single dimension literal indices are allowed");
-        }
-        let o = self.eval(indices[0].clone(), false);
-        if o.is_some() {
-            log::error!("memory variables are not allowed as indices");
+        self.asm.push("push 0".to_string());
+        self.stack.push("offset".to_string());
+        for x in 0..indices.len() {
+            let o = self.eval(indices[x].clone(), false);
+            if o.is_some() {
+                log::error!("memory variables are not allowed as indices");
+            }
+            if x == indices.len() - 1 && indices.len() == dimensions.len() {
+                self.asm.push("add".to_string());
+                self.stack.pop();
+            } else {
+                let dim_sum = sum(dimensions, x + 1);
+                self.asm.push(format!("push {dim_sum}"));
+                self.asm.push("mul".to_string());
+                self.asm.push("add".to_string());
+                self.stack.pop();
+            }
         }
     }
 
     pub fn calc_vec_offset_static(dimensions: &Vec<usize>, indices: &Vec<Expr>) -> usize {
         let sum = |vec: &Vec<usize>, start: usize| -> usize {
-            let mut out = 0;
+            let mut out = 1;
             for x in start..vec.len() {
-                out += vec[x];
+                out *= vec[x];
             }
             out
         };
@@ -1147,7 +1165,7 @@ impl<'a> VM<'a> {
                             self.asm
                                 .push(format!("dup {}", self.stack.len() - stack_index));
                             self.asm.push("add".to_string());
-                            self.asm.push(format!("read_mem 1"));
+                            self.asm.push(format!("write_mem 1"));
                             self.asm.push(format!("pop 1"));
                             self.stack.pop();
                             self.stack.pop();

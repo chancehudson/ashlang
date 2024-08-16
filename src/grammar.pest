@@ -10,13 +10,13 @@ fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
 stmt = { var_def | const_def | if_stmt | function_call | loop_stmt | var_index_assign | var_vec_def }
 
 expr = { atom ~ (op ~ expr)* }
-return_stmt = { "return " ~ (function_call | expr) }
+return_stmt = { "return " ~ expr }
 
 // this is distinct from fn_header because it accepts an expr or a var
-fn_args = { "(" ~ (((function_call | expr) ~ ("," | ")"))+ | ")") }
+fn_args = { "(" ~ ((expr ~ ("," | ")"))+ | ")") }
 function_call = { varname ~ fn_args }
 
-loop_stmt = { "loop" ~ (function_call | expr) ~ block }
+loop_stmt = { "loop" ~ expr ~ block }
 
 op = _{ add | sub | mul | inv }
     add = { "+" }
@@ -31,23 +31,23 @@ bool_op = _{ equal | not_equal | gt | lt }
 
 bool_expr = { expr ~ bool_op ~ expr }
 if_stmt = { "if " ~ bool_expr ~ block }
-block = { "{" ~ "\n"* ~ (stmt ~ "\n")* ~ "\n"* ~ "}" }
+block = { "{" ~ "\n"* ~ ((stmt ~ "\n") | "\n")* ~ "\n"* ~ "}" }
 
 vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec | literal_dec))* ~ "\n"* ~ "]"}
 
 // this let_r match is needed to
 // determine if a variable is being
 // declared for the first time
-var_def = { var ~ "=" ~ (function_call | expr | vec) }
+var_def = { var ~ "=" ~ (expr | vec) }
 let_r = { "let " }
 const_def = { "const " ~ varname ~ "=" ~ (expr | vec) }
 var_vec_def = { let_r ~ var_indexed }
-var_index_assign = { var_indexed ~ "=" ~ (function_call | expr ) }
+var_index_assign = { var_indexed ~ "=" ~ expr }
 
 var = { let_r? ~ varname }
-var_indexed = { varname ~ ("[" ~ atom ~ "]")+ }
+var_indexed = { varname ~ ("[" ~ expr ~ "]")+ }
 
-atom = { literal_dec | var_indexed | varname }
+atom = { literal_dec | var_indexed | function_call | varname }
 
 literal_dec = @{ ASCII_DIGIT+ }
 
