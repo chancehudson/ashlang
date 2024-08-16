@@ -1,3 +1,8 @@
+# repeatedly calculate and store the fifth
+# power of the numbers [0, 1024)
+#
+# see stdlib/pow5
+
 let z[1024]
 
 let i = 0

@@ -1,3 +1,6 @@
+# build two 1024x1 vectors and multiply
+# them together
+
 let i = 0
 
 let z[1024]
