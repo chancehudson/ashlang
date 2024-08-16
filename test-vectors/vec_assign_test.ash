@@ -11,3 +11,16 @@ vec2[1][2] = 999
 
 assert_eq(vec2[0][0], 99)
 assert_eq(vec2[1][2], 999)
+
+let vec_dyn[100]
+let i = 0
+loop 100 {
+  vec_dyn[i] = i
+  i = i + 1
+}
+
+i = 0
+loop 100 {
+  assert_eq(vec_dyn[i], i)
+  i = i + 1
+}

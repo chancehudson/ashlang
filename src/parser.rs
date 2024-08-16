@@ -30,7 +30,7 @@ pub enum Expr {
     VecVec(Vec<Expr>),
     VecLit(Vec<u64>),
     Lit(u64),
-    Val(String, Vec<u64>),
+    Val(String, Vec<Expr>),
     FnCall(String, Vec<Box<Expr>>),
     NumOp {
         lhs: Box<Expr>,
@@ -142,40 +142,50 @@ impl AshParser {
         match pair.as_rule() {
             Rule::var_index_assign => {
                 let mut pair = pair.into_inner();
-                let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
-                let mut next = AshParser::next_or_error(&mut pair)?;
-                let mut indices: Vec<Expr> = Vec::new();
-                while next.as_rule() == Rule::var_index {
-                    let mut index_pair = next.into_inner();
-                    while let Some(v) = index_pair.next() {
-                        indices.push(self.build_expr_from_pair(v)?);
+                let next = AshParser::next_or_error(&mut pair)?;
+                let v = self.build_expr_from_pair(next)?;
+                let name;
+                let indices;
+                match v {
+                    Expr::Val(n, i) => {
+                        name = n;
+                        indices = i;
                     }
-                    next = AshParser::next_or_error(&mut pair)?;
+                    _ => {
+                        anyhow::bail!("unexpected expr in var_index_assign: {:?}, expected Val", v)
+                    }
                 }
-
+                let next = AshParser::next_or_error(&mut pair)?;
                 let expr = self.build_expr_from_pair(next)?;
                 Ok(AssignVec(name, indices, expr))
             }
             Rule::var_vec_def => {
                 let mut pair = pair.into_inner();
                 let _ = AshParser::next_or_error(&mut pair)?;
-                let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
-                let mut indices: Vec<usize> = Vec::new();
-                while let Some(v) = pair.next() {
-                    let mut pair = v.clone().into_inner();
-                    let next = AshParser::next_or_error(&mut pair)?;
-                    let mut pair = next.clone().into_inner();
-                    // unwrap the atom
-                    let next = AshParser::next_or_error(&mut pair)?;
-                    match next.as_rule() {
-                        Rule::varname => {
-                            log::error!("variables are not allowed in vector literals");
+                let next = AshParser::next_or_error(&mut pair)?;
+                let expr = self.build_expr_from_pair(next)?;
+                match expr {
+                    Expr::Val(name, indices) => {
+                        let mut indices_static: Vec<usize> = Vec::new();
+                        for i in indices {
+                            match i {
+                                Expr::Lit(v) => {
+                                    indices_static.push(usize::try_from(v).unwrap());
+                                }
+                                _ => {
+                                    anyhow::bail!(
+                                        "unexpected expr in var_vec_def: {:?}, expected Lit",
+                                        i
+                                    )
+                                }
+                            }
                         }
-                        Rule::literal_dec => indices.push(next.as_str().parse::<usize>().unwrap()),
-                        _ => anyhow::bail!("unexpected rule in var_vec_def: {:?}", next.as_rule()),
+                        Ok(EmptyVecDef(name, indices_static))
+                    }
+                    _ => {
+                        anyhow::bail!("unexpected expr in var_vec_def: {:?}, expected Val", expr)
                     }
                 }
-                Ok(EmptyVecDef(name, indices))
             }
             Rule::loop_stmt => {
                 let mut pair = pair.into_inner();
@@ -273,6 +283,15 @@ impl AshParser {
 
     fn build_expr_from_pair(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<Expr> {
         match pair.as_rule() {
+            Rule::var_indexed => {
+                let mut pair = pair.into_inner();
+                let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
+                let mut indices: Vec<Expr> = Vec::new();
+                while let Some(v) = pair.next() {
+                    indices.push(self.build_expr_from_pair(v)?);
+                }
+                Ok(Expr::Val(name, indices))
+            }
             Rule::literal_dec => Ok(Expr::Lit(pair.as_str().parse::<u64>().unwrap())),
             Rule::vec => {
                 let mut pair = pair.into_inner();
@@ -310,23 +329,13 @@ impl AshParser {
                 let mut pair = pair.into_inner();
                 let n = AshParser::next_or_error(&mut pair)?;
                 match n.as_rule() {
-                    Rule::varname => {
-                        let name = n.as_str().to_string();
-                        let mut indices: Vec<u64> = Vec::new();
+                    Rule::varname => Ok(Expr::Val(n.as_str().to_string(), vec![])),
+                    Rule::var_indexed => {
+                        let mut pair = n.into_inner();
+                        let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
+                        let mut indices: Vec<Expr> = Vec::new();
                         while let Some(v) = pair.next() {
-                            let mut pair = v.clone().into_inner();
-                            let next = AshParser::next_or_error(&mut pair)?;
-                            match next.as_rule() {
-                                Rule::varname => {
-                                    log::error!("unexpected decimal literal in atom");
-                                }
-                                Rule::literal_dec => {
-                                    indices.push(next.as_str().parse::<u64>().unwrap())
-                                }
-                                _ => {
-                                    log::error!("unexpected rule in atom");
-                                }
-                            }
+                            indices.push(self.build_expr_from_pair(v)?);
                         }
                         Ok(Expr::Val(name, indices))
                     }

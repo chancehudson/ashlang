@@ -41,13 +41,13 @@ vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec 
 var_def = { var ~ "=" ~ (function_call | expr | vec) }
 let_r = { "let " }
 const_def = { "const " ~ varname ~ "=" ~ (expr | vec) }
-var_vec_def = { let_r ~ varname ~ var_index* }
-var_index_assign = { varname ~ var_index+ ~ "=" ~ (function_call | expr ) }
+var_vec_def = { let_r ~ var_indexed }
+var_index_assign = { var_indexed ~ "=" ~ (function_call | expr ) }
 
 var = { let_r? ~ varname }
-var_index = { "[" ~ atom ~ "]" }
+var_indexed = { varname ~ ("[" ~ atom ~ "]")+ }
 
-atom = { literal_dec | (varname ~ var_index*) }
+atom = { literal_dec | var_indexed | varname }
 
 literal_dec = @{ ASCII_DIGIT+ }
 
