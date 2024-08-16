@@ -24,3 +24,8 @@ loop 100 {
   assert_eq(vec_dyn[i], i)
   i = i + 1
 }
+
+let vec_dyn2[100]
+vec_dyn2[vec_dyn[5]] = 99
+assert_eq(vec_dyn2[5], 99)
+assert_eq(vec_dyn2[vec_dyn[5]], 99)
