@@ -329,6 +329,7 @@ impl AshParser {
                 let mut pair = pair.into_inner();
                 let n = AshParser::next_or_error(&mut pair)?;
                 match n.as_rule() {
+                    Rule::function_call => Ok(self.build_expr_from_pair(n)?),
                     Rule::varname => Ok(Expr::Val(n.as_str().to_string(), vec![])),
                     Rule::var_indexed => {
                         let mut pair = n.into_inner();
