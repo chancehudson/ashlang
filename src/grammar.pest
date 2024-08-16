@@ -42,10 +42,10 @@ var_def = { var ~ "=" ~ (function_call | expr | vec) }
 let_r = { "let " }
 const_def = { "const " ~ varname ~ "=" ~ (expr | vec) }
 var_vec_def = { let_r ~ varname ~ var_index* }
-var_index_assign = { varname ~ var_index+ ~ "=" ~ expr }
+var_index_assign = { varname ~ var_index+ ~ "=" ~ (function_call | expr ) }
 
 var = { let_r? ~ varname }
-var_index = _{ "[" ~ literal_dec ~ "]" }
+var_index = { "[" ~ atom ~ "]" }
 
 atom = { literal_dec | (varname ~ var_index*) }
 

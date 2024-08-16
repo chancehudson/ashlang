@@ -22,7 +22,7 @@ pub enum AstNode {
     If(Expr, Vec<AstNode>),
     Loop(Expr, Vec<AstNode>),
     EmptyVecDef(String, Vec<usize>),
-    AssignVec(String, Vec<u64>, Expr),
+    AssignVec(String, Vec<Expr>, Expr),
 }
 
 #[derive(Debug, Clone)]
@@ -143,21 +143,19 @@ impl AshParser {
             Rule::var_index_assign => {
                 let mut pair = pair.into_inner();
                 let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
-                let mut indices: Vec<u64> = Vec::new();
-                let mut expr = None;
-                while let Some(v) = pair.next() {
-                    match v.as_rule() {
-                        Rule::literal_dec => indices.push(v.as_str().parse::<u64>().unwrap()),
-                        Rule::expr => {
-                            expr = Some(self.build_expr_from_pair(v)?);
-                        }
-                        _ => anyhow::bail!("unexpected rule in var_index_assign"),
+                let mut next = AshParser::next_or_error(&mut pair)?;
+                let mut indices: Vec<Expr> = Vec::new();
+                println!("{:?}", next);
+                while next.as_rule() == Rule::var_index {
+                    let mut index_pair = next.into_inner();
+                    while let Some(v) = index_pair.next() {
+                        indices.push(self.build_expr_from_pair(v)?);
                     }
+                    next = AshParser::next_or_error(&mut pair)?;
                 }
-                if expr.is_none() {
-                    anyhow::bail!("no expression found in var_index_assign");
-                }
-                Ok(AssignVec(name, indices, expr.unwrap()))
+
+                let expr = self.build_expr_from_pair(next)?;
+                Ok(AssignVec(name, indices, expr))
             }
             Rule::var_vec_def => {
                 let mut pair = pair.into_inner();
@@ -165,9 +163,17 @@ impl AshParser {
                 let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
                 let mut indices: Vec<usize> = Vec::new();
                 while let Some(v) = pair.next() {
-                    match v.as_rule() {
-                        Rule::literal_dec => indices.push(v.as_str().parse::<usize>().unwrap()),
-                        _ => anyhow::bail!("unexpected rule in var_vec_def"),
+                    let mut pair = v.clone().into_inner();
+                    let next = AshParser::next_or_error(&mut pair)?;
+                    let mut pair = next.clone().into_inner();
+                    // unwrap the atom
+                    let next = AshParser::next_or_error(&mut pair)?;
+                    match next.as_rule() {
+                        Rule::varname => {
+                            log::error!("variables are not allowed in vector literals");
+                        }
+                        Rule::literal_dec => indices.push(next.as_str().parse::<usize>().unwrap()),
+                        _ => anyhow::bail!("unexpected rule in var_vec_def: {:?}", next.as_rule()),
                     }
                 }
                 Ok(EmptyVecDef(name, indices))
@@ -259,12 +265,16 @@ impl AshParser {
                     block_ast,
                 ))
             }
-            unknown_expr => anyhow::bail!("Unexpected expression: {:?}", unknown_expr),
+            unknown_expr => anyhow::bail!(
+                "Unable to build ast node, unexpected expression: {:?}",
+                unknown_expr
+            ),
         }
     }
 
     fn build_expr_from_pair(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<Expr> {
         match pair.as_rule() {
+            Rule::literal_dec => Ok(Expr::Lit(pair.as_str().parse::<u64>().unwrap())),
             Rule::vec => {
                 let mut pair = pair.into_inner();
                 let next = AshParser::next_or_error(&mut pair)?;
@@ -305,11 +315,19 @@ impl AshParser {
                         let name = n.as_str().to_string();
                         let mut indices: Vec<u64> = Vec::new();
                         while let Some(v) = pair.next() {
-                            match v.as_rule() {
-                                Rule::literal_dec => {
-                                    indices.push(v.as_str().parse::<u64>().unwrap())
+                            let mut pair = v.clone().into_inner();
+                            let next = AshParser::next_or_error(&mut pair)?;
+                            match next.as_rule() {
+                                Rule::varname => {
+                                    log::error!("unexpected decimal literal in atom");
                                 }
-                                _ => panic!("unexpected rule in atom"),
+                                Rule::literal_dec => {
+                                    indices.push(next.as_str().parse::<u64>().unwrap())
+                                }
+                                _ => {
+                                    println!("{}", v.as_str());
+                                    log::error!("unexpected rule in atom");
+                                }
                             }
                         }
                         Ok(Expr::Val(name, indices))
@@ -341,7 +359,10 @@ impl AshParser {
                     rhs,
                 })
             }
-            unknown_expr => anyhow::bail!("Unexpected expression: {:?}", unknown_expr),
+            unknown_expr => anyhow::bail!(
+                "Unable to build expression, unexpected rule: {:?}",
+                unknown_expr
+            ),
         }
     }
 }

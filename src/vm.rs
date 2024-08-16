@@ -554,7 +554,18 @@ impl<'a> VM<'a> {
         (dimensions, vec_rep)
     }
 
-    pub fn calc_vec_offset(dimensions: &Vec<usize>, indices: &Vec<u64>) -> usize {
+    // output a single stack element
+    pub fn calc_vec_offset(&mut self, _dimensions: &Vec<usize>, indices: &Vec<Expr>) {
+        if indices.len() != 1 {
+            log::error!("only single dimension literal indices are allowed");
+        }
+        let o = self.eval(indices[0].clone(), false);
+        if o.is_some() {
+            log::error!("memory variables are not allowed as indices");
+        }
+    }
+
+    pub fn calc_vec_offset_static(dimensions: &Vec<usize>, indices: &Vec<u64>) -> usize {
         let sum = |vec: &Vec<usize>, start: usize| -> usize {
             let mut out = 0;
             for x in start..vec.len() {
@@ -562,14 +573,18 @@ impl<'a> VM<'a> {
             }
             out
         };
+        let indices = indices
+            .iter()
+            .map(|v| usize::try_from(*v).unwrap())
+            .collect::<Vec<usize>>();
         let mut offset = 0;
         for x in 0..indices.len() {
             // for each index we sum the deeper dimensions
             // to determine how far to move in the array storage
             if x == indices.len() - 1 && indices.len() == dimensions.len() {
-                offset += usize::try_from(indices[x]).unwrap();
+                offset += indices[x];
             } else {
-                offset += usize::try_from(indices[x]).unwrap() * sum(dimensions, x + 1);
+                offset += indices[x] * sum(dimensions, x + 1);
             }
         }
         offset
@@ -756,7 +771,7 @@ impl<'a> VM<'a> {
                             //
                             // if we're operating on two scalars (length 1 vector)
                             // we should move the value to the stack
-                            let offset = VM::calc_vec_offset(&v.dimensions, indices);
+                            let offset = VM::calc_vec_offset_static(&v.dimensions, indices);
                             if indices.len() == v.dimensions.len() {
                                 // we're accessing a scalar, move it to the stack
                                 if let Some(mem_index) = v.memory_index {
@@ -818,7 +833,7 @@ impl<'a> VM<'a> {
                                 self.asm.push(format!("push {}", value[0]));
                                 return None;
                             }
-                            let offset = VM::calc_vec_offset(&v.dimensions, indices);
+                            let offset = VM::calc_vec_offset_static(&v.dimensions, indices);
                             if indices.len() == v.dimensions.len() {
                                 // we're accessing a scalar, move it to the stack
                                 self.stack.push(name.clone());
@@ -1085,9 +1100,11 @@ impl<'a> VM<'a> {
                             "attempting to assign to undeclared variable \"{name}\""
                         ));
                     }
+                    // value being assigned
                     let o = self.eval(expr, false);
-                    let v = self.vars.get(&name).unwrap();
-                    let offset = VM::calc_vec_offset(&v.dimensions, &indices);
+                    let v = self.vars.get(&name).unwrap().clone();
+                    // offset is pushed onto the stack
+                    self.calc_vec_offset(&v.dimensions, &indices);
                     if indices.len() == v.dimensions.len() {
                         // assigning a scalar into a specific index in a vec
                         if o.is_some() {
@@ -1098,17 +1115,19 @@ impl<'a> VM<'a> {
                         // push the expr to the stack then into memory
                         // we're accessing a scalar, move it to the stack
                         if let Some(mem_index) = v.memory_index {
-                            self.stack.push(name.clone());
-                            self.asm.push(format!("push {}", mem_index + offset));
+                            self.asm.push(format!("push {mem_index}"));
+                            self.asm.push(format!("add"));
                             self.asm.push(format!("write_mem 1"));
                             self.asm.push(format!("pop 1"));
+                            self.stack.pop();
                             self.stack.pop();
                         } else if let Some(stack_index) = v.stack_index {
                             self.asm
                                 .push(format!("dup {}", self.stack.len() - stack_index));
-                            self.stack.push(name.clone());
+                            self.asm.push("add".to_string());
                             self.asm.push(format!("read_mem 1"));
                             self.asm.push(format!("pop 1"));
+                            self.stack.pop();
                             self.stack.pop();
                         } else {
                             log::error!("unexpected: variable has no memory or stack index");
