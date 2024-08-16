@@ -31,7 +31,7 @@ bool_op = _{ equal | not_equal | gt | lt }
 
 bool_expr = { expr ~ bool_op ~ expr }
 if_stmt = { "if " ~ bool_expr ~ block }
-block = { "{" ~ "\n"* ~ (stmt ~ "\n")* ~ "\n"* ~ "}" }
+block = { "{" ~ "\n"* ~ ((stmt ~ "\n") | "\n")* ~ "\n"* ~ "}" }
 
 vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec | literal_dec))* ~ "\n"* ~ "]"}
 
@@ -45,7 +45,7 @@ var_vec_def = { let_r ~ var_indexed }
 var_index_assign = { var_indexed ~ "=" ~ expr }
 
 var = { let_r? ~ varname }
-var_indexed = { varname ~ ("[" ~ atom ~ "]")+ }
+var_indexed = { varname ~ ("[" ~ expr ~ "]")+ }
 
 atom = { literal_dec | var_indexed | function_call | varname }
 

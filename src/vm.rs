@@ -1147,7 +1147,7 @@ impl<'a> VM<'a> {
                             self.asm
                                 .push(format!("dup {}", self.stack.len() - stack_index));
                             self.asm.push("add".to_string());
-                            self.asm.push(format!("read_mem 1"));
+                            self.asm.push(format!("write_mem 1"));
                             self.asm.push(format!("pop 1"));
                             self.stack.pop();
                             self.stack.pop();
