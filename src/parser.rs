@@ -145,7 +145,6 @@ impl AshParser {
                 let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
                 let mut next = AshParser::next_or_error(&mut pair)?;
                 let mut indices: Vec<Expr> = Vec::new();
-                println!("{:?}", next);
                 while next.as_rule() == Rule::var_index {
                     let mut index_pair = next.into_inner();
                     while let Some(v) = index_pair.next() {
@@ -325,7 +324,6 @@ impl AshParser {
                                     indices.push(next.as_str().parse::<u64>().unwrap())
                                 }
                                 _ => {
-                                    println!("{}", v.as_str());
                                     log::error!("unexpected rule in atom");
                                 }
                             }
