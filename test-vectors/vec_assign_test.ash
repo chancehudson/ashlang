@@ -1,39 +1,51 @@
-let vec[2][3]
-vec[0][0] = 99
-vec[1][2] = 999
 
-assert_eq(vec[0][0], 99)
-assert_eq(vec[1][2], 999)
+let high_dim[10][10][10][10][10]
 
-let vec2[2][3]
-vec2[0][0] = 99
-vec2[1][2] = 999
 
-assert_eq(vec2[0][0], 99)
-assert_eq(vec2[1][2], 999)
-
-let vec_dyn[100]
 let i = 0
-loop 100 {
-  vec_dyn[i] = i
+let j = 0
+let k = 0
+let l = 0
+let m = 0
+loop 4 {
+  j = 0
+  loop 4 {
+    k = 0
+    loop 4 {
+      l = 0
+      loop 4 {
+        m = 0
+        loop 4 {
+          high_dim[i][j][k][l][m] = i * j * k * l * m
+          m = m + 1
+        }
+        l = l + 1
+      }
+      k = k + 1
+    }
+    j = j + 1
+  }
   i = i + 1
 }
 
-i = 0
-loop 100 {
-  assert_eq(vec_dyn[i], i)
-  i = i + 1
-}
+assert_eq(high_dim[0][0][0][0][0], 0)
+assert_eq(high_dim[1][1][1][1][1], 1)
+assert_eq(high_dim[2][2][2][2][2], 32)
+assert_eq(high_dim[3][3][3][3][3], 243)
+assert_eq(high_dim[3][3][1][3][3], 81)
 
-let vec_dyn2[100]
-vec_dyn2[vec_dyn[5]] = 99
-assert_eq(vec_dyn2[5], 99)
-assert_eq(vec_dyn2[vec_dyn[5]], 99)
+i = 3
+j = 3
+k = 2
+l = 3
+m = 1
+assert_eq(high_dim[i][j][k][l][m], 54)
+assert_eq(high_dim[i][j][k][l][m], i * j * k * l * m)
 
-# test expr in function call
-assert_eq(vec_dyn[5] * vec_dyn[5], 25)
-# test expr in assignment
-let x = vec_dyn[5] * vec_dyn[5]
-assert_eq(x, 25)
-
-vec_dyn[5] = 99
+i = 1
+j = 2
+k = 2
+l = 3
+m = 1
+assert_eq(high_dim[i][j][k][l][m], 12)
+assert_eq(high_dim[i][j][k][l][m], i * j * k * l * m)
