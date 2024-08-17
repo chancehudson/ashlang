@@ -2,3 +2,5 @@
 
 pop 1
 xor
+
+return

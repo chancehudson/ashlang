@@ -181,7 +181,6 @@ impl Compiler {
             asm.push("\n".to_string());
             asm.push(format!("{}:", fn_call.typed_name()));
             asm.append(&mut fn_asm.clone());
-            asm.push("return".to_string());
         }
 
         // step 3: add blocks to file

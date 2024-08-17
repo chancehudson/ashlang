@@ -3,3 +3,5 @@
 pop 1
 swap 1
 lt
+
+return

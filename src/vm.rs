@@ -701,7 +701,8 @@ impl<'a> VM<'a> {
                     let mut vm = VM::new(&mut self.compiler_state);
                     vm.eval_ast(fn_ast, arg_types.clone());
                     vm.return_if_needed();
-                    let asm = vm.asm.clone();
+                    let mut asm = vm.asm.clone();
+                    asm.push("return".to_string());
                     let no_return_call = call.clone();
                     if let Some(return_type) = vm.return_type {
                         call.return_type = Some(return_type);

@@ -1,3 +1,5 @@
 () -> _
 push 0
 assert
+
+return

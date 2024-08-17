@@ -2,3 +2,4 @@
 
 pop 1
 write_io 1
+return
