@@ -1,7 +1,8 @@
-use crate::asm_parser::AsmParser;
 use crate::log;
 use crate::parser::{AshParser, AstNode};
-use crate::vm::{FnCall, VM};
+use crate::tasm::asm_parser::AsmParser;
+use crate::tasm::vm::{FnCall, VM};
+use anyhow::Result;
 use camino::Utf8PathBuf;
 use std::{collections::HashMap, fs};
 
@@ -66,32 +67,55 @@ impl Compiler {
     //
     // if the include is a directory, the directory is recursively
     // walked and passed to this function
-    pub fn include(&mut self, path: Utf8PathBuf) {
+    pub fn include(&mut self, path: Utf8PathBuf) -> Result<()> {
         // first check if it's a directory
         let metadata = fs::metadata(&path)
-            .unwrap_or_else(|_| panic!("Failed to stat metadata for include path: {:?}", path));
+            .map_err(|_| anyhow::anyhow!("Failed to stat metadata for include path: {:?}", path))?;
         if metadata.is_file() {
-            let ext = path
-                .extension()
-                .unwrap_or_else(|| panic!("Failed to get extension for path: {:?}", path));
-            if ext != "ash" && ext != "tasm" {
-                return;
+            // TODO: formalize extensions and extension priorities
+            let ext = path.extension();
+            if ext.is_none() {
+                anyhow::bail!("Failed to get extension for path: {:?}", path)
             }
-            let name_str = path
-                .file_stem()
-                .unwrap_or_else(|| panic!("Failed to parse file stem for include path: {:?}", path))
-                .to_string();
+            let ext = ext.unwrap();
+            if ext != "ash" && ext != "tasm" {
+                return Ok(());
+            }
+            let name_str = path.file_stem();
+            if name_str.is_none() {
+                anyhow::bail!("Failed to parse file stem for include path: {:?}", path)
+            }
+            let name_str = name_str.unwrap().to_string();
             if self.fn_to_path.contains_key(&name_str) {
-                log::error!(&format!(
-                    "{}\n{}\n{}",
-                    format!("Duplicate file/function names detected: {name_str}"),
-                    format!("Path 1: {:?}", &path),
-                    format!("Path 2: {:?}", self.fn_to_path.get(&name_str).unwrap())
-                ));
+                // check if another file exists at the same path with a different
+                // extension
+                //
+                // if so prefer the tasm file
+
+                let existing_path = self.fn_to_path.get(&name_str).unwrap().canonicalize()?;
+                if existing_path.parent().is_none() {
+                    anyhow::bail!(
+                        "Failed to canonicalize path: {:?}",
+                        self.fn_to_path.get(&name_str).unwrap()
+                    )
+                }
+                if existing_path.parent() != path.canonicalize()?.parent() {
+                    log::error!(&format!(
+                        "{}\n{}\n{}",
+                        format!("Duplicate file/function names detected: {name_str}"),
+                        format!("Path 1: {:?}", &path),
+                        format!("Path 2: {:?}", self.fn_to_path.get(&name_str).unwrap())
+                    ));
+                }
+                if ext == "tasm" {
+                    // we'll prefer the tasm impl
+                    self.fn_to_path.insert(name_str.clone(), path.clone());
+                    self.path_to_fn.insert(path, name_str);
+                }
+                return Ok(());
             }
             self.fn_to_path.insert(name_str.clone(), path.clone());
             self.path_to_fn.insert(path, name_str);
-            // }
         } else if metadata.is_dir() {
             let files = fs::read_dir(&path)
                 .unwrap_or_else(|_| panic!("Failed to read directory: {:?}", &path));
@@ -99,9 +123,10 @@ impl Compiler {
                 let next_path = entry
                     .unwrap_or_else(|_| panic!("Failed to read dir entry: {:?}", &path))
                     .path();
-                self.include(Utf8PathBuf::from_path_buf(next_path).unwrap());
+                self.include(Utf8PathBuf::from_path_buf(next_path).unwrap())?;
             }
         }
+        Ok(())
     }
 
     // loads, parses, and returns an ashlang function by name

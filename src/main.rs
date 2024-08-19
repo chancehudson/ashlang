@@ -3,11 +3,10 @@ use clap::{arg, Arg, Command};
 use compiler::Compiler;
 use triton_vm::prelude::*;
 
-mod asm_parser;
 mod compiler;
 mod log;
 mod parser;
-mod vm;
+mod tasm;
 
 fn cli() -> Command {
     Command::new("acc")
@@ -75,7 +74,10 @@ fn main() {
         if p.is_empty() {
             continue;
         }
-        compiler.include(Utf8PathBuf::from(p));
+        if let Err(err) = compiler.include(Utf8PathBuf::from(p)) {
+            println!("Failed to include path: {:?}", err);
+            std::process::exit(1);
+        }
     }
 
     compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
