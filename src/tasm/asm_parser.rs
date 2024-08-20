@@ -1,14 +1,14 @@
 use crate::log;
 
-use crate::vm::ArgType;
-use crate::vm::FnCall;
-use crate::vm::VarLocation;
+use crate::tasm::vm::ArgType;
+use crate::tasm::vm::FnCall;
+use crate::tasm::vm::VarLocation;
 use log::error;
 use pest::Parser;
 use pest_derive::Parser;
 
 #[derive(Parser)]
-#[grammar = "tasm_grammar.pest"] // relative to project `src`
+#[grammar = "tasm/tasm_grammar.pest"] // relative to project `src`
 pub struct AsmPestParser;
 
 pub struct AsmParser {

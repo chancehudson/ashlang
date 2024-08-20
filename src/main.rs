@@ -3,11 +3,10 @@ use clap::{arg, Arg, Command};
 use compiler::Compiler;
 use triton_vm::prelude::*;
 
-mod asm_parser;
 mod compiler;
 mod log;
 mod parser;
-mod vm;
+mod tasm;
 
 fn cli() -> Command {
     Command::new("acc")
@@ -15,6 +14,14 @@ fn cli() -> Command {
         .subcommand_required(false)
         .arg_required_else_help(true)
         .arg(arg!(<ENTRY_FN> "The entrypoint function name"))
+        .arg(
+            Arg::new("target")
+                .short('t')
+                .long("target")
+                .required(false)
+                .help("the output compile target")
+                .action(clap::ArgAction::Append),
+        )
         .arg(
             Arg::new("include")
                 .short('i')
@@ -26,7 +33,7 @@ fn cli() -> Command {
         .arg(
             Arg::new("print_asm")
                 .short('v')
-                .long("asm")
+                .long("print")
                 .required(false)
                 .num_args(0)
                 .help("print the compiled asm before proving"),
@@ -63,6 +70,11 @@ fn main() {
     let entry_fn = matches
         .get_one::<String>("ENTRY_FN")
         .expect("Failed to get ENTRY_FN");
+    let target = matches
+        .get_many::<String>("target")
+        .unwrap_or_default()
+        .map(|v| v.as_str())
+        .collect::<Vec<_>>();
     let include_paths = matches
         .get_many::<String>("include")
         .unwrap_or_default()
@@ -70,16 +82,36 @@ fn main() {
         .collect::<Vec<_>>();
     let public_inputs = matches.get_one::<String>("public_inputs");
     let secret_inputs = matches.get_one::<String>("secret_inputs");
-    let mut compiler = Compiler::new();
+    if target.len() > 1 {
+        println!("Multiple targets not supported yet");
+        std::process::exit(1);
+    }
+    if target.is_empty() {
+        println!("No target specified");
+        std::process::exit(1);
+    }
+    let target = target[0];
+    let mut compiler;
+    if target == "tasm" {
+        compiler = Compiler::new(vec!["ash".to_string(), "tasm".to_string()]);
+    } else if target == "r1cs" {
+        compiler = Compiler::new(vec!["ash".to_string(), "r1cs".to_string()]);
+    } else {
+        println!("Unsupported target: {}", target);
+        std::process::exit(1);
+    }
     for p in include_paths {
         if p.is_empty() {
             continue;
         }
-        compiler.include(Utf8PathBuf::from(p));
+        if let Err(err) = compiler.include(Utf8PathBuf::from(p)) {
+            println!("Failed to include path: {:?}", err);
+            std::process::exit(1);
+        }
     }
 
     compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
-    let asm = compiler.compile(entry_fn);
+    let asm = compiler.compile(entry_fn, target);
 
     let instructions = triton_vm::parser::parse(&asm).unwrap();
     let l_instructions = triton_vm::parser::to_labelled_instructions(instructions.as_slice());
