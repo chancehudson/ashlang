@@ -7,6 +7,6 @@ do
   if echo $entry | grep "_test.ash"
   then
 
-    cargo run --release -- $(basename $entry | sed "s/.ash//") -i ./stdlib -i ./test-vectors --asm -p 1 -s 1
+    cargo run --release -- -t tasm $(basename $entry | sed "s/.ash//") -i ./stdlib -i ./test-vectors -v -p 1 -s 1
   fi
 done

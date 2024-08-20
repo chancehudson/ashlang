@@ -39,6 +39,7 @@ pub struct Compiler {
     fn_to_path: HashMap<String, Utf8PathBuf>,
     pub print_asm: bool,
     state: CompilerState,
+    extensions: Vec<String>,
 }
 
 /**
@@ -51,12 +52,13 @@ pub struct Compiler {
  * a full output file.
  */
 impl Compiler {
-    pub fn new() -> Self {
+    pub fn new(extensions: Vec<String>) -> Self {
         Compiler {
             path_to_fn: HashMap::new(),
             fn_to_path: HashMap::new(),
             print_asm: false,
             state: CompilerState::new(),
+            extensions,
         }
     }
 
@@ -72,13 +74,12 @@ impl Compiler {
         let metadata = fs::metadata(&path)
             .map_err(|_| anyhow::anyhow!("Failed to stat metadata for include path: {:?}", path))?;
         if metadata.is_file() {
-            // TODO: formalize extensions and extension priorities
             let ext = path.extension();
             if ext.is_none() {
                 anyhow::bail!("Failed to get extension for path: {:?}", path)
             }
             let ext = ext.unwrap();
-            if ext != "ash" && ext != "tasm" {
+            if !self.extensions.contains(&ext.to_string()) {
                 return Ok(());
             }
             let name_str = path.file_stem();
@@ -90,16 +91,20 @@ impl Compiler {
                 // check if another file exists at the same path with a different
                 // extension
                 //
-                // if so prefer the tasm file
+                // if so prefer the higher index file
 
-                let existing_path = self.fn_to_path.get(&name_str).unwrap().canonicalize()?;
+                let existing_path = self
+                    .fn_to_path
+                    .get(&name_str)
+                    .unwrap()
+                    .canonicalize_utf8()?;
                 if existing_path.parent().is_none() {
                     anyhow::bail!(
                         "Failed to canonicalize path: {:?}",
                         self.fn_to_path.get(&name_str).unwrap()
                     )
                 }
-                if existing_path.parent() != path.canonicalize()?.parent() {
+                if existing_path.parent() != path.canonicalize_utf8()?.parent() {
                     log::error!(&format!(
                         "{}\n{}\n{}",
                         format!("Duplicate file/function names detected: {name_str}"),
@@ -107,8 +112,15 @@ impl Compiler {
                         format!("Path 2: {:?}", self.fn_to_path.get(&name_str).unwrap())
                     ));
                 }
-                if ext == "tasm" {
-                    // we'll prefer the tasm impl
+                let existing_extension = existing_path.extension().unwrap();
+                let existing_index = self
+                    .extensions
+                    .iter()
+                    .position(|x| *x == *existing_extension)
+                    .unwrap();
+                let current_index = self.extensions.iter().position(|x| *x == *ext).unwrap();
+                if current_index > existing_index {
+                    // we'll prefer the higher indexed impl
                     self.fn_to_path.insert(name_str.clone(), path.clone());
                     self.path_to_fn.insert(path, name_str);
                 }
