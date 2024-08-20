@@ -215,7 +215,20 @@ impl Compiler {
         }
         match target {
             "r1cs" => {
-                log::error!("r1cs compile target is not yet supported");
+                let mut vm = crate::r1cs::vm::VM::new(&mut self.state);
+                // build constraints from the AST
+                vm.eval_ast(parser.ast);
+                if self.print_asm {
+                    // prints the raw constraints
+                    for c in &vm.constraints {
+                        println!("{}", c.to_string());
+                    }
+                }
+                vm.constraints
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join("\n")
             }
             "tasm" => {
                 // step 1: compile the entrypoint to assembly
