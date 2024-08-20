@@ -1,7 +1,7 @@
 use crate::log;
 use crate::parser::{AshParser, AstNode};
 use crate::tasm::asm_parser::AsmParser;
-use crate::tasm::vm::{FnCall, VM};
+use crate::tasm::vm::FnCall;
 use anyhow::Result;
 use camino::Utf8PathBuf;
 use std::{collections::HashMap, fs};
@@ -163,7 +163,7 @@ impl Compiler {
     // start at the entry file
     // parse it and determine what other files are needed
     // repeat until all files have been parsed
-    pub fn compile(&mut self, entry_fn_name: &str) -> String {
+    pub fn compile(&mut self, entry_fn_name: &str, target: &str) -> String {
         let parser = AshParser::parse(&self.parse_fn(entry_fn_name).0, entry_fn_name);
 
         // tracks total number of includes for a fn in all sources
@@ -180,60 +180,76 @@ impl Compiler {
                     continue;
                 }
                 let (text, ext) = self.parse_fn(&fn_name);
-                if ext == "ash" {
-                    let parser = AshParser::parse(&text, &fn_name);
-                    for (fn_name, count) in parser.fn_names {
-                        if let Some(x) = included_fn.get_mut(&fn_name) {
-                            *x += count;
-                        } else {
-                            included_fn.insert(fn_name, count);
+                match ext.as_str() {
+                    "ash" => {
+                        let parser = AshParser::parse(&text, &fn_name);
+                        for (fn_name, count) in parser.fn_names {
+                            if let Some(x) = included_fn.get_mut(&fn_name) {
+                                *x += count;
+                            } else {
+                                included_fn.insert(fn_name, count);
+                            }
                         }
+                        self.state.fn_to_ast.insert(fn_name, parser.ast);
                     }
-                    self.state.fn_to_ast.insert(fn_name, parser.ast);
-                } else if ext == "tasm" {
-                    let parser = AsmParser::parse(&text, &fn_name);
-                    self.state.fn_to_ast.insert(fn_name.clone(), vec![]);
-                    let mut call_no_return = parser.call_type.clone();
-                    call_no_return.return_type = None;
-                    self.state
-                        .fn_return_types
-                        .insert(call_no_return.clone(), parser.call_type.clone());
-                    self.state
-                        .compiled_fn
-                        .insert(call_no_return, parser.asm.clone());
-                } else {
-                    panic!("unexpected: unknown file extension {ext}");
+                    "tasm" => {
+                        let parser = AsmParser::parse(&text, &fn_name);
+                        self.state.fn_to_ast.insert(fn_name.clone(), vec![]);
+                        let mut call_no_return = parser.call_type.clone();
+                        call_no_return.return_type = None;
+                        self.state
+                            .fn_return_types
+                            .insert(call_no_return.clone(), parser.call_type.clone());
+                        self.state
+                            .compiled_fn
+                            .insert(call_no_return, parser.asm.clone());
+                    }
+                    "r1cs" => {
+                        log::error!(&format!("r1cs files are not yet supported: {fn_name}"));
+                    }
+                    _ => {
+                        log::error!(&format!("unexpected file extension: {ext}"));
+                    }
                 }
             }
         }
+        match target {
+            "r1cs" => {
+                log::error!("r1cs compile target is not yet supported");
+            }
+            "tasm" => {
+                // step 1: compile the entrypoint to assembly
+                let mut vm = crate::tasm::vm::VM::new(&mut self.state);
+                vm.eval_ast(parser.ast, vec![]);
+                let mut asm = vm.asm.clone();
+                asm.push("halt".to_string());
 
-        // step 1: compile the entrypoint to assembly
-        let mut vm = VM::new(&mut self.state);
-        vm.eval_ast(parser.ast, vec![]);
-        let mut asm = vm.asm.clone();
-        asm.push("halt".to_string());
+                // step 2: add functions to file
+                for (fn_call, fn_asm) in &self.state.compiled_fn {
+                    asm.push("\n".to_string());
+                    asm.push(format!("{}:", fn_call.typed_name()));
+                    asm.append(&mut fn_asm.clone());
+                }
 
-        // step 2: add functions to file
-        for (fn_call, fn_asm) in &self.state.compiled_fn {
-            asm.push("\n".to_string());
-            asm.push(format!("{}:", fn_call.typed_name()));
-            asm.append(&mut fn_asm.clone());
-        }
+                // step 3: add blocks to file
+                for v in self.state.block_fn_asm.iter() {
+                    let mut block_asm = v.clone();
+                    asm.push("\n".to_string());
+                    asm.append(&mut block_asm);
+                }
+                asm.push("\n".to_string());
 
-        // step 3: add blocks to file
-        for v in self.state.block_fn_asm.iter() {
-            let mut block_asm = v.clone();
-            asm.push("\n".to_string());
-            asm.append(&mut block_asm);
-        }
-        asm.push("\n".to_string());
-
-        if self.print_asm {
-            // prints the assembly
-            for l in &asm {
-                println!("{}", l);
+                if self.print_asm {
+                    // prints the assembly
+                    for l in &asm {
+                        println!("{}", l);
+                    }
+                }
+                asm.clone().join("\n")
+            }
+            _ => {
+                log::error!(&format!("unexpected target: {target}"));
             }
         }
-        asm.clone().join("\n")
     }
 }

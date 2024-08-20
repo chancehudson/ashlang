@@ -94,6 +94,8 @@ fn main() {
     let mut compiler;
     if target == "tasm" {
         compiler = Compiler::new(vec!["ash".to_string(), "tasm".to_string()]);
+    } else if target == "r1cs" {
+        compiler = Compiler::new(vec!["ash".to_string(), "r1cs".to_string()]);
     } else {
         println!("Unsupported target: {}", target);
         std::process::exit(1);
@@ -109,7 +111,7 @@ fn main() {
     }
 
     compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
-    let asm = compiler.compile(entry_fn);
+    let asm = compiler.compile(entry_fn, target);
 
     let instructions = triton_vm::parser::parse(&asm).unwrap();
     let l_instructions = triton_vm::parser::to_labelled_instructions(instructions.as_slice());
