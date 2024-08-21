@@ -29,6 +29,8 @@ jobs:
         with:
           toolchain: 1.79.0
           override: true
+      - name: Build compiler
+        run: cargo build --release
       - name: Run test vectors
         run: cargo run --release -- r1cs_test -t r1cs -i ./test-vectors -i stdlib -v
   compile-tasm:
@@ -41,5 +43,7 @@ jobs:
         with:
           toolchain: 1.79.0
           override: true
+      - name: Build compiler
+        run: cargo build --release
       - name: Run test vectors
         run: sh test.sh
