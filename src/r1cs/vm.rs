@@ -89,7 +89,7 @@ impl<'a> VM<'a> {
                     let v = self.eval(&expr);
                     self.vars.insert(name, v);
                 }
-                AstNode::Const(name, expr) => {}
+                AstNode::StaticDef(name, expr) => {}
                 _ => {
                     log::error!(&format!("ast node not supported for r1cs: {:?}", v));
                 }

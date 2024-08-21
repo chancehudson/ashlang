@@ -9,7 +9,7 @@ use std::collections::HashMap;
 pub enum VarLocation {
     Stack,
     Memory,
-    Const,
+    Static,
 }
 
 #[derive(Clone)]
@@ -188,14 +188,14 @@ impl<'a> VM<'a> {
         self.block_depth -= 1;
     }
 
-    // define a constant that will be available in
+    // define a static that will be available in
     // the current VM object
-    pub fn const_var(&mut self, name: String, expr: Expr) {
+    pub fn static_var(&mut self, name: String, expr: Expr) {
         // check for duplicate var names
         if self.vars.contains_key(&name) {
             log::error!(
                 &format!("variable name \"{name}\" is already in use"),
-                &format!("you're attempting to define a constant variable with the same name as another variable")
+                &format!("you're attempting to define a static variable with the same name as another variable")
             );
         }
         match expr {
@@ -205,7 +205,7 @@ impl<'a> VM<'a> {
                     Var {
                         stack_index: None,
                         block_index: self.block_depth,
-                        location: VarLocation::Const,
+                        location: VarLocation::Static,
                         memory_index: None,
                         dimensions: vec![],
                         value: Some(vec![v]),
@@ -214,15 +214,15 @@ impl<'a> VM<'a> {
             }
             Expr::Val(ref_name, indices) => {
                 if indices.len() > 0 {
-                    log::error!("const var index assignment not supported");
+                    log::error!("static var index assignment not supported");
                 }
                 if let Some(v) = self.vars.get(&ref_name) {
                     match v.location {
-                        VarLocation::Const => {
+                        VarLocation::Static => {
                             self.vars.insert(name, v.clone());
                         }
                         _ => {
-                            log::error!("dynamically evaluated consts not supported");
+                            log::error!("dynamically evaluated statics not supported");
                         }
                     }
                 } else {
@@ -234,17 +234,17 @@ impl<'a> VM<'a> {
                 op: _,
                 rhs: _,
             } => {
-                log::error!("numerical operations in constants is not yet supported");
+                log::error!("numerical operations in statics is not yet supported");
             }
             Expr::FnCall(_name, _vars) => {
-                log::error!("constant expression functions not implemented");
+                log::error!("static expression functions not implemented");
             }
             Expr::BoolOp {
                 lhs: _,
                 bool_op: _,
                 rhs: _,
             } => {
-                log::error!("boolean operations in constants is not supported");
+                log::error!("boolean operations in statics is not supported");
             }
             Expr::VecVec(_) | Expr::VecLit(_) => {
                 let (dimensions, vec) = self.build_var_from_ast_vec(expr);
@@ -253,7 +253,7 @@ impl<'a> VM<'a> {
                     Var {
                         stack_index: None,
                         block_index: self.block_depth,
-                        location: VarLocation::Const,
+                        location: VarLocation::Static,
                         memory_index: None,
                         dimensions,
                         value: Some(vec),
@@ -397,10 +397,10 @@ impl<'a> VM<'a> {
             ));
         }
         match t.location {
-            VarLocation::Const => {
+            VarLocation::Static => {
                 log::error!(
-                    &format!("function argument variable \"{name}\" is a constant"),
-                    "calling functions with constant arguments is not supported yet"
+                    &format!("function argument variable \"{name}\" is static"),
+                    "calling functions with static arguments is not supported yet"
                 );
             }
             VarLocation::Stack => {
@@ -448,10 +448,10 @@ impl<'a> VM<'a> {
             );
         }
         let v = self.vars.get(&name).unwrap();
-        if v.location == VarLocation::Const {
+        if v.location == VarLocation::Static {
             log::error!(
-                &format!("cannot assign constant var \"{name}\""),
-                "you're attempting to assign a value to variable that is a constant"
+                &format!("cannot assign static var \"{name}\""),
+                "you're attempting to assign a value to variable that is a static"
             );
         }
         if v.location == VarLocation::Memory {
@@ -485,9 +485,9 @@ impl<'a> VM<'a> {
                     "cannot get stack index of memory variable \"{var_name}\""
                 ));
             }
-            if var.location == VarLocation::Const {
+            if var.location == VarLocation::Static {
                 log::error!(&format!(
-                    "cannot get stack index of constant variable \"{var_name}\""
+                    "cannot get stack index of static variable \"{var_name}\""
                 ));
             }
             if let Some(stack_index) = var.stack_index {
@@ -657,8 +657,8 @@ impl<'a> VM<'a> {
                     // and can add it to the arg_types. We'll then push the absolute
                     // position of the memory variable onto the stack
                     if let Some(v) = o {
-                        if v.location == VarLocation::Const {
-                            panic!("cannot pass constant as argument");
+                        if v.location == VarLocation::Static {
+                            panic!("cannot pass static variable as argument");
                         }
                         arg_types.push(ArgType {
                             location: v.location,
@@ -742,8 +742,8 @@ impl<'a> VM<'a> {
                     self.stack.pop();
                 }
                 match call.return_type.clone().unwrap().location {
-                    VarLocation::Const => {
-                        panic!("cannot return constant from function");
+                    VarLocation::Static => {
+                        panic!("cannot return static variable from function");
                     }
                     VarLocation::Stack => {
                         // if the return value is a stack variable
@@ -788,7 +788,7 @@ impl<'a> VM<'a> {
                 }
             }
             Expr::Val(name, indices) => {
-                // if the val is a constant we push to stack
+                // if the val is a static we push to stack
                 if !self.vars.contains_key(name) {
                     log::error!(&format!("unknown variable: {name}"));
                 }
@@ -866,13 +866,13 @@ impl<'a> VM<'a> {
                             }
                         }
                     }
-                    VarLocation::Const => {
+                    VarLocation::Static => {
                         if v.value.is_none() {
-                            panic!("constant variable does not have values defined");
+                            panic!("static variable does not have values defined");
                         }
                         let value = v.value.as_ref().unwrap();
                         if value.len() == 1 {
-                            // a constant that can be represented on the stack
+                            // a static that can be represented on the stack
                             self.stack.push(name.clone());
                             self.asm.push(format!("push {}", value[0]));
                             return None;
@@ -885,7 +885,7 @@ impl<'a> VM<'a> {
                             return None;
                         }
                         // we're accessing a vec/mat, leave it in memory
-                        // or in this case (const) in the VM value array
+                        // or in this case (static) in the VM value array
                         return Some(Var {
                             stack_index: v.stack_index,
                             block_index: v.block_index,
@@ -979,12 +979,12 @@ impl<'a> VM<'a> {
                                         );
                                     }
                                 }
-                                VarLocation::Const => {
+                                VarLocation::Static => {
                                     self.asm
                                         .push(format!("push {}", v1.value.as_ref().unwrap()[x]));
                                     self.stack.push("v1".to_string());
                                 }
-                                _ => panic!("lhs operand not const or memory"),
+                                _ => panic!("lhs operand not static or memory"),
                             }
                             // make sure the RHS is read second so the inv operation
                             // is applied to the correct operand
@@ -1013,12 +1013,12 @@ impl<'a> VM<'a> {
                                         );
                                     }
                                 }
-                                VarLocation::Const => {
+                                VarLocation::Static => {
                                     self.stack.push("v2".to_string());
                                     self.asm
                                         .push(format!("push {}", v2.value.as_ref().unwrap()[x]));
                                 }
-                                _ => panic!("rhs operand not const or memory"),
+                                _ => panic!("rhs operand not static or memory"),
                             }
                             // v1 and v2 are operated on and a single output
                             // remains
@@ -1240,12 +1240,12 @@ impl<'a> VM<'a> {
                 AstNode::Rtrn(expr) => {
                     self.return_expr(expr);
                 }
-                AstNode::Const(name, expr) => {
+                AstNode::StaticDef(name, expr) => {
                     // we must be able to fully evaluate
-                    // the constant at compile time
+                    // the static at compile time
                     // e.g. the expr must contain only
-                    // Expr::Lit and Expr::Val containing other consts
-                    self.const_var(name, expr);
+                    // Expr::Lit and Expr::Val containing other statics
+                    self.static_var(name, expr);
                 }
                 AstNode::If(expr, block_ast) => {
                     self.eval(expr, false);

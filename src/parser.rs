@@ -21,7 +21,7 @@ pub enum AstNode {
     Stmt(String, bool, Expr),
     ExprUnassigned(Expr),
     Rtrn(Expr),
-    Const(String, Expr),
+    StaticDef(String, Expr),
     If(Expr, Vec<AstNode>),
     Loop(Expr, Vec<AstNode>),
     EmptyVecDef(String, Vec<usize>),
@@ -232,11 +232,11 @@ impl AshParser {
                 let n = AshParser::next_or_error(&mut pair)?;
                 Ok(Stmt(name, is_let, self.build_expr_from_pair(n)?))
             }
-            Rule::const_def => {
+            Rule::static_def => {
                 let mut pair = pair.into_inner();
                 let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
                 let expr = AshParser::next_or_error(&mut pair)?;
-                Ok(Const(
+                Ok(StaticDef(
                     name.as_str().to_string(),
                     self.build_expr_from_pair(expr)?,
                 ))

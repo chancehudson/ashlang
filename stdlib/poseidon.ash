@@ -27,7 +27,7 @@ loop T {
 # program digest and do not require
 # memory
 #
-# TODO: switch to constants
+# TODO: switch to statics
 let C = poseidon_C(T)
 let M = poseidon_M(T)
 let N_F = poseidon_N_F(T)
