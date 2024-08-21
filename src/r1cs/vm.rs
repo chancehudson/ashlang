@@ -16,6 +16,7 @@ pub struct R1csConstraint {
     pub a: Vec<(u64, usize)>,
     pub b: Vec<(u64, usize)>,
     pub c: Vec<(u64, usize)>,
+    pub comment: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -48,6 +49,9 @@ impl ToString for R1csConstraint {
             out.push_str(&format!("({},{})", coef, index));
         }
         out.push_str("]");
+        if let Some(comment) = &self.comment {
+            out.push_str(&format!(" # {}", comment));
+        }
         out
     }
 }
@@ -62,6 +66,8 @@ pub struct VM<'a> {
     pub compiler_state: &'a mut CompilerState,
     // a, b, c
     pub constraints: Vec<R1csConstraint>,
+    pub args: Vec<Var>,
+    pub return_val: Option<Var>,
 }
 
 impl<'a> VM<'a> {
@@ -72,6 +78,20 @@ impl<'a> VM<'a> {
             vars: HashMap::new(),
             compiler_state,
             constraints: Vec::new(),
+            args: Vec::new(),
+            return_val: None,
+        }
+    }
+
+    pub fn from(vm: &'a mut VM, args: Vec<Var>) -> Self {
+        VM {
+            prime: vm.prime,
+            var_index: vm.var_index,
+            vars: HashMap::new(),
+            compiler_state: vm.compiler_state,
+            constraints: Vec::new(),
+            args,
+            return_val: None,
         }
     }
 
@@ -88,6 +108,27 @@ impl<'a> VM<'a> {
                     // returns a variable index
                     let v = self.eval(&expr);
                     self.vars.insert(name, v);
+                }
+                AstNode::FnVar(names) => {
+                    for x in 0..names.len() {
+                        let name = &names[x];
+                        if self.vars.contains_key(name) {
+                            log::error!(
+                                &format!("variable already defined: {name}"),
+                                "attempting to define variable in function header"
+                            );
+                        }
+                        self.vars.insert(name.clone(), self.args[x].clone());
+                    }
+                }
+                AstNode::Rtrn(expr) => {
+                    if self.return_val.is_some() {
+                        log::error!(
+                            "return value already set",
+                            "you likely have called return more than once"
+                        );
+                    }
+                    self.return_val = Some(self.eval(&expr));
                 }
                 AstNode::StaticDef(name, expr) => {}
                 _ => {
@@ -106,7 +147,32 @@ impl<'a> VM<'a> {
                 panic!("matrix literals must be assigned before operation");
             }
             Expr::FnCall(name, vars) => {
-                log::error!(&format!("function calls not supported in r1cs: {name}"));
+                let fn_ast = self.compiler_state.fn_to_ast.get(name);
+                if fn_ast.is_none() {
+                    log::error!("function not found: {name}");
+                }
+                let fn_ast = fn_ast.unwrap().clone();
+                let args = vars
+                    .into_iter()
+                    .map(|v| self.eval(&*v))
+                    .collect::<Vec<Var>>();
+                let mut vm = VM::from(self, args);
+                vm.eval_ast(fn_ast);
+                let return_val = vm.return_val;
+                let new_var_index = vm.var_index;
+                let mut out_constraints = vm.constraints;
+                self.constraints.append(&mut out_constraints);
+                self.var_index = new_var_index;
+                if let Some(v) = return_val {
+                    return v;
+                } else {
+                    Var {
+                        index: 0,
+                        location: VarLocation::Constraint,
+                        dimensions: vec![],
+                        value: vec![1],
+                    }
+                }
             }
             Expr::Val(name, indices) => {
                 if indices.len() > 0 {
@@ -133,6 +199,10 @@ impl<'a> VM<'a> {
                     a: vec![(1, new_var.index)],
                     b: vec![(1, 0)],
                     c: vec![(val.clone(), 0)],
+                    comment: Some(format!(
+                        "assigning literal ({val}) to signal {}",
+                        new_var.index
+                    )),
                 });
                 new_var
             }
@@ -213,6 +283,7 @@ impl<'a> VM<'a> {
                             a: vec![(1, ai), (1, bi)],
                             b: vec![(1, 0)],
                             c: vec![(1, oi)],
+                            comment: Some(format!("addition between {ai} and {bi} into {oi}")),
                         }],
                         u64::try_from(x).unwrap(),
                     )
@@ -235,6 +306,9 @@ impl<'a> VM<'a> {
                             a: vec![(1, ai)],
                             b: vec![(1, bi)],
                             c: vec![(1, oi)],
+                            comment: Some(format!(
+                                "multiplication between {ai} and {bi} into {oi}"
+                            )),
                         }],
                         u64::try_from(x).unwrap(),
                     )
@@ -258,6 +332,7 @@ impl<'a> VM<'a> {
                             a: vec![(1, ai), (self.prime - 1, bi)],
                             b: vec![(1, 0)],
                             c: vec![(1, oi)],
+                            comment: Some(format!("subtraction between {ai} and {bi} into {oi}")),
                         }],
                         u64::try_from(x).unwrap(),
                     )
@@ -282,6 +357,7 @@ impl<'a> VM<'a> {
                             a: vec![(1, bi)],
                             b: vec![(1, oi)],
                             c: vec![(1, 0)],
+                            comment: Some(format!("inversion of {bi} into {oi} (1/2)")),
                         }],
                         u64::try_from(b_inv).unwrap(),
                     )
@@ -303,6 +379,9 @@ impl<'a> VM<'a> {
                             a: vec![(1, ai)],
                             b: vec![(1, bi)],
                             c: vec![(1, oi)],
+                            comment: Some(format!(
+                                "multiplication of {ai} and {bi} into {oi} (2/2)"
+                            )),
                         }],
                         u64::try_from(x).unwrap(),
                     )

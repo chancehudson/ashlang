@@ -8,4 +8,6 @@ let z3 = x / y
 
 let _ = z1 * z2
 
+let a = pow5(2)
+
 #assert_eq(z, 1)
