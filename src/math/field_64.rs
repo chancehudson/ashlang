@@ -44,7 +44,7 @@ impl FromStr for FoiFieldElement {
 
 impl Display for FoiFieldElement {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.0.value())
     }
 }
 

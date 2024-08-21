@@ -70,8 +70,8 @@ This program compiles to the following `ar1cs`:
 {(1,3)(1,5)}{(1,0)}{(mul,6)} # symbolic
 [(1,7)][(1,0)][(10,0)] # assigning literal (10) to signal 7
 {(10,0)}{(0,0)}{(add,7)} # symbolic
-[(1,6)(-1,7)][(1,0)][(1,8)] # subtraction between 6 and 7 into 8
-{(1,6)(-1,7)}{(1,0)}{(mul,8)} # symbolic
+[(1,6)(18446744069414584320,7)][(1,0)][(1,8)] # subtraction between 6 and 7 into 8
+{(1,6)(18446744069414584320,7)}{(1,0)}{(mul,8)} # symbolic
 [(1,8)][(1,8)][(1,9)] # multiplication between 8 and 8 into 9
 {(1,8)}{(1,8)}{(mul,9)} # symbolic
 [(1,9)][(1,9)][(1,10)] # multiplication between 9 and 9 into 10
