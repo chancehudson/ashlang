@@ -9,7 +9,7 @@ program = _{ SOI ~ "\n"* ~ (fn_header ~ "\n")? ~ "\n"* ~ (stmt ~ "\n"+) * ~ (ret
 fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
 stmt = { var_def | const_def | if_stmt | function_call | loop_stmt | var_index_assign | var_vec_def }
 
-expr = { atom ~ (op ~ expr)* }
+expr = { atom ~ (op ~ atom)* }
 return_stmt = { "return " ~ expr }
 
 // this is distinct from fn_header because it accepts an expr or a var

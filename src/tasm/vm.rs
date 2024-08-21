@@ -1,7 +1,7 @@
 use crate::{
     compiler::CompilerState,
     log,
-    parser::{AstNode, BoolOp, Expr, Op},
+    parser::{AstNode, BoolOp, Expr, NumOp},
 };
 use std::collections::HashMap;
 
@@ -1042,13 +1042,13 @@ impl<'a> VM<'a> {
                         }
                     };
                     match op {
-                        Op::Add => {
+                        NumOp::Add => {
                             op_elements(&lvu, &rvu, &out_v, &mut vec![format!("add")]);
                         }
-                        Op::Mul => {
+                        NumOp::Mul => {
                             op_elements(&lvu, &rvu, &out_v, &mut vec![format!("mul")]);
                         }
-                        Op::Sub => {
+                        NumOp::Sub => {
                             op_elements(
                                 &lvu,
                                 &rvu,
@@ -1056,7 +1056,7 @@ impl<'a> VM<'a> {
                                 &mut vec![format!("push -1"), format!("mul"), format!("add")],
                             );
                         }
-                        Op::Inv => {
+                        NumOp::Inv => {
                             op_elements(
                                 &lvu,
                                 &rvu,
@@ -1072,11 +1072,11 @@ impl<'a> VM<'a> {
                     // each one of these removes two elements and
                     // adds 1
                     // so we have a net effect of a single pop
-                    Op::Add => {
+                    NumOp::Add => {
                         self.stack.pop();
                         self.asm.push(format!("add"));
                     }
-                    Op::Sub => {
+                    NumOp::Sub => {
                         self.stack.pop();
                         self.asm.append(&mut vec![
                             format!("push -1"),
@@ -1084,11 +1084,11 @@ impl<'a> VM<'a> {
                             format!("add"),
                         ]);
                     }
-                    Op::Mul => {
+                    NumOp::Mul => {
                         self.stack.pop();
                         self.asm.push(format!("mul"));
                     }
-                    Op::Inv => {
+                    NumOp::Inv => {
                         self.stack.pop();
                         self.asm
                             .append(&mut vec![format!("invert"), format!("mul")]);

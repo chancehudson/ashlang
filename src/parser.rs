@@ -5,6 +5,9 @@ use anyhow::Result;
 use log::error;
 use pest::iterators::Pair;
 use pest::iterators::Pairs;
+use pest::pratt_parser::Assoc;
+use pest::pratt_parser::Op;
+use pest::pratt_parser::PrattParser;
 use pest::Parser;
 use pest::RuleType;
 use pest_derive::Parser;
@@ -34,7 +37,7 @@ pub enum Expr {
     FnCall(String, Vec<Box<Expr>>),
     NumOp {
         lhs: Box<Expr>,
-        op: Op,
+        op: NumOp,
         rhs: Box<Expr>,
     },
     BoolOp {
@@ -53,7 +56,7 @@ pub enum BoolOp {
 }
 
 #[derive(Debug, Clone)]
-pub enum Op {
+pub enum NumOp {
     Add,
     Sub,
     Inv,
@@ -348,24 +351,40 @@ impl AshParser {
                 let mut pair = pair.into_inner();
                 if pair.len() == 1 {
                     return self.build_expr_from_pair(AshParser::next_or_error(&mut pair)?);
-                    // return Expr::Val(first_atom.as_str().to_string());
                 }
-                let lhs =
-                    Box::new(self.build_expr_from_pair(AshParser::next_or_error(&mut pair)?)?);
-                let op = pair.next().unwrap();
-                let rhs =
-                    Box::new(self.build_expr_from_pair(AshParser::next_or_error(&mut pair)?)?);
-                Ok(Expr::NumOp {
-                    lhs,
-                    op: match op.as_rule() {
-                        Rule::add => Op::Add,
-                        Rule::sub => Op::Sub,
-                        Rule::mul => Op::Mul,
-                        Rule::inv => Op::Inv,
-                        _ => panic!("invalid op"),
-                    },
-                    rhs,
-                })
+                let pratt = PrattParser::new()
+                    .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
+                    .op(Op::infix(Rule::mul, Assoc::Left) | Op::infix(Rule::inv, Assoc::Left));
+                pratt
+                    .map_primary(|primary| match primary.as_rule() {
+                        Rule::atom => self.build_expr_from_pair(primary),
+                        Rule::expr => self.build_expr_from_pair(primary),
+                        _ => panic!("unexpected rule in pratt parser"),
+                    })
+                    .map_infix(|lhs, op, rhs| match op.as_rule() {
+                        Rule::add => Ok(Expr::NumOp {
+                            lhs: Box::new(lhs?),
+                            op: NumOp::Add,
+                            rhs: Box::new(rhs?),
+                        }),
+                        Rule::sub => Ok(Expr::NumOp {
+                            lhs: Box::new(lhs?),
+                            op: NumOp::Sub,
+                            rhs: Box::new(rhs?),
+                        }),
+                        Rule::mul => Ok(Expr::NumOp {
+                            lhs: Box::new(lhs?),
+                            op: NumOp::Mul,
+                            rhs: Box::new(rhs?),
+                        }),
+                        Rule::inv => Ok(Expr::NumOp {
+                            lhs: Box::new(lhs?),
+                            op: NumOp::Inv,
+                            rhs: Box::new(rhs?),
+                        }),
+                        _ => unreachable!(),
+                    })
+                    .parse(pair)
             }
             unknown_expr => anyhow::bail!(
                 "Unable to build expression, unexpected rule: {:?}",
