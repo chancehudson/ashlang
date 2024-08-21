@@ -6,6 +6,7 @@ use triton_vm::prelude::*;
 mod compiler;
 mod log;
 mod parser;
+mod r1cs;
 mod tasm;
 
 fn cli() -> Command {
@@ -91,42 +92,56 @@ fn main() {
         std::process::exit(1);
     }
     let target = target[0];
-    let mut compiler;
-    if target == "tasm" {
-        compiler = Compiler::new(vec!["ash".to_string(), "tasm".to_string()]);
-    } else if target == "r1cs" {
-        compiler = Compiler::new(vec!["ash".to_string(), "r1cs".to_string()]);
-    } else {
-        println!("Unsupported target: {}", target);
-        std::process::exit(1);
-    }
-    for p in include_paths {
-        if p.is_empty() {
-            continue;
-        }
-        if let Err(err) = compiler.include(Utf8PathBuf::from(p)) {
-            println!("Failed to include path: {:?}", err);
-            std::process::exit(1);
-        }
-    }
+    match target {
+        "tasm" => {
+            let mut compiler = Compiler::new(vec!["ash".to_string(), "tasm".to_string()]);
+            for p in include_paths {
+                if p.is_empty() {
+                    continue;
+                }
+                if let Err(err) = compiler.include(Utf8PathBuf::from(p)) {
+                    println!("Failed to include path: {:?}", err);
+                    std::process::exit(1);
+                }
+            }
+            compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
+            let asm = compiler.compile(entry_fn, target);
 
-    compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
-    let asm = compiler.compile(entry_fn, target);
+            let instructions = triton_vm::parser::parse(&asm).unwrap();
+            let l_instructions =
+                triton_vm::parser::to_labelled_instructions(instructions.as_slice());
+            let program = triton_vm::program::Program::new(l_instructions.as_slice());
 
-    let instructions = triton_vm::parser::parse(&asm).unwrap();
-    let l_instructions = triton_vm::parser::to_labelled_instructions(instructions.as_slice());
-    let program = triton_vm::program::Program::new(l_instructions.as_slice());
-
-    let public_inputs = PublicInput::from(parse_inputs(public_inputs));
-    let secret_inputs = NonDeterminism::from(parse_inputs(secret_inputs));
-    match triton_vm::prove_program(&program, public_inputs, secret_inputs) {
-        Ok((_stark, _claim, _proof)) => {
-            println!("{:?}", _stark);
-            println!("{:?}", _claim);
+            let public_inputs = PublicInput::from(parse_inputs(public_inputs));
+            let secret_inputs = NonDeterminism::from(parse_inputs(secret_inputs));
+            match triton_vm::prove_program(&program, public_inputs, secret_inputs) {
+                Ok((_stark, _claim, _proof)) => {
+                    println!("{:?}", _stark);
+                    println!("{:?}", _claim);
+                }
+                Err(e) => {
+                    println!("Triton VM errored");
+                    println!("{e}");
+                    std::process::exit(1);
+                }
+            }
         }
-        Err(e) => {
-            println!("Triton VM errored");
-            println!("{e}");
+        "r1cs" => {
+            let mut compiler = Compiler::new(vec!["ash".to_string(), "r1cs".to_string()]);
+            for p in include_paths {
+                if p.is_empty() {
+                    continue;
+                }
+                if let Err(err) = compiler.include(Utf8PathBuf::from(p)) {
+                    println!("Failed to include path: {:?}", err);
+                    std::process::exit(1);
+                }
+            }
+            compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
+            let constraints = compiler.compile(entry_fn, target);
+        }
+        _ => {
+            println!("Unsupported target: {}", target);
             std::process::exit(1);
         }
     }
