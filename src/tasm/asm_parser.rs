@@ -20,59 +20,57 @@ impl AsmParser {
     pub fn parse(source: &str, name: &str) -> Self {
         let mut call_type = None;
         let mut asm = Vec::new();
-        match AsmPestParser::parse(Rule::program, source) {
-            Ok(pairs) => {
-                for pair in pairs {
-                    match pair.as_rule() {
-                        Rule::type_header => {
-                            let pair = pair.into_inner();
-                            let mut arg_types: Vec<ArgType> = Vec::new();
-                            for v in pair {
-                                match v.as_rule() {
-                                    Rule::scalar => {
-                                        arg_types.push(ArgType {
-                                            location: VarLocation::Stack,
-                                            dimensions: vec![],
-                                        });
-                                    }
-                                    Rule::dimension => {
-                                        let pair = v.into_inner();
-                                        let mut dimensions = vec![];
-                                        for z in pair {
-                                            dimensions.push(z.as_str().parse::<usize>().unwrap());
-                                        }
-                                        arg_types.push(ArgType {
-                                            location: VarLocation::Memory,
-                                            dimensions,
-                                        });
-                                    }
-                                    _ => panic!("unexpected type_header rule: {:?}", v.as_rule()),
+        let parsed = AsmPestParser::parse(Rule::program, source);
+        if let Err(e) = parsed {
+            log::parse_error(e, name);
+            unreachable!();
+        }
+        let parsed = parsed.unwrap();
+        for pair in parsed {
+            match pair.as_rule() {
+                Rule::type_header => {
+                    let pair = pair.into_inner();
+                    let mut arg_types: Vec<ArgType> = Vec::new();
+                    for v in pair {
+                        match v.as_rule() {
+                            Rule::scalar => {
+                                arg_types.push(ArgType {
+                                    location: VarLocation::Stack,
+                                    dimensions: vec![],
+                                });
+                            }
+                            Rule::dimension => {
+                                let pair = v.into_inner();
+                                let mut dimensions = vec![];
+                                for z in pair {
+                                    dimensions.push(z.as_str().parse::<usize>().unwrap());
                                 }
+                                arg_types.push(ArgType {
+                                    location: VarLocation::Memory,
+                                    dimensions,
+                                });
                             }
-                            if arg_types.len() == 0 {
-                                panic!("unexpected: bad arg types")
-                            }
-                            let return_type = arg_types.pop().unwrap();
-                            call_type = Some(FnCall {
-                                name: name.to_string(),
-                                arg_types,
-                                return_type: Some(return_type),
-                            });
+                            _ => panic!("unexpected type_header rule: {:?}", v.as_rule()),
                         }
-                        Rule::stmt => {
-                            let mut pair = pair.into_inner();
-                            if let Some(next) = pair.next() {
-                                asm.push(next.as_str().to_string());
-                            }
-                        }
-                        Rule::EOI => {}
-                        _ => panic!("unexpected line pair rule: {:?}", pair.as_rule()),
+                    }
+                    if arg_types.len() == 0 {
+                        panic!("unexpected: bad arg types")
+                    }
+                    let return_type = arg_types.pop().unwrap();
+                    call_type = Some(FnCall {
+                        name: name.to_string(),
+                        arg_types,
+                        return_type: Some(return_type),
+                    });
+                }
+                Rule::stmt => {
+                    let mut pair = pair.into_inner();
+                    if let Some(next) = pair.next() {
+                        asm.push(next.as_str().to_string());
                     }
                 }
-            }
-            Err(e) => {
-                log::parse_error(e, name);
-                unreachable!();
+                Rule::EOI => {}
+                _ => panic!("unexpected line pair rule: {:?}", pair.as_rule()),
             }
         }
         if let Some(call_type) = call_type {

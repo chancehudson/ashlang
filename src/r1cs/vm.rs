@@ -1,23 +1,11 @@
+use crate::r1cs::constraint::R1csConstraint;
+use crate::r1cs::constraint::SymbolicOp;
 use crate::{
     compiler::CompilerState,
     log,
     parser::{AstNode, Expr, NumOp},
 };
 use std::collections::HashMap;
-
-// a b and c represent values in
-// a constraint a * b - c = 0
-// each factor specifies an array
-// of coefficient, index pairs
-// indices may be specified multiple times
-// and will be summed
-pub struct R1csConstraint {
-    // (coefficient, var_index)
-    pub a: Vec<(u64, usize)>,
-    pub b: Vec<(u64, usize)>,
-    pub c: Vec<(u64, usize)>,
-    pub comment: Option<String>,
-}
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum VarLocation {
@@ -27,33 +15,10 @@ pub enum VarLocation {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Var {
-    index: usize,
-    location: VarLocation,
-    dimensions: Vec<usize>,
-    value: Vec<u64>,
-}
-
-impl ToString for R1csConstraint {
-    fn to_string(&self) -> String {
-        let mut out = "".to_owned();
-        out.push_str("[");
-        for (coef, index) in &self.a {
-            out.push_str(&format!("({},{})", coef, index));
-        }
-        out.push_str("][");
-        for (coef, index) in &self.b {
-            out.push_str(&format!("({},{})", coef, index));
-        }
-        out.push_str("][");
-        for (coef, index) in &self.c {
-            out.push_str(&format!("({},{})", coef, index));
-        }
-        out.push_str("]");
-        if let Some(comment) = &self.comment {
-            out.push_str(&format!(" # {}", comment));
-        }
-        out
-    }
+    pub index: usize,
+    pub location: VarLocation,
+    pub dimensions: Vec<usize>,
+    pub value: Vec<u64>,
 }
 
 pub struct VM<'a> {
@@ -195,15 +160,18 @@ impl<'a> VM<'a> {
                     value: vec![*val],
                 };
                 self.var_index += 1;
-                self.constraints.push(R1csConstraint {
-                    a: vec![(1, new_var.index)],
-                    b: vec![(1, 0)],
-                    c: vec![(val.clone(), 0)],
-                    comment: Some(format!(
-                        "assigning literal ({val}) to signal {}",
-                        new_var.index
-                    )),
-                });
+                self.constraints.push(R1csConstraint::new(
+                    vec![(1, new_var.index)],
+                    vec![(1, 0)],
+                    vec![(val.clone(), 0)],
+                    format!("assigning literal ({val}) to signal {}", new_var.index),
+                ));
+                self.constraints.push(R1csConstraint::symbolic(
+                    new_var.index,
+                    vec![(val.clone(), 0)],
+                    vec![(0, 0)],
+                    SymbolicOp::Add,
+                ));
                 new_var
             }
             _ => {
@@ -279,12 +247,20 @@ impl<'a> VM<'a> {
                     // (1*lv + 1*rv) * (1*1) - (1*new_var) = 0
                     // lv + rv - new_var = 0
                     (
-                        vec![R1csConstraint {
-                            a: vec![(1, ai), (1, bi)],
-                            b: vec![(1, 0)],
-                            c: vec![(1, oi)],
-                            comment: Some(format!("addition between {ai} and {bi} into {oi}")),
-                        }],
+                        vec![
+                            R1csConstraint::new(
+                                vec![(1, ai), (1, bi)],
+                                vec![(1, 0)],
+                                vec![(1, oi)],
+                                format!("addition between {ai} and {bi} into {oi}"),
+                            ),
+                            R1csConstraint::symbolic(
+                                oi,
+                                vec![(1, ai), (1, bi)],
+                                vec![(1, 0)],
+                                SymbolicOp::Mul,
+                            ),
+                        ],
                         u64::try_from(x).unwrap(),
                     )
                 };
@@ -302,14 +278,20 @@ impl<'a> VM<'a> {
                     // (1*lv) * (1*rv) - (1*new_var) = 0
                     // lv * rv - new_var = 0
                     (
-                        vec![R1csConstraint {
-                            a: vec![(1, ai)],
-                            b: vec![(1, bi)],
-                            c: vec![(1, oi)],
-                            comment: Some(format!(
-                                "multiplication between {ai} and {bi} into {oi}"
-                            )),
-                        }],
+                        vec![
+                            R1csConstraint::new(
+                                vec![(1, ai)],
+                                vec![(1, bi)],
+                                vec![(1, oi)],
+                                format!("multiplication between {ai} and {bi} into {oi}"),
+                            ),
+                            R1csConstraint::symbolic(
+                                oi,
+                                vec![(1, ai)],
+                                vec![(1, bi)],
+                                SymbolicOp::Mul,
+                            ),
+                        ],
                         u64::try_from(x).unwrap(),
                     )
                 };
@@ -328,12 +310,20 @@ impl<'a> VM<'a> {
                     // (1*lv + -1*rv) * (1*1) - (1*new_var) = 0
                     // lv + -1*rv - new_var = 0
                     (
-                        vec![R1csConstraint {
-                            a: vec![(1, ai), (self.prime - 1, bi)],
-                            b: vec![(1, 0)],
-                            c: vec![(1, oi)],
-                            comment: Some(format!("subtraction between {ai} and {bi} into {oi}")),
-                        }],
+                        vec![
+                            R1csConstraint::new(
+                                vec![(1, ai), (self.prime - 1, bi)],
+                                vec![(1, 0)],
+                                vec![(1, oi)],
+                                format!("subtraction between {ai} and {bi} into {oi}"),
+                            ),
+                            R1csConstraint::symbolic(
+                                oi,
+                                vec![(1, ai), (self.prime - 1, bi)],
+                                vec![(1, 0)],
+                                SymbolicOp::Mul,
+                            ),
+                        ],
                         u64::try_from(x).unwrap(),
                     )
                 };
@@ -353,12 +343,15 @@ impl<'a> VM<'a> {
                     // (1*rhs) * (1*rhs_inv) - (1*1) = 0
                     // rhs * rhs_inv - 1 = 0
                     (
-                        vec![R1csConstraint {
-                            a: vec![(1, bi)],
-                            b: vec![(1, oi)],
-                            c: vec![(1, 0)],
-                            comment: Some(format!("inversion of {bi} into {oi} (1/2)")),
-                        }],
+                        vec![
+                            R1csConstraint::new(
+                                vec![(1, bi)],
+                                vec![(1, oi)],
+                                vec![(1, 0)],
+                                format!("inversion of {bi} into {oi} (1/2)"),
+                            ),
+                            R1csConstraint::symbolic(oi, vec![(1, bi)], vec![], SymbolicOp::Inv),
+                        ],
                         u64::try_from(b_inv).unwrap(),
                     )
                 };
@@ -375,14 +368,20 @@ impl<'a> VM<'a> {
                     // (1*lv) * (1*rv) - (1*new_var) = 0
                     // lv * rv - new_var = 0
                     (
-                        vec![R1csConstraint {
-                            a: vec![(1, ai)],
-                            b: vec![(1, bi)],
-                            c: vec![(1, oi)],
-                            comment: Some(format!(
-                                "multiplication of {ai} and {bi} into {oi} (2/2)"
-                            )),
-                        }],
+                        vec![
+                            R1csConstraint::new(
+                                vec![(1, ai)],
+                                vec![(1, bi)],
+                                vec![(1, oi)],
+                                format!("multiplication of {ai} and {bi} into {oi} (2/2)"),
+                            ),
+                            R1csConstraint::symbolic(
+                                oi,
+                                vec![(1, ai)],
+                                vec![(1, bi)],
+                                SymbolicOp::Mul,
+                            ),
+                        ],
                         u64::try_from(x).unwrap(),
                     )
                 };

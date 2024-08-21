@@ -1,0 +1,16 @@
+program = _{ SOI ~ stmt+ }
+
+stmt = _{ (constraint_line | symbolic_line) ~ ("\n" | EOI) }
+
+constraint_line = { constraint ~ constraint ~ constraint ~ COMMENT? }
+symbolic_line = { symbolic ~ symbolic ~ symbolic ~ COMMENT? }
+
+constraint = { "[" ~ constraint_inner* ~ "]" }
+symbolic = { "{" ~ constraint_inner* ~ "}" }
+constraint_inner = _{ "(" ~ literal ~ "," ~ literal_dec ~ ")" }
+
+literal = @{ ASCII_ALPHANUMERIC+ }
+literal_dec = @{ ASCII_DIGIT+ }
+
+COMMENT = { "#" ~ (!"\n" ~ ANY)* }
+WHITESPACE = _{ " " }

@@ -139,6 +139,7 @@ fn main() {
             }
             compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
             let constraints = compiler.compile(entry_fn, target);
+            r1cs::solver::solve(&constraints);
         }
         _ => {
             println!("Unsupported target: {}", target);
