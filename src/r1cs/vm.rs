@@ -1,10 +1,10 @@
+use crate::compiler::CompilerState;
+use crate::log;
+use crate::parser::AstNode;
+use crate::parser::Expr;
+use crate::parser::NumOp;
 use crate::r1cs::constraint::R1csConstraint;
 use crate::r1cs::constraint::SymbolicOp;
-use crate::{
-    compiler::CompilerState,
-    log,
-    parser::{AstNode, Expr, NumOp},
-};
 use std::collections::HashMap;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

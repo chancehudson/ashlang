@@ -1,6 +1,5 @@
-use crate::log;
-
 use self::AstNode::*;
+use crate::log;
 use anyhow::Result;
 use log::error;
 use pest::iterators::Pair;

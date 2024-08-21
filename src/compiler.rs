@@ -1,10 +1,12 @@
 use crate::log;
-use crate::parser::{AshParser, AstNode};
+use crate::parser::AshParser;
+use crate::parser::AstNode;
 use crate::tasm::asm_parser::AsmParser;
 use crate::tasm::vm::FnCall;
 use anyhow::Result;
 use camino::Utf8PathBuf;
-use std::{collections::HashMap, fs};
+use std::collections::HashMap;
+use std::fs;
 
 // things that both Compiler and VM
 // need to modify

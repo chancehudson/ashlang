@@ -1,5 +1,7 @@
 use camino::Utf8PathBuf;
-use clap::{arg, Arg, Command};
+use clap::arg;
+use clap::Arg;
+use clap::Command;
 use compiler::Compiler;
 use triton_vm::prelude::*;
 

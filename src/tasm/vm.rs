@@ -1,8 +1,9 @@
-use crate::{
-    compiler::CompilerState,
-    log,
-    parser::{AstNode, BoolOp, Expr, NumOp},
-};
+use crate::compiler::CompilerState;
+use crate::log;
+use crate::parser::AstNode;
+use crate::parser::BoolOp;
+use crate::parser::Expr;
+use crate::parser::NumOp;
 use std::collections::HashMap;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
