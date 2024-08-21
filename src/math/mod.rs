@@ -12,6 +12,7 @@ use std::ops::SubAssign;
 use std::str::FromStr;
 
 pub mod field_64;
+pub mod matrix;
 
 pub trait FieldElement:
     Add<Output = Self>

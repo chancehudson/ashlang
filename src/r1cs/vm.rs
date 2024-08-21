@@ -1,5 +1,6 @@
 use crate::compiler::CompilerState;
 use crate::log;
+use crate::math::matrix::Matrix;
 use crate::math::FieldElement;
 use crate::parser::AstNode;
 use crate::parser::Expr;
@@ -16,10 +17,9 @@ pub enum VarLocation {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Var<T: FieldElement> {
-    pub index: usize,
+    pub index: Option<usize>,
     pub location: VarLocation,
-    pub dimensions: Vec<usize>,
-    pub value: Vec<T>,
+    pub value: Matrix<T>,
 }
 
 pub struct VM<'a, T: FieldElement> {
@@ -137,10 +137,9 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     return v;
                 } else {
                     Var {
-                        index: 0,
+                        index: Some(0),
                         location: VarLocation::Constraint,
-                        dimensions: vec![],
-                        value: vec![T::one()],
+                        value: Matrix::from(T::one()),
                     }
                 }
             }
@@ -159,20 +158,22 @@ impl<'a, T: FieldElement> VM<'a, T> {
             Expr::NumOp { lhs, op, rhs } => self.eval_numop(&*lhs, op, &*rhs),
             Expr::Lit(val) => {
                 let new_var = Var {
-                    index: self.var_index,
+                    index: Some(self.var_index),
                     location: VarLocation::Constraint,
-                    dimensions: vec![],
-                    value: vec![T::from(*val)],
+                    value: Matrix::from(T::from(*val)),
                 };
                 self.var_index += 1;
                 self.constraints.push(R1csConstraint::new(
-                    vec![(T::from(1), new_var.index)],
+                    vec![(T::from(1), new_var.index.unwrap())],
                     vec![(T::from(1), 0)],
                     vec![(T::from(*val), 0)],
-                    &format!("assigning literal ({val}) to signal {}", new_var.index),
+                    &format!(
+                        "assigning literal ({val}) to signal {}",
+                        new_var.index.unwrap()
+                    ),
                 ));
                 self.constraints.push(R1csConstraint::symbolic(
-                    new_var.index,
+                    new_var.index.unwrap(),
                     vec![(T::from(*val), 0)],
                     vec![(T::from(0), 0)],
                     SymbolicOp::Add,
@@ -185,192 +186,187 @@ impl<'a, T: FieldElement> VM<'a, T> {
         }
     }
 
+    // handle the following cases
+    // 1. lhs and rhs are both constraint variables
+    // 2. lhs is a constraint variable and rhs is a static (and vis-versa)
+    // 3. lhs and rhs are both static variables
     fn eval_numop(&mut self, lhs: &Expr, op: &NumOp, rhs: &Expr) -> Var<T> {
         let lv = self.eval(lhs);
         let rv = self.eval(rhs);
-        if lv.location != VarLocation::Constraint {
-            log::error!(&format!("lhs is not a constraint variable: {:?}", lhs));
+        // check that the variables are the same type
+        lv.value.assert_eq_shape(&rv.value);
+
+        if lv.location == VarLocation::Constraint && rv.location == VarLocation::Constraint {
+            // both are signals
+            self.eval_numop_signals(&lv, op, &rv)
+        } else if lv.location != rv.location {
+            // one is signal one is static
+            self.eval_numop_signal_static(&lv, op, &rv)
+        } else {
+            // both static
+            self.eval_numop_static(&lv, op, &rv)
         }
-        if rv.location != VarLocation::Constraint {
-            log::error!(&format!("rhs is not a constraint variable: {:?}", rhs));
-        }
-        if rv.dimensions.len() != lv.dimensions.len() {
-            log::error!(&format!(
-                "lhs and rhs dimensions are not equal: {:?} {:?}",
-                lhs, rhs
-            ));
-        }
-        for x in 0..rv.dimensions.len() {
-            if rv.dimensions[x] != lv.dimensions[x] {
-                log::error!(&format!(
-                    "lhs and rhs inner dimensions are not equal: {:?} {:?}",
-                    lhs, rhs
-                ));
-            }
-        }
+    }
+
+    fn eval_numop_static(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Var<T> {
+        panic!("eval numop static not implemented");
+    }
+
+    fn eval_numop_signal_static(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Var<T> {
+        panic!("eval nump signal static not implemented");
+    }
+
+    fn eval_numop_signals(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Var<T> {
         // take a lhs and rhs of variable size and apply
         // an operation to each element
-        let mut operate =
-            |lhs: Var<T>,
-             rhs: Var<T>,
-             op: Box<dyn Fn(T, T, usize, usize, usize) -> (Vec<R1csConstraint<T>>, T)>|
-             -> Var<T> {
-                let mut new_var = Var {
-                    index: self.var_index,
-                    location: VarLocation::Constraint,
-                    dimensions: lhs.dimensions.clone(),
-                    value: vec![],
-                };
-                self.var_index += lhs.value.len();
-                for x in 0..lhs.value.len() {
-                    // will generate constraints and output value
-                    let (constraints, val) = (*op)(
-                        lhs.value[x].clone(),
-                        rhs.value[x].clone(),
-                        lhs.index + x,
-                        rhs.index + x,
-                        new_var.index + x,
-                    );
-                    new_var.value.push(val);
-                    for c in constraints {
-                        self.constraints.push(c);
-                    }
-                }
-                new_var
-            };
         match op {
             NumOp::Add => {
-                let add =
-                    |a: T, b: T, ai: usize, bi: usize, oi: usize| -> (Vec<R1csConstraint<T>>, T) {
-                        let x = a + b;
-                        let one = T::from(1);
-                        // (1*lv + 1*rv) * (1*1) - (1*new_var) = 0
-                        // lv + rv - new_var = 0
-                        (
-                            vec![
-                                R1csConstraint::new(
-                                    vec![(one.clone(), ai), (one.clone(), bi)],
-                                    vec![(one.clone(), 0)],
-                                    vec![(one.clone(), oi)],
-                                    &format!("addition between {ai} and {bi} into {oi}"),
-                                ),
-                                R1csConstraint::symbolic(
-                                    oi,
-                                    vec![(one.clone(), ai), (one.clone(), bi)],
-                                    vec![(one.clone(), 0)],
-                                    SymbolicOp::Mul,
-                                ),
-                            ],
-                            x,
-                        )
-                    };
-                operate(lv, rv, Box::new(add))
+                let new_var = Var {
+                    index: Some(self.var_index),
+                    location: VarLocation::Constraint,
+                    value: lv.value.clone() + rv.value.clone(),
+                };
+                self.var_index += new_var.value.len();
+                for x in 0..new_var.value.len() {
+                    let lvi = lv.index.unwrap() + x;
+                    let rvi = rv.index.unwrap() + x;
+                    let ovi = new_var.index.unwrap() + x;
+                    // (1*lv + 1*rv) * (1*1) - (1*new_var) = 0
+                    // lv + rv - new_var = 0
+                    self.constraints.append(&mut vec![
+                        R1csConstraint::new(
+                            vec![(T::one(), lvi), (T::one(), rvi)],
+                            vec![(T::one(), 0)],
+                            vec![(T::one(), ovi)],
+                            &format!("addition between {lvi} and {rvi} into {ovi}"),
+                        ),
+                        R1csConstraint::symbolic(
+                            ovi,
+                            vec![(T::one(), lvi), (T::one(), rvi)],
+                            vec![(T::one(), 0)],
+                            SymbolicOp::Mul,
+                        ),
+                    ]);
+                }
+                new_var
             }
             NumOp::Mul => {
-                let mul =
-                    |a: T, b: T, ai: usize, bi: usize, oi: usize| -> (Vec<R1csConstraint<T>>, T) {
-                        let x = a * b;
-                        // (1*lv) * (1*rv) - (1*new_var) = 0
-                        // lv * rv - new_var = 0
-                        (
-                            vec![
-                                R1csConstraint::new(
-                                    vec![(T::one(), ai)],
-                                    vec![(T::one(), bi)],
-                                    vec![(T::one(), oi)],
-                                    &format!("multiplication between {ai} and {bi} into {oi}"),
-                                ),
-                                R1csConstraint::symbolic(
-                                    oi,
-                                    vec![(T::one(), ai)],
-                                    vec![(T::one(), bi)],
-                                    SymbolicOp::Mul,
-                                ),
-                            ],
-                            x,
-                        )
-                    };
-                operate(lv, rv, Box::new(mul))
+                let new_var = Var {
+                    index: Some(self.var_index),
+                    location: VarLocation::Constraint,
+                    value: lv.value.clone() * rv.value.clone(),
+                };
+                self.var_index += new_var.value.len();
+                for x in 0..new_var.value.len() {
+                    let lvi = lv.index.unwrap() + x;
+                    let rvi = rv.index.unwrap() + x;
+                    let ovi = new_var.index.unwrap() + x;
+                    // (1*lv + 1*rv) * (1*1) - (1*new_var) = 0
+                    // lv + rv - new_var = 0
+                    self.constraints.append(&mut vec![
+                        R1csConstraint::new(
+                            vec![(T::one(), lvi)],
+                            vec![(T::one(), rvi)],
+                            vec![(T::one(), ovi)],
+                            &format!("multiplication between {lvi} and {rvi} into {ovi}"),
+                        ),
+                        R1csConstraint::symbolic(
+                            ovi,
+                            vec![(T::one(), lvi)],
+                            vec![(T::one(), rvi)],
+                            SymbolicOp::Mul,
+                        ),
+                    ]);
+                }
+                new_var
             }
             NumOp::Sub => {
-                let sub =
-                    |a: T, b: T, ai: usize, bi: usize, oi: usize| -> (Vec<R1csConstraint<T>>, T) {
-                        let x = a - b;
-                        // (1*lv + -1*rv) * (1*1) - (1*new_var) = 0
-                        // lv + -1*rv - new_var = 0
-                        (
-                            vec![
-                                R1csConstraint::new(
-                                    vec![(T::one(), ai), (T::one().neg(), bi)],
-                                    vec![(T::one(), 0)],
-                                    vec![(T::one(), oi)],
-                                    &format!("subtraction between {ai} and {bi} into {oi}"),
-                                ),
-                                R1csConstraint::symbolic(
-                                    oi,
-                                    vec![(T::one(), ai), (T::one().neg(), bi)],
-                                    vec![(T::one(), 0)],
-                                    SymbolicOp::Mul,
-                                ),
-                            ],
-                            x,
-                        )
-                    };
-                operate(lv, rv, Box::new(sub))
+                let new_var = Var {
+                    index: Some(self.var_index),
+                    location: VarLocation::Constraint,
+                    value: lv.value.clone() * rv.value.mul_scalar(T::zero() - T::one()),
+                };
+                self.var_index += new_var.value.len();
+                for x in 0..new_var.value.len() {
+                    let lvi = lv.index.unwrap() + x;
+                    let rvi = rv.index.unwrap() + x;
+                    let ovi = new_var.index.unwrap() + x;
+                    // (1*lv + -1*rv) * (1*1) - (1*new_var) = 0
+                    // lv + -1*rv - new_var = 0
+                    self.constraints.append(&mut vec![
+                        R1csConstraint::new(
+                            vec![(T::one(), lvi), (T::one().neg(), rvi)],
+                            vec![(T::one(), 0)],
+                            vec![(T::one(), ovi)],
+                            &format!("subtraction between {lvi} and {rvi} into {ovi}"),
+                        ),
+                        R1csConstraint::symbolic(
+                            ovi,
+                            vec![(T::one(), lvi), (T::one().neg(), rvi)],
+                            vec![(T::one(), 0)],
+                            SymbolicOp::Mul,
+                        ),
+                    ]);
+                }
+                new_var
             }
             NumOp::Inv => {
-                // (1/rhs) * lhs
-                // first invert the rhs and store in a variable
-                let inv =
-                    |_: T, b: T, _: usize, bi: usize, oi: usize| -> (Vec<R1csConstraint<T>>, T) {
-                        let b_inv = T::one() / b;
-                        // first: constrain rhs_inv
-                        // (1*rhs) * (1*rhs_inv) - (1*1) = 0
-                        // rhs * rhs_inv - 1 = 0
-                        (
-                            vec![
-                                R1csConstraint::new(
-                                    vec![(T::one(), bi)],
-                                    vec![(T::one(), oi)],
-                                    vec![(T::one(), 0)],
-                                    &format!("inversion of {bi} into {oi} (1/2)"),
-                                ),
-                                R1csConstraint::symbolic(
-                                    oi,
-                                    vec![(T::one(), bi)],
-                                    vec![],
-                                    SymbolicOp::Inv,
-                                ),
-                            ],
-                            b_inv,
-                        )
-                    };
-                let rv_inv = operate(rv.clone(), rv.clone(), Box::new(inv));
-                // then multiple rv_inv by the lhs
-                let mul =
-                    |a: T, b: T, ai: usize, bi: usize, oi: usize| -> (Vec<R1csConstraint<T>>, T) {
-                        let x = a * b;
-                        // (1*lv) * (1*rv) - (1*new_var) = 0
-                        // lv * rv - new_var = 0
-                        (
-                            vec![
-                                R1csConstraint::new(
-                                    vec![(T::one(), ai)],
-                                    vec![(T::one(), bi)],
-                                    vec![(T::one(), oi)],
-                                    &format!("multiplication of {ai} and {bi} into {oi} (2/2)"),
-                                ),
-                                R1csConstraint::symbolic(
-                                    oi,
-                                    vec![(T::one(), ai)],
-                                    vec![(T::one(), bi)],
-                                    SymbolicOp::Mul,
-                                ),
-                            ],
-                            x,
-                        )
-                    };
-                operate(lv, rv_inv, Box::new(mul))
+                let inv_var = Var {
+                    index: Some(self.var_index),
+                    location: VarLocation::Constraint,
+                    value: rv.value.invert(),
+                };
+                self.var_index += inv_var.value.len();
+                for x in 0..inv_var.value.len() {
+                    let rvi = rv.index.unwrap() + x;
+                    let ovi = inv_var.index.unwrap() + x;
+                    // first: constrain rhs_inv
+                    // (1*rhs) * (1*rhs_inv) - (1*1) = 0
+                    // rhs * rhs_inv - 1 = 0
+                    self.constraints.append(&mut vec![
+                        R1csConstraint::new(
+                            vec![(T::one(), rvi)],
+                            vec![(T::one(), ovi)],
+                            vec![(T::one(), 0)],
+                            &format!("inversion of {rvi} into {ovi} (1/2)"),
+                        ),
+                        R1csConstraint::symbolic(
+                            ovi,
+                            vec![(T::one(), rvi)],
+                            vec![],
+                            SymbolicOp::Inv,
+                        ),
+                    ]);
+                }
+                // then multiply rv_inv by the lhs
+                let new_var = Var {
+                    index: Some(self.var_index),
+                    location: VarLocation::Constraint,
+                    value: lv.value.clone() * inv_var.value.clone(),
+                };
+                self.var_index += new_var.value.len();
+                for x in 0..inv_var.value.len() {
+                    let lvi = lv.index.unwrap() + x;
+                    let rvi = inv_var.index.unwrap() + x;
+                    let ovi = new_var.index.unwrap() + x;
+                    // (1*lv) * (1*rv) - (1*new_var) = 0
+                    // lv * rv - new_var = 0
+                    self.constraints.append(&mut vec![
+                        R1csConstraint::new(
+                            vec![(T::one(), lvi)],
+                            vec![(T::one(), rvi)],
+                            vec![(T::one(), ovi)],
+                            &format!("multiplication of {lvi} and {rvi} into {ovi} (2/2)"),
+                        ),
+                        R1csConstraint::symbolic(
+                            ovi,
+                            vec![(T::one(), lvi)],
+                            vec![(T::one(), rvi)],
+                            SymbolicOp::Mul,
+                        ),
+                    ]);
+                }
+                new_var
             }
         }
     }
