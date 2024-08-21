@@ -1,6 +1,6 @@
 # r1cs compile target
 
-The r1cs compile target outputs system of constraints as well as symbolic constraints that can be used to build a witness. We define an `ar1cs` file format for specifying constraint systems.
+The r1cs compile target outputs system of constraints as well as symbolic constraints that can be used to build a witness. We define an `ar1cs` ascii file format for specifying constraint systems.
 
 ## `ar1cs` file format
 
