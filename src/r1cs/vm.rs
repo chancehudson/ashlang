@@ -37,11 +37,21 @@ pub struct VM<'a, T: FieldElement> {
 
 impl<'a, T: FieldElement> VM<'a, T> {
     pub fn new(compiler_state: &'a mut CompilerState) -> Self {
+        // add the field safety constraint
+        // constrains -1*1 * -1*1 - 1 = 0
+        // should fail in any field that is different than
+        // the current one
+        let constraints = vec![R1csConstraint::new(
+            vec![(T::zero() - T::one(), 0)],
+            vec![(T::zero() - T::one(), 0)],
+            vec![(T::one(), 0)],
+            "field safety constraint",
+        )];
         VM {
             var_index: 1,
             vars: HashMap::new(),
             compiler_state,
-            constraints: Vec::new(),
+            constraints,
             args: Vec::new(),
             return_val: None,
         }
@@ -159,7 +169,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     vec![(T::from(1), new_var.index)],
                     vec![(T::from(1), 0)],
                     vec![(T::from(*val), 0)],
-                    format!("assigning literal ({val}) to signal {}", new_var.index),
+                    &format!("assigning literal ({val}) to signal {}", new_var.index),
                 ));
                 self.constraints.push(R1csConstraint::symbolic(
                     new_var.index,
@@ -242,7 +252,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                     vec![(one.clone(), ai), (one.clone(), bi)],
                                     vec![(one.clone(), 0)],
                                     vec![(one.clone(), oi)],
-                                    format!("addition between {ai} and {bi} into {oi}"),
+                                    &format!("addition between {ai} and {bi} into {oi}"),
                                 ),
                                 R1csConstraint::symbolic(
                                     oi,
@@ -268,7 +278,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                     vec![(T::one(), ai)],
                                     vec![(T::one(), bi)],
                                     vec![(T::one(), oi)],
-                                    format!("multiplication between {ai} and {bi} into {oi}"),
+                                    &format!("multiplication between {ai} and {bi} into {oi}"),
                                 ),
                                 R1csConstraint::symbolic(
                                     oi,
@@ -294,7 +304,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                     vec![(T::one(), ai), (T::one().neg(), bi)],
                                     vec![(T::one(), 0)],
                                     vec![(T::one(), oi)],
-                                    format!("subtraction between {ai} and {bi} into {oi}"),
+                                    &format!("subtraction between {ai} and {bi} into {oi}"),
                                 ),
                                 R1csConstraint::symbolic(
                                     oi,
@@ -323,7 +333,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                     vec![(T::one(), bi)],
                                     vec![(T::one(), oi)],
                                     vec![(T::one(), 0)],
-                                    format!("inversion of {bi} into {oi} (1/2)"),
+                                    &format!("inversion of {bi} into {oi} (1/2)"),
                                 ),
                                 R1csConstraint::symbolic(
                                     oi,
@@ -348,7 +358,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                     vec![(T::one(), ai)],
                                     vec![(T::one(), bi)],
                                     vec![(T::one(), oi)],
-                                    format!("multiplication of {ai} and {bi} into {oi} (2/2)"),
+                                    &format!("multiplication of {ai} and {bi} into {oi} (2/2)"),
                                 ),
                                 R1csConstraint::symbolic(
                                     oi,

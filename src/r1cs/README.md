@@ -56,6 +56,7 @@ return v4 * v
 This program compiles to the following `ar1cs`:
 
 ```
+[(18446744069414584320,0)][(18446744069414584320,0)][(1,0)] # field safety constraint
 [(1,1)][(1,0)][(99,0)] # assigning literal (99) to signal 1
 {(99,0)}{(0,0)}{(add,1)} # symbolic
 [(1,2)][(1,0)][(1,0)] # assigning literal (1) to signal 2
@@ -80,4 +81,4 @@ This program compiles to the following `ar1cs`:
 {(1,10)}{(1,8)}{(mul,11)} # symbolic
 ```
 
-Looking through the constraints it's possible to see how each assignment is constrained and used.
+Looking through the constraints it's possible to see how each assignment is constrained and used. For more info on the field safety constraint see [here](https://github.com/chancehudson/ashlang/issues/29).

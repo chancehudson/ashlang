@@ -42,8 +42,7 @@ impl<T: FieldElement> R1csParser<T> {
                     let b = parse_constraint_inner(b);
                     let c = pair.next().unwrap();
                     let c = parse_constraint_inner(c);
-                    out.constraints
-                        .push(R1csConstraint::new(a, b, c, "".to_owned()));
+                    out.constraints.push(R1csConstraint::new(a, b, c, ""));
                 }
                 Rule::symbolic_line => {
                     let mut pair = pair.into_inner();

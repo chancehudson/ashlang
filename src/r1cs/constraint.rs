@@ -98,18 +98,13 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
 }
 
 impl<T: FieldElement> R1csConstraint<T> {
-    pub fn new(
-        a: Vec<(T, usize)>,
-        b: Vec<(T, usize)>,
-        c: Vec<(T, usize)>,
-        comment: String,
-    ) -> Self {
+    pub fn new(a: Vec<(T, usize)>, b: Vec<(T, usize)>, c: Vec<(T, usize)>, comment: &str) -> Self {
         Self {
             a,
             b,
             c,
             out_i: None,
-            comment: Some(comment),
+            comment: Some(comment.to_string()),
             symbolic: false,
             symbolic_op: None,
         }
