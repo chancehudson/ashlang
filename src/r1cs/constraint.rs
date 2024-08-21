@@ -1,3 +1,5 @@
+use crate::math::FieldElement;
+
 // a b and c represent values in
 // a constraint a * b - c = 0
 // each factor specifies an array
@@ -5,11 +7,11 @@
 // indices may be specified multiple times
 // and will be summed
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct R1csConstraint {
+pub struct R1csConstraint<T: FieldElement> {
     // (coefficient, var_index)
-    pub a: Vec<(u64, usize)>,
-    pub b: Vec<(u64, usize)>,
-    pub c: Vec<(u64, usize)>,
+    pub a: Vec<(T, usize)>,
+    pub b: Vec<(T, usize)>,
+    pub c: Vec<(T, usize)>,
     pub out_i: Option<usize>,
     pub comment: Option<String>,
     pub symbolic: bool,
@@ -44,7 +46,7 @@ impl ToString for SymbolicOp {
     }
 }
 
-impl ToString for R1csConstraint {
+impl<T: FieldElement> ToString for R1csConstraint<T> {
     fn to_string(&self) -> String {
         if self.symbolic {
             let mut out = "".to_owned();
@@ -95,11 +97,11 @@ impl ToString for R1csConstraint {
     }
 }
 
-impl R1csConstraint {
+impl<T: FieldElement> R1csConstraint<T> {
     pub fn new(
-        a: Vec<(u64, usize)>,
-        b: Vec<(u64, usize)>,
-        c: Vec<(u64, usize)>,
+        a: Vec<(T, usize)>,
+        b: Vec<(T, usize)>,
+        c: Vec<(T, usize)>,
         comment: String,
     ) -> Self {
         Self {
@@ -113,12 +115,7 @@ impl R1csConstraint {
         }
     }
 
-    pub fn symbolic(
-        out_i: usize,
-        a: Vec<(u64, usize)>,
-        b: Vec<(u64, usize)>,
-        op: SymbolicOp,
-    ) -> Self {
+    pub fn symbolic(out_i: usize, a: Vec<(T, usize)>, b: Vec<(T, usize)>, op: SymbolicOp) -> Self {
         Self {
             a,
             b,

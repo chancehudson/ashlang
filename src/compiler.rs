@@ -1,4 +1,5 @@
 use crate::log;
+use crate::math::field_64::FoiFieldElement;
 use crate::parser::AshParser;
 use crate::parser::AstNode;
 use crate::tasm::asm_parser::AsmParser;
@@ -217,7 +218,8 @@ impl Compiler {
         }
         match target {
             "r1cs" => {
-                let mut vm = crate::r1cs::vm::VM::new(&mut self.state);
+                use crate::r1cs::vm::VM;
+                let mut vm: VM<FoiFieldElement> = VM::new(&mut self.state);
                 // build constraints from the AST
                 vm.eval_ast(parser.ast);
                 if self.print_asm {
@@ -233,8 +235,9 @@ impl Compiler {
                     .join("\n")
             }
             "tasm" => {
+                use crate::tasm::vm::VM;
                 // step 1: compile the entrypoint to assembly
-                let mut vm = crate::tasm::vm::VM::new(&mut self.state);
+                let mut vm = VM::new(&mut self.state);
                 vm.eval_ast(parser.ast, vec![]);
                 let mut asm = vm.asm.clone();
                 asm.push("halt".to_string());

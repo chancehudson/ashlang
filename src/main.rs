@@ -7,6 +7,7 @@ use triton_vm::prelude::*;
 
 mod compiler;
 mod log;
+mod math;
 mod parser;
 mod r1cs;
 mod tasm;

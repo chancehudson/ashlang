@@ -1,3 +1,4 @@
+use crate::math::FieldElement;
 use crate::r1cs::constraint::R1csConstraint;
 use crate::r1cs::constraint::SymbolicOp;
 use pest::Parser;
@@ -7,25 +8,25 @@ use pest_derive::Parser;
 #[grammar = "r1cs/r1cs_grammar.pest"] // relative to project `src`
 pub struct R1csPestParser;
 
-pub struct R1csParser {
-    pub constraints: Vec<R1csConstraint>,
+pub struct R1csParser<T: FieldElement> {
+    pub constraints: Vec<R1csConstraint<T>>,
 }
 
-impl R1csParser {
+impl<T: FieldElement> R1csParser<T> {
     pub fn new(source: &str) -> Self {
         let mut out = R1csParser {
-            constraints: vec![],
+            constraints: Vec::new(),
         };
         let parsed = R1csPestParser::parse(Rule::program, source);
         if let Err(e) = parsed {
             panic!("Failed to parse r1cs: {}", e);
         }
         let parsed = parsed.unwrap();
-        let parse_constraint_inner = |p: pest::iterators::Pair<Rule>| -> Vec<(u64, usize)> {
+        let parse_constraint_inner = |p: pest::iterators::Pair<Rule>| -> Vec<(T, usize)> {
             let mut pair = p.into_inner();
             let mut out = vec![];
             while let Some(v) = pair.next() {
-                let coef = v.as_str().parse::<u64>().unwrap();
+                let coef = T::from(v.as_str().parse::<u64>().unwrap());
                 let var_index = pair.next().unwrap().as_str().parse::<usize>().unwrap();
                 out.push((coef, var_index));
             }
