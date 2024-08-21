@@ -1,7 +1,7 @@
 use crate::{
     compiler::CompilerState,
     log,
-    parser::{AstNode, Expr, Op},
+    parser::{AstNode, Expr, NumOp},
 };
 use std::collections::HashMap;
 
@@ -142,7 +142,7 @@ impl<'a> VM<'a> {
         }
     }
 
-    fn eval_numop(&mut self, lhs: &Expr, op: &Op, rhs: &Expr) -> Var {
+    fn eval_numop(&mut self, lhs: &Expr, op: &NumOp, rhs: &Expr) -> Var {
         let lv = self.eval(lhs);
         let rv = self.eval(rhs);
         if lv.location != VarLocation::Constraint {
@@ -197,7 +197,7 @@ impl<'a> VM<'a> {
             };
         // TODO: better field math
         match op {
-            Op::Add => {
+            NumOp::Add => {
                 let add = |a: u64,
                            b: u64,
                            ai: usize,
@@ -219,7 +219,7 @@ impl<'a> VM<'a> {
                 };
                 operate(lv, rv, Box::new(add))
             }
-            Op::Mul => {
+            NumOp::Mul => {
                 let mul = |a: u64,
                            b: u64,
                            ai: usize,
@@ -241,7 +241,7 @@ impl<'a> VM<'a> {
                 };
                 operate(lv, rv, Box::new(mul))
             }
-            Op::Sub => {
+            NumOp::Sub => {
                 let sub = |a: u64,
                            b: u64,
                            ai: usize,
@@ -264,7 +264,7 @@ impl<'a> VM<'a> {
                 };
                 operate(lv, rv, Box::new(sub))
             }
-            Op::Inv => {
+            NumOp::Inv => {
                 // (1/rhs) * lhs
                 // first invert the rhs and store in a variable
                 let inv = |_: u64,
