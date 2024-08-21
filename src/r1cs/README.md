@@ -10,7 +10,9 @@ The ashlang r1cs file format is designed to express constraint systems in a read
 
 Constraints are expressed as a sequence of three bracket statements `[]`. Each bracket may contain an arbitrary number of tuples specifying a coefficient and a variable index. Each bracket is evaluated as a dot product of each coefficient and variable. Any variable not specified is implied to have a 0 coefficient.
 
-For example: `[(1, 4)(99, 1)]` is equivalent to `1*vars[4] + 99*vars[1]`. Each bracket corresponds to `a`, `b`, and `c` in an equation `a*b - c = 0`.
+For example: `[(1, 4)(99, 1)]` is equivalent to `1*vars[4] + 99*vars[1]`.
+
+A full line consists of 3 bracket statements corresponding to `a`, `b`, and `c` in an equation `a*b - c = 0`. For example `[(1,6)(-1,7)][(1,0)][(1,8)(4,3)]` is equivalent to `(1*vars[6] + -1*vars[7]) * (1*vars[0]) - (1*vars[8] + 4*vars[3]) = 0`.
 
 ### Symbolic constraints
 
@@ -19,6 +21,8 @@ Symbolic constraints allow a prover to calculate a witness without needing a spe
 Symbolic constraints are expressed similarly to constraints, but using curly brackets (`{}`) instead of regular brackets (`[]`).
 
 The first two brackets specify a dot product of the internal tuples, just like in a normal constraint. The final bracket may contain only a single tuple specifying `(operation, var_out)`. That is, the type of operation to be applied to the first two brackets (`mul`, `inv`, `add`, etc), and a variable that should take the value of the result (`var_out`).
+
+For example: `{(99,0)(10, 2)}{(0,0)}{(add,3)}` is equivalent to `vars[3] = (99*vars[0] + 10*vars[2]) + (0*vars[0])`.
 
 Note that because this constraint is not used in proving the operator is not limited to that which is provable. e.g. it's possible to take the floored division of `a` and `b`, or a bitwise `AND` or any other type of operation.
 
