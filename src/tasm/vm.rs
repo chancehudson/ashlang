@@ -8,7 +8,6 @@ use crate::parser::Expr;
 use crate::parser::NumOp;
 use anyhow::Result;
 use std::collections::HashMap;
-use std::fmt::format;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum VarLocation {
@@ -159,6 +158,58 @@ impl<'a> VM<'a> {
         self.block_depth += 1;
     }
 
+    fn stack_pop(&mut self, count: usize) {
+        if count == 0 {
+            return;
+        }
+        // at most 5 elements can be popped at once
+        let iters = count / 5;
+        let remainder = count % 5;
+        for _ in 0..iters {
+            self.asm.push("pop 5".to_string());
+        }
+        if remainder > 0 {
+            self.asm.push(format!("pop {remainder}"));
+        }
+        self.stack.truncate(self.stack.len() - count);
+    }
+
+    fn stack_push(&mut self, v: u64) {
+        self.asm.push(format!("push {v}"));
+        self.stack.push("".to_string());
+    }
+
+    fn stack_dup(&mut self, i: usize) {
+        if i > self.stack.len() {
+            panic!(
+                "cannot dup more elements than are on the stack {} {}",
+                i,
+                self.stack.len()
+            );
+        }
+        self.asm.push(format!("dup {}", self.stack.len() - i));
+        self.stack.push("".to_string());
+    }
+
+    fn stack_swap(&mut self, i: usize) {
+        if i == 0 {
+            return;
+        }
+        self.asm.push(format!("swap {}", i));
+    }
+
+    fn stack_read_mem(&mut self, count: usize) {
+        self.asm.push(format!("read_mem {count}"));
+        for _ in 0..count {
+            self.stack.push("".to_string());
+        }
+    }
+
+    fn stack_write_mem(&mut self, count: usize) {
+        self.asm.push(format!("write_mem {count}"));
+        self.stack.truncate(self.stack.len() - count);
+    }
+
     // remove variables from the stack and the
     // local vm
     pub fn end_block(&mut self) {
@@ -177,15 +228,15 @@ impl<'a> VM<'a> {
             self.block_depth -= 1;
             return;
         }
-        // TODO: don't iterate here
+        let mut pop_count = 0;
         for (k, v) in &entries_to_remove {
             // swap with the bottom of the stack
             if v.stack_index.is_some() {
-                self.stack.pop();
-                self.asm.push(format!("pop 1"));
+                pop_count += 1;
             }
             self.vars.remove(k);
         }
+        self.stack_pop(pop_count);
         self.block_depth -= 1;
     }
 
@@ -230,7 +281,11 @@ impl<'a> VM<'a> {
                     log::error!(&format!("unknown variable {ref_name}"));
                 }
             }
-            Expr::NumOp { lhs, op, rhs } => {
+            Expr::NumOp {
+                lhs: _,
+                op: _,
+                rhs: _,
+            } => {
                 let out = self.eval(expr, false);
                 if out.is_none() {
                     log::error!("static expression evaluated to stack variable");
@@ -241,7 +296,7 @@ impl<'a> VM<'a> {
                 }
                 self.vars.insert(name, out);
             }
-            Expr::FnCall(a, b) => {
+            Expr::FnCall(_, _) => {
                 if let Some(v) = self.eval(expr.clone(), false) {
                     if v.location != VarLocation::Static {
                         log::error!("static expression evaluated to memory variable in FnCall");
@@ -294,7 +349,7 @@ impl<'a> VM<'a> {
             });
         } else {
             // put the top of the stack at the bottom
-            self.asm.push(format!("swap {}", self.stack.len() - 1));
+            self.stack_swap(self.stack.len() - 1);
             self.return_type = Some(ArgType {
                 location: VarLocation::Stack,
                 dimensions: vec![],
@@ -305,9 +360,7 @@ impl<'a> VM<'a> {
         // everything on the stack so that when we return
         // to the previous position the stack is in a
         // predictable state
-        for _ in 1..self.stack.len() {
-            self.asm.push(format!("pop 1"));
-        }
+        self.stack_pop(self.stack.len() - 1);
         self.has_returned = true;
     }
 
@@ -325,9 +378,7 @@ impl<'a> VM<'a> {
             dimensions: vec![],
             value: Some(vec![0]),
         });
-        for _ in 0..self.stack.len() {
-            self.asm.push(format!("pop 1"));
-        }
+        self.stack_pop(self.stack.len());
         self.has_returned = true;
     }
 
@@ -350,18 +401,18 @@ impl<'a> VM<'a> {
                 self.vars.insert(name, v);
                 // put the variable in memory
                 for vv in vec.clone().iter().rev() {
-                    self.asm.push(format!("push {vv}"))
+                    // self.asm.push(format!("push {vv}"))
+                    self.stack_push(*vv);
                 }
-                self.asm
-                    .push(format!("push {}", self.memory_start + self.memory_index));
+                self.stack_push(u64::try_from(self.memory_start + self.memory_index).unwrap());
                 self.memory_index += vec.len();
                 // TODO: batch insertion
                 for _ in vec.iter() {
-                    self.asm.push(format!("write_mem 1"))
+                    self.stack_write_mem(1);
                 }
                 // pop the updated ram pointer
                 // track memory index in this VM instead
-                self.asm.push("pop 1".to_string());
+                self.stack_pop(1);
             }
             _ => {
                 let out = self.eval(expr, false);
@@ -389,9 +440,7 @@ impl<'a> VM<'a> {
                     VarLocation::Static => {
                         // if static is a scalar write to stack
                         if out.value.clone().unwrap().len() == 1 {
-                            self.asm
-                                .push(format!("push {}", out.value.clone().unwrap()[0]));
-                            self.stack.push("".to_string());
+                            self.stack_push(out.value.clone().unwrap()[0]);
                             self.vars.insert(
                                 name,
                                 Var {
@@ -418,10 +467,10 @@ impl<'a> VM<'a> {
                         // copy values into memory
                         let mut offset = v.memory_index.unwrap();
                         for v in v.value.as_ref().unwrap() {
-                            self.asm.push(format!("push {v}"));
-                            self.asm.push(format!("push {offset}"));
-                            self.asm.push(format!("write_mem 1"));
-                            self.asm.push(format!("pop 1"));
+                            self.stack_push(*v);
+                            self.stack_push(u64::try_from(offset).unwrap());
+                            self.stack_write_mem(1);
+                            self.stack_pop(1);
                             offset += 1;
                         }
                         self.vars.insert(name, v);
@@ -526,10 +575,15 @@ impl<'a> VM<'a> {
                     "you're attempting to assign a vector to a scalar variable"
                 );
             }
+            if v.location == VarLocation::Static {
+                log::error!(
+                    &format!("cannot assign vector static value to stack var \"{name}\""),
+                    "you're attempting to assign a vector to a scalar variable"
+                );
+            }
         }
-        self.asm.push(format!("swap {}", self.stack_index(&name)));
-        self.asm.push("pop 1".to_string());
-        self.stack.pop();
+        self.stack_swap(self.stack_index(&name));
+        self.stack_pop(1);
     }
 
     // get the index of a variable in the execution stack
@@ -634,24 +688,23 @@ impl<'a> VM<'a> {
         }
         if is_static {
             let offset = Self::calc_vec_offset_static(dimensions, indices);
-            self.stack.push("vec_offset".to_string());
-            self.asm.push(format!("push {offset}"));
+            self.stack_push(offset.try_into().unwrap());
             return;
         }
-        self.asm.push("push 0".to_string());
-        self.stack.push("offset".to_string());
+        self.stack_push(0); // offset
         for x in 0..indices.len() {
             let o = self.eval_to_stack(indices[x].clone(), false);
             if o.is_some() {
-                log::error!("memory variables are not allowed as indices");
+                log::error!("vector variables are not allowed as indices");
             }
             if x == indices.len() - 1 && indices.len() == dimensions.len() {
                 self.asm.push("add".to_string());
                 self.stack.pop();
             } else {
                 let dim_sum = sum(dimensions, x + 1);
-                self.asm.push(format!("push {dim_sum}"));
+                self.stack_push(dim_sum.try_into().unwrap());
                 self.asm.push("mul".to_string());
+                self.stack.pop();
                 self.asm.push("add".to_string());
                 self.stack.pop();
             }
@@ -691,9 +744,7 @@ impl<'a> VM<'a> {
     pub fn static_to_stack(&mut self, v: &Var) -> Result<()> {
         if v.location == VarLocation::Static && v.value.clone().unwrap().len() == 1 {
             // static we can put on stack
-            self.asm
-                .push(format!("push {}", v.value.clone().unwrap()[0]));
-            self.stack.push("".to_string());
+            self.stack_push(v.value.clone().unwrap()[0]);
             return Ok(());
         }
         anyhow::bail!("static variable is not a scalar");
@@ -751,16 +802,13 @@ impl<'a> VM<'a> {
                         // 1 stack element we don't need to mutate
                         // the virtual stack
                         if let Some(mem_index) = v.memory_index {
-                            self.stack.push(name.clone());
-                            self.asm.push(format!("push {mem_index}"));
+                            self.stack_push(mem_index.try_into().unwrap());
                             stack_arg_count += 1;
                         } else if let Some(stack_index) = v.stack_index {
                             // give a copy of the stack memory index or value
                             // to the function
                             // the function will pop the value off the stack
-                            self.asm
-                                .push(format!("dup {}", self.stack.len() - stack_index));
-                            self.stack.push(name.clone());
+                            self.stack_dup(stack_index);
                             stack_arg_count += 1;
                         } else if v.location == VarLocation::Static {
                             //
@@ -812,20 +860,18 @@ impl<'a> VM<'a> {
                         *call_count += 1;
                     })
                     .or_insert_with(|| 1);
+                // the function pops all arguments off the stack before it returns
                 // we push the return memory index for every call
                 // it's not used if the return type is stack
                 if is_returning {
                     if let Some(v) = self.vars.get(RETURN_VAR) {
-                        self.asm
-                            .push(format!("dup {}", self.stack.len() - v.stack_index.unwrap()));
+                        self.stack_dup(v.stack_index.unwrap());
                     } else {
                         panic!("no return memory address");
                     }
                 } else if call.return_type.clone().unwrap().location != VarLocation::Static {
-                    self.asm
-                        .push(format!("push {}", self.memory_start + self.memory_index));
+                    self.stack_push((self.memory_start + self.memory_index).try_into().unwrap());
                 }
-                // the function pops all arguments off the stack before it returns
                 for _ in 0..stack_arg_count {
                     self.stack.pop();
                 }
@@ -843,12 +889,10 @@ impl<'a> VM<'a> {
                     VarLocation::Stack => {
                         // if the return value is a stack variable
                         // we need to increment the virtual stack
-                        self.stack.push("".to_string());
                         self.asm.push(format!("call {}", call.typed_name()));
                         return None;
                     }
                     VarLocation::Memory => {
-                        self.stack.push("".to_string());
                         self.asm.push(format!("call {}", call.typed_name()));
                         if is_returning {
                             // TODO: test this code, it's currently only used
@@ -909,6 +953,7 @@ impl<'a> VM<'a> {
                 if lv.is_some() && rv.is_none() {
                     if let Ok(_) = self.static_to_stack(&lv.clone().unwrap()) {
                         lv = None;
+                        self.asm.push("swap 1".to_string());
                     }
                 }
                 if rv.is_some() && lv.is_none() {
@@ -973,25 +1018,25 @@ impl<'a> VM<'a> {
                     // adds 1
                     // so we have a net effect of a single pop
                     NumOp::Add => {
-                        self.stack.pop();
                         self.asm.push(format!("add"));
+                        self.stack.pop();
                     }
                     NumOp::Sub => {
-                        self.stack.pop();
                         self.asm.append(&mut vec![
                             format!("push -1"),
                             format!("mul"),
                             format!("add"),
                         ]);
+                        self.stack.pop();
                     }
                     NumOp::Mul => {
-                        self.stack.pop();
                         self.asm.push(format!("mul"));
+                        self.stack.pop();
                     }
                     NumOp::Inv => {
-                        self.stack.pop();
                         self.asm
                             .append(&mut vec![format!("invert"), format!("mul")]);
+                        self.stack.pop();
                     }
                 }
                 return None;
@@ -1009,19 +1054,19 @@ impl<'a> VM<'a> {
                     BoolOp::Equal => {
                         // we're popping the two inputs off the stack
                         // eq removes 1, and skiz removes 1
-                        self.stack.pop();
-                        self.stack.pop();
                         self.asm.append(&mut vec![format!("eq"), format!("skiz")]);
+                        self.stack.pop();
+                        self.stack.pop();
                     }
                     BoolOp::NotEqual => {
-                        self.stack.pop();
-                        self.stack.pop();
                         self.asm.append(&mut vec![
                             format!("eq"),
                             format!("push -1"),
                             format!("add"),
                             format!("skiz"),
                         ]);
+                        self.stack.pop();
+                        self.stack.pop();
                     }
                     _ => panic!("boolean operation not supported"),
                 }
@@ -1054,20 +1099,17 @@ impl<'a> VM<'a> {
                         // push the expr to the stack then into memory
                         // we're accessing a scalar, move it to the stack
                         if let Some(mem_index) = v.memory_index {
-                            self.asm.push(format!("push {mem_index}"));
+                            self.stack_push(mem_index.try_into().unwrap());
                             self.asm.push(format!("add"));
-                            self.asm.push(format!("write_mem 1"));
-                            self.asm.push(format!("pop 1"));
                             self.stack.pop();
-                            self.stack.pop();
+                            self.stack_write_mem(1);
+                            self.stack_pop(1);
                         } else if let Some(stack_index) = v.stack_index {
-                            self.asm
-                                .push(format!("dup {}", self.stack.len() - stack_index));
+                            self.stack_dup(stack_index);
                             self.asm.push("add".to_string());
-                            self.asm.push(format!("write_mem 1"));
-                            self.asm.push(format!("pop 1"));
                             self.stack.pop();
-                            self.stack.pop();
+                            self.stack_write_mem(1);
+                            self.stack_pop(1);
                         } else {
                             log::error!("unexpected: variable has no memory or stack index");
                         }
@@ -1108,12 +1150,10 @@ impl<'a> VM<'a> {
                     let o = self.eval(expr, false);
                     if let Some(v) = o {
                         if let Some(_) = v.stack_index {
-                            self.stack.pop();
-                            self.asm.push("pop 1".to_string());
+                            self.stack_pop(1);
                         }
                     } else {
-                        self.stack.pop();
-                        self.asm.push("pop 1".to_string());
+                        self.stack_pop(1);
                     }
                 }
                 AstNode::FnVar(vars) => {
@@ -1178,7 +1218,7 @@ impl<'a> VM<'a> {
                         log::error!("loop condition must be static");
                     }
 
-                    for x in 0..o.value.unwrap()[0] {
+                    for _ in 0..o.value.clone().unwrap()[0] {
                         self.begin_block();
                         self.eval_ast(block_ast.clone(), vec![]);
                         self.end_block();
@@ -1195,29 +1235,27 @@ impl<'a> VM<'a> {
                 if offset.is_some() {
                     log::error!(&format!("attempting to access stack variable by index"));
                 }
-                let mut out = vec![format!("dup {}", v.stack_index.unwrap())];
-                self.stack.push("sfaf".to_string());
-                self.asm.append(&mut out);
+                self.stack_dup(v.stack_index.unwrap());
             }
             VarLocation::Memory => {
                 if offset.is_some() {
-                    self.asm.push(format!("push {}", offset.unwrap()));
-                    self.stack.push("".to_string());
+                    self.stack_push(offset.unwrap().try_into().unwrap());
                 } else {
                     self.calc_vec_offset(&v.dimensions, &vec![]);
                 }
                 // we're accessing a scalar, move it to the stack
                 if let Some(mem_index) = v.memory_index {
-                    self.asm.push(format!("push {}", mem_index));
+                    self.stack_push(mem_index.try_into().unwrap());
                     self.asm.push("add".to_string());
-                    self.asm.push(format!("read_mem 1"));
-                    self.asm.push(format!("pop 1"));
+                    self.stack.pop();
+                    self.stack_read_mem(1);
+                    self.stack_pop(1);
                 } else if let Some(stack_index) = v.stack_index {
-                    self.asm
-                        .push(format!("dup {}", self.stack.len() - stack_index));
+                    self.stack_dup(stack_index);
                     self.asm.push("add".to_string());
-                    self.asm.push(format!("read_mem 1"));
-                    self.asm.push(format!("pop 1"));
+                    self.stack.pop();
+                    self.stack_read_mem(1);
+                    self.stack_pop(1);
                 } else {
                     panic!("unexpected: variable has no memory or stack index");
                 }
@@ -1231,8 +1269,7 @@ impl<'a> VM<'a> {
                     panic!("static variable access must have an offset");
                 }
                 let value = v.value.as_ref().unwrap();
-                self.asm.push(format!("push {}", value[offset.unwrap()]));
-                self.stack.push("unknown".to_string());
+                self.stack_push(value[offset.unwrap()]);
             }
         }
     }
@@ -1246,9 +1283,7 @@ impl<'a> VM<'a> {
                         "attempting to access stack variable \"unknown\" by index"
                     ));
                 }
-                let mut out = vec![format!("dup {}", self.stack.len() - v.stack_index.unwrap())];
-                self.stack.push("sfaf".to_string());
-                self.asm.append(&mut out);
+                self.stack_dup(v.stack_index.unwrap());
                 return None;
             }
             VarLocation::Memory => {
@@ -1266,16 +1301,17 @@ impl<'a> VM<'a> {
                     self.calc_vec_offset(&v.dimensions, indices);
                     // we're accessing a scalar, move it to the stack
                     if let Some(mem_index) = v.memory_index {
-                        self.asm.push(format!("push {}", mem_index));
+                        self.stack_push(mem_index.try_into().unwrap());
                         self.asm.push("add".to_string());
-                        self.asm.push(format!("read_mem 1"));
-                        self.asm.push(format!("pop 1"));
+                        self.stack.pop();
+                        self.stack_read_mem(1);
+                        self.stack_pop(1);
                     } else if let Some(stack_index) = v.stack_index {
-                        self.asm
-                            .push(format!("dup {}", self.stack.len() - stack_index));
+                        self.stack_dup(stack_index);
                         self.asm.push("add".to_string());
-                        self.asm.push(format!("read_mem 1"));
-                        self.asm.push(format!("pop 1"));
+                        self.stack.pop();
+                        self.stack_read_mem(1);
+                        self.stack_pop(1);
                     } else {
                         panic!("unexpected: variable has no memory or stack index");
                     }
@@ -1386,24 +1422,22 @@ impl<'a> VM<'a> {
             self.load_scalar(v2, Some(x));
             // v1 and v2 are operated on and a single output
             // remains
-            self.stack.pop();
-
             self.asm
                 .append(&mut ops(FoiFieldElement::zero(), FoiFieldElement::one()).1);
+            self.stack.pop();
 
             if let Some(memory_index) = out.memory_index {
-                self.asm.push(format!("push {}", memory_index + x));
+                self.stack_push((memory_index + x).try_into().unwrap());
             } else if let Some(stack_index) = out.stack_index {
-                self.asm
-                    .push(format!("dup {}", self.stack.len() - stack_index));
-                self.asm.push(format!("push {x}"));
+                self.stack_dup(stack_index);
+                self.stack_push(x.try_into().unwrap());
                 self.asm.push("add".to_string());
+                self.stack.pop();
             }
             // the final output is written to memory below and
             // removed from the stack
-            self.stack.pop();
-            self.asm.push(format!("write_mem 1"));
-            self.asm.push(format!("pop 1"));
+            self.stack_write_mem(1);
+            self.stack_pop(1);
         }
         Some(out)
     }

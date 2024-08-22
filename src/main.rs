@@ -147,7 +147,10 @@ fn main() {
             }
             compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
             let constraints = compiler.compile(entry_fn, target);
-            r1cs::solver::solve(&constraints);
+            if let Err(e) = r1cs::solver::solve(&constraints) {
+                println!("Failed to solve r1cs: {:?}", e);
+                std::process::exit(1);
+            }
         }
         _ => {
             println!("Unsupported target: {}", target);
