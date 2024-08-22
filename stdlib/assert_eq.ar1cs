@@ -1,6 +1,13 @@
-(a, b)
+(a, b) -> ()
 
-[(1,a)][(1,0)][(1,b)]
+# one is a global signal that is equal to 1
+# e.g. one === 1
+#
+# coefficients must be literals
+#
+# an extra (0,one) is added below
+# this evaluates to 0 and is thus a no-op
+[(1,a)(0,one)][(1,one)][(1,b)] # assert equality
 
 # no symbolic constraint necessary
 # only operating on known values

@@ -101,7 +101,7 @@ static RETURN_VAR: &str = "_____return_____";
  *
  * Automatically move vars between memory and stack
  */
-pub struct VM<'a> {
+pub struct VM<'a, T: FieldElement> {
     // represents the contents of the stack
     pub stack: Vec<String>,
 
@@ -130,11 +130,11 @@ pub struct VM<'a> {
 
     pub return_type: Option<ArgType>,
 
-    pub compiler_state: &'a mut CompilerState,
+    pub compiler_state: &'a mut CompilerState<T>,
 }
 
-impl<'a> VM<'a> {
-    pub fn new(compiler_state: &'a mut CompilerState) -> Self {
+impl<'a, T: FieldElement> VM<'a, T> {
+    pub fn new(compiler_state: &'a mut CompilerState<T>) -> Self {
         let memory_start = compiler_state.memory_offset.clone();
         compiler_state.memory_offset += 2_usize.pow(32);
         VM {
@@ -925,8 +925,9 @@ impl<'a> VM<'a> {
                                 panic!("no return memory address");
                             }
                         } else {
-                            let len =
-                                VM::dimensions_to_len(call.clone().return_type.unwrap().dimensions);
+                            let len = VM::<T>::dimensions_to_len(
+                                call.clone().return_type.unwrap().dimensions,
+                            );
                             let memory_index = self.memory_start + self.memory_index;
                             self.memory_index += len;
                             return Some(Var {
@@ -1144,7 +1145,7 @@ impl<'a> VM<'a> {
                             "attempting to define a variable that already exists \"{name}\""
                         ));
                     }
-                    let len = VM::dimensions_to_len(dimensions.clone());
+                    let len = VM::<T>::dimensions_to_len(dimensions.clone());
                     self.vars.insert(
                         name.clone(),
                         Var {
@@ -1345,7 +1346,7 @@ impl<'a> VM<'a> {
                     }
                     return None;
                 } else {
-                    let offset = VM::calc_vec_offset_static(&v.dimensions, indices);
+                    let offset = VM::<T>::calc_vec_offset_static(&v.dimensions, indices);
                     // we're accessing a vec/mat, leave it in memory
                     if let Some(mem_index) = v.memory_index {
                         if v.stack_index.is_some() {
@@ -1383,7 +1384,7 @@ impl<'a> VM<'a> {
                     panic!("static variable does not have values defined");
                 }
                 let value = v.value.as_ref().unwrap();
-                let offset = VM::calc_vec_offset_static(&v.dimensions, indices);
+                let offset = VM::<T>::calc_vec_offset_static(&v.dimensions, indices);
                 return Some(Var {
                     stack_index: v.stack_index,
                     block_index: v.block_index,
@@ -1405,7 +1406,7 @@ impl<'a> VM<'a> {
         out_: Option<Var>,
         ops: fn(FoiFieldElement, FoiFieldElement) -> (FoiFieldElement, Vec<String>),
     ) -> Option<Var> {
-        let total_len = VM::dimensions_to_len(v1.dimensions.clone());
+        let total_len = VM::<T>::dimensions_to_len(v1.dimensions.clone());
         if v1.location == VarLocation::Static
             && v2.location == VarLocation::Static
             && out_.is_none()

@@ -1,13 +1,20 @@
 program = _{ SOI ~ stmt+ }
 
-stmt = _{ (constraint_line | symbolic_line) ~ ("\n" | EOI) }
+stmt = _{ type_header? ~ "\n"* ~ (constraint_line | symbolic_line | "\n") ~ ("\n" | EOI) }
+
+type_header = { tuple ~ "->" ~ tuple ~ "\n" }
+
+tuple = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
 
 constraint_line = { constraint ~ constraint ~ constraint ~ COMMENT? }
 symbolic_line = { symbolic ~ symbolic ~ symbolic ~ COMMENT? }
 
 constraint = { "[" ~ constraint_inner* ~ "]" }
 symbolic = { "{" ~ constraint_inner* ~ "}" }
-constraint_inner = _{ "(" ~ literal ~ "," ~ literal_dec ~ ")" }
+constraint_inner = _{ "(" ~ literal ~ "," ~ varname ~ ")" }
+
+varname = @{ char+ }
+char = _{ ASCII_ALPHANUMERIC | "_"  }
 
 literal = @{ ASCII_ALPHANUMERIC+ }
 literal_dec = @{ ASCII_DIGIT+ }

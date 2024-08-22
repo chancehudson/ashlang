@@ -3,6 +3,7 @@ use clap::arg;
 use clap::Arg;
 use clap::Command;
 use compiler::Compiler;
+use math::field_64::FoiFieldElement;
 use triton_vm::prelude::*;
 
 mod compiler;
@@ -97,7 +98,8 @@ fn main() {
     let target = target[0];
     match target {
         "tasm" => {
-            let mut compiler = Compiler::new(vec!["ash".to_string(), "tasm".to_string()]);
+            let mut compiler: Compiler<FoiFieldElement> =
+                Compiler::new(vec!["ash".to_string(), "tasm".to_string()]);
             for p in include_paths {
                 if p.is_empty() {
                     continue;
@@ -135,7 +137,8 @@ fn main() {
             }
         }
         "r1cs" => {
-            let mut compiler = Compiler::new(vec!["ash".to_string(), "r1cs".to_string()]);
+            let mut compiler: Compiler<FoiFieldElement> =
+                Compiler::new(vec!["ash".to_string(), "ar1cs".to_string()]);
             for p in include_paths {
                 if p.is_empty() {
                     continue;

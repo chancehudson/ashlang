@@ -1,7 +1,9 @@
 use crate::log;
 use crate::math::field_64::FoiFieldElement;
+use crate::math::FieldElement;
 use crate::parser::AshParser;
 use crate::parser::AstNode;
+use crate::r1cs::parser::R1csParser;
 use crate::tasm::asm_parser::AsmParser;
 use crate::tasm::vm::FnCall;
 use anyhow::Result;
@@ -11,7 +13,7 @@ use std::fs;
 
 // things that both Compiler and VM
 // need to modify
-pub struct CompilerState {
+pub struct CompilerState<T: FieldElement> {
     // each function gets it's own memory space
     // track where in the memory we're at
     pub memory_offset: usize,
@@ -22,9 +24,10 @@ pub struct CompilerState {
     pub fn_to_ast: HashMap<String, Vec<AstNode>>,
     pub block_counter: usize,
     pub block_fn_asm: Vec<Vec<String>>,
+    pub fn_to_r1cs_parser: HashMap<String, R1csParser<T>>,
 }
 
-impl CompilerState {
+impl<T: FieldElement> CompilerState<T> {
     pub fn new() -> Self {
         CompilerState {
             memory_offset: 0,
@@ -35,15 +38,16 @@ impl CompilerState {
             is_fn_ash: HashMap::new(),
             block_counter: 0,
             block_fn_asm: vec![],
+            fn_to_r1cs_parser: HashMap::new(),
         }
     }
 }
 
-pub struct Compiler {
+pub struct Compiler<T: FieldElement> {
     path_to_fn: HashMap<Utf8PathBuf, String>,
     fn_to_path: HashMap<String, Utf8PathBuf>,
     pub print_asm: bool,
-    state: CompilerState,
+    state: CompilerState<T>,
     extensions: Vec<String>,
 }
 
@@ -56,7 +60,7 @@ pub struct Compiler {
  * Compiler is responsible for structuring each function asm into
  * a full output file.
  */
-impl Compiler {
+impl<T: FieldElement> Compiler<T> {
     pub fn new(extensions: Vec<String>) -> Self {
         Compiler {
             path_to_fn: HashMap::new(),
@@ -210,8 +214,18 @@ impl Compiler {
                             .compiled_fn
                             .insert(call_no_return, parser.asm.clone());
                     }
-                    "r1cs" => {
-                        log::error!(&format!("r1cs files are not yet supported: {fn_name}"));
+                    "ar1cs" => {
+                        let parser: R1csParser<T> = R1csParser::new(&text);
+                        self.state.fn_to_ast.insert(fn_name.clone(), vec![]);
+                        // let mut call_no_return = parser.call_type.clone();
+                        // call_no_return.return_type = None;
+                        // self.state
+                        //     .fn_return_types
+                        //     .insert(call_no_return.clone(), parser.call_type.clone());
+                        self.state.fn_to_r1cs_parser.insert(fn_name.clone(), parser);
+                        // self.state
+                        //     .compiled_fn
+                        //     .insert(call_no_return, parser.constraints.m);
                     }
                     _ => {
                         log::error!(&format!("unexpected file extension: {ext}"));
@@ -222,7 +236,7 @@ impl Compiler {
         match target {
             "r1cs" => {
                 use crate::r1cs::vm::VM;
-                let mut vm: VM<FoiFieldElement> = VM::new(&mut self.state);
+                let mut vm: VM<T> = VM::new(&mut self.state);
                 // build constraints from the AST
                 vm.eval_ast(parser.ast);
                 if self.print_asm {
@@ -240,7 +254,7 @@ impl Compiler {
             "tasm" => {
                 use crate::tasm::vm::VM;
                 // step 1: compile the entrypoint to assembly
-                let mut vm = VM::new(&mut self.state);
+                let mut vm: VM<T> = VM::new(&mut self.state);
                 vm.eval_ast(parser.ast, vec![], None);
                 let mut asm = vm.asm.clone();
                 asm.push("halt".to_string());

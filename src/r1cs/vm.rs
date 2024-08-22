@@ -28,7 +28,7 @@ pub struct VM<'a, T: FieldElement> {
     pub var_index: usize,
     // local scope name keyed to global variable index
     pub vars: HashMap<String, Var<T>>,
-    pub compiler_state: &'a mut CompilerState,
+    pub compiler_state: &'a mut CompilerState<T>,
     // a, b, c
     pub constraints: Vec<R1csConstraint<T>>,
     pub args: Vec<Var<T>>,
@@ -36,7 +36,7 @@ pub struct VM<'a, T: FieldElement> {
 }
 
 impl<'a, T: FieldElement> VM<'a, T> {
-    pub fn new(compiler_state: &'a mut CompilerState) -> Self {
+    pub fn new(compiler_state: &'a mut CompilerState<T>) -> Self {
         // add the field safety constraint
         // constrains -1*1 * -1*1 - 1 = 0
         // should fail in any field that is different than
@@ -143,6 +143,9 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     }
                     self.vars.insert(name, v);
                 }
+                AstNode::ExprUnassigned(expr) => {
+                    self.eval(&expr);
+                }
                 _ => {
                     log::error!(&format!("ast node not supported for r1cs: {:?}", v));
                 }
@@ -159,12 +162,58 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 panic!("matrix literals must be assigned before operation");
             }
             Expr::FnCall(name, vars) => {
+                let args: Vec<Var<T>> = vars.into_iter().map(|v| self.eval(&*v)).collect::<_>();
+                // look for an ar1cs implementation first
+                if let Some(v) = self.compiler_state.fn_to_r1cs_parser.get(name) {
+                    let mut out_constraints = v.constraints_for_args(
+                        args.iter()
+                            .map(|v| {
+                                if let Some(i) = v.index {
+                                    return i;
+                                } else {
+                                    if v.value.len() != 1 {
+                                        log::error!(
+                                            "cannot pass a vector static to an r1cs function"
+                                        );
+                                    }
+                                    // if we get a static variable we need to
+                                    // assert equality of it's current value
+                                    // to turn it into a signal
+                                    // log::error!("cannot pass a static variable to a r1cs function");
+                                    let index = self.var_index;
+                                    self.var_index += 1;
+                                    self.constraints.push(R1csConstraint::new(
+                                        vec![(T::from(1), index)],
+                                        vec![(T::from(1), 0)],
+                                        vec![(v.value.values[0].clone(), 0)],
+                                        &format!(
+                                            "assigning literal ({}) to signal {index}",
+                                            v.value.values[0]
+                                        ),
+                                    ));
+                                    self.constraints.push(R1csConstraint::symbolic(
+                                        index,
+                                        vec![(v.value.values[0].clone(), 0)],
+                                        vec![(T::from(0), 0)],
+                                        SymbolicOp::Add,
+                                    ));
+                                    return index;
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    );
+                    self.constraints.append(&mut out_constraints);
+                    return Var {
+                        index: None,
+                        location: VarLocation::Static,
+                        value: Matrix::from(T::one()),
+                    };
+                }
                 let fn_ast = self.compiler_state.fn_to_ast.get(name);
                 if fn_ast.is_none() {
                     log::error!("function not found: {name}");
                 }
                 let fn_ast = fn_ast.unwrap().clone();
-                let args = vars.into_iter().map(|v| self.eval(&*v)).collect::<_>();
                 let mut vm = VM::from(self, args);
                 vm.eval_ast(fn_ast);
                 let return_val = vm.return_val;
