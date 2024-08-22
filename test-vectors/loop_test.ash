@@ -7,7 +7,7 @@ loop 10 {
 
 assert_eq(v, 10)
 
-let c = 5
+static c = 5
 loop add(c, 1) {
   v = v + 1
 }
