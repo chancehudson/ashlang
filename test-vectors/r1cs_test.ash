@@ -1,13 +1,45 @@
-let x = 99
-let y = 1
+let _ = 0
 
+# static variables are specified at compile time
+# these are not constrained
+static x = 99
+static y = 1
+
+# test static operations
+#
+# assignment to the let variable is constrained
+# but the operation is not constrained because
+# it's between two static variables
+#
+# it's the same as assigning a literal e.g. z0 = 100
 let z0 = x + y
 let z1 = x * y
 let z2 = x - y
 let z3 = x / y
 
-let _ = z1 * z2
+# test static assignment
+static z00 = x + y
+static z01 = x * y
+static z02 = x - y
+static z03 = x / y
 
-let a = pow5(2)
+# test signal operations with statics
+let z = 5
+# todo: assertions
+_ = z - x
+_ = x - z
+_ = x * z
+_ = z * x
+_ = x + z
+_ = z + x
 
-#assert_eq(z, 1)
+# test signal operations
+_ = z0 + z1
+_ = z0 - z1
+_ = z0 * z1
+_ = z0 / z1
+
+# test function call
+let a = pow5(z0)
+static b = pow5_static(2)
+a = b

@@ -72,15 +72,45 @@ impl<'a, T: FieldElement> VM<'a, T> {
         for v in ast {
             match v {
                 AstNode::Stmt(name, is_let, expr) => {
-                    if !is_let {
-                        log::error!("re-assignment not supported");
+                    if is_let && self.vars.contains_key(&name) {
+                        log::error!(&format!("variable already defined: {name}"));
+                    } else if !is_let && !self.vars.contains_key(&name) {
+                        log::error!(&format!("variable does not exist in scope: {name}"));
                     }
-                    if self.vars.contains_key(&name) {
-                        log::error!("variable already defined: {name}");
-                    }
-                    // returns a variable index
                     let v = self.eval(&expr);
-                    self.vars.insert(name, v);
+                    if v.location == VarLocation::Constraint {
+                        // if we get a constrained variable from the
+                        // evaluation we simply store that as a named variable
+                        self.vars.insert(name, v);
+                    } else {
+                        // if we get a static variable from the evaluation
+                        // we constraint the assigment into a new signal
+                        let new_var = Var {
+                            index: Some(self.var_index),
+                            location: VarLocation::Constraint,
+                            value: v.value,
+                        };
+                        self.var_index += new_var.value.len();
+                        for v in &new_var.value.values {
+                            // assigning a constant
+                            self.constraints.push(R1csConstraint::new(
+                                vec![(T::from(1), new_var.index.unwrap())],
+                                vec![(T::from(1), 0)],
+                                vec![(v.clone(), 0)],
+                                &format!(
+                                    "assigning literal ({v}) to signal {}",
+                                    new_var.index.unwrap()
+                                ),
+                            ));
+                            self.constraints.push(R1csConstraint::symbolic(
+                                new_var.index.unwrap(),
+                                vec![(v.clone(), 0)],
+                                vec![(T::from(0), 0)],
+                                SymbolicOp::Add,
+                            ));
+                        }
+                        self.vars.insert(name, new_var);
+                    }
                 }
                 AstNode::FnVar(names) => {
                     for x in 0..names.len() {
@@ -103,7 +133,16 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     }
                     self.return_val = Some(self.eval(&expr));
                 }
-                AstNode::StaticDef(name, expr) => {}
+                AstNode::StaticDef(name, expr) => {
+                    if self.vars.contains_key(&name) {
+                        log::error!("variable already defined: {name}");
+                    }
+                    let v = self.eval(&expr);
+                    if v.location != VarLocation::Static {
+                        log::error!("static variable cannot be assigned from signal");
+                    }
+                    self.vars.insert(name, v);
+                }
                 _ => {
                     log::error!(&format!("ast node not supported for r1cs: {:?}", v));
                 }
@@ -137,8 +176,8 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     return v;
                 } else {
                     Var {
-                        index: Some(0),
-                        location: VarLocation::Constraint,
+                        index: None,
+                        location: VarLocation::Static,
                         value: Matrix::from(T::one()),
                     }
                 }
@@ -156,30 +195,11 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
             }
             Expr::NumOp { lhs, op, rhs } => self.eval_numop(&*lhs, op, &*rhs),
-            Expr::Lit(val) => {
-                let new_var = Var {
-                    index: Some(self.var_index),
-                    location: VarLocation::Constraint,
-                    value: Matrix::from(T::from(*val)),
-                };
-                self.var_index += 1;
-                self.constraints.push(R1csConstraint::new(
-                    vec![(T::from(1), new_var.index.unwrap())],
-                    vec![(T::from(1), 0)],
-                    vec![(T::from(*val), 0)],
-                    &format!(
-                        "assigning literal ({val}) to signal {}",
-                        new_var.index.unwrap()
-                    ),
-                ));
-                self.constraints.push(R1csConstraint::symbolic(
-                    new_var.index.unwrap(),
-                    vec![(T::from(*val), 0)],
-                    vec![(T::from(0), 0)],
-                    SymbolicOp::Add,
-                ));
-                new_var
-            }
+            Expr::Lit(val) => Var {
+                index: None,
+                location: VarLocation::Static,
+                value: Matrix::from(T::from(*val)),
+            },
             _ => {
                 log::error!("unimplemented expression case");
             }
@@ -209,11 +229,165 @@ impl<'a, T: FieldElement> VM<'a, T> {
     }
 
     fn eval_numop_static(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Var<T> {
-        panic!("eval numop static not implemented");
+        match op {
+            NumOp::Add => Var {
+                index: None,
+                location: VarLocation::Static,
+                value: lv.value.clone() + rv.value.clone(),
+            },
+            NumOp::Mul => Var {
+                index: None,
+                location: VarLocation::Static,
+                value: lv.value.clone() * rv.value.clone(),
+            },
+            NumOp::Sub => Var {
+                index: None,
+                location: VarLocation::Static,
+                value: lv.value.clone() - rv.value.clone(),
+            },
+            NumOp::Inv => Var {
+                index: None,
+                location: VarLocation::Static,
+                value: lv.value.clone() / rv.value.clone(),
+            },
+        }
     }
 
     fn eval_numop_signal_static(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Var<T> {
-        panic!("eval nump signal static not implemented");
+        let static_v;
+        let signal_v;
+        if lv.location == VarLocation::Static {
+            static_v = lv;
+            signal_v = rv;
+        } else {
+            static_v = rv;
+            signal_v = lv;
+        }
+        match op {
+            NumOp::Add => {
+                let new_var = Var {
+                    index: Some(self.var_index),
+                    location: VarLocation::Constraint,
+                    value: lv.value.clone() + rv.value.clone(),
+                };
+                self.var_index += new_var.value.len();
+                for x in 0..new_var.value.len() {
+                    let svi = signal_v.index.unwrap() + x;
+                    // the coefficient value, not a signal index
+                    let cv = static_v.value.values[x].clone();
+                    let ovi = new_var.index.unwrap() + x;
+                    // (cv*1 + 1*svi)*(1*1) - (1*ovi) = 0
+                    // cv + sv - ov = 0
+                    self.constraints.append(&mut vec![
+                        R1csConstraint::new(
+                            vec![(cv.clone(), 0), (T::one(), svi)],
+                            vec![(T::one(), 0)],
+                            vec![(T::one(), ovi)],
+                            &format!("addition between ({cv}) and {svi} into {ovi}"),
+                        ),
+                        R1csConstraint::symbolic(
+                            ovi,
+                            vec![(cv, 0), (T::one(), svi)],
+                            vec![(T::one(), 0)],
+                            SymbolicOp::Mul,
+                        ),
+                    ]);
+                }
+                new_var
+            }
+            NumOp::Mul => {
+                let new_var = Var {
+                    index: Some(self.var_index),
+                    location: VarLocation::Constraint,
+                    value: lv.value.clone() * rv.value.clone(),
+                };
+                self.var_index += new_var.value.len();
+                for x in 0..new_var.value.len() {
+                    let svi = signal_v.index.unwrap() + x;
+                    // the coefficient value, not a signal index
+                    let cv = static_v.value.values[x].clone();
+                    let ovi = new_var.index.unwrap() + x;
+                    // (cv*1)*(1*svi) - (1*ovi) = 0
+                    // cv * sv - ov = 0
+                    self.constraints.append(&mut vec![
+                        R1csConstraint::new(
+                            vec![(cv.clone(), 0)],
+                            vec![(T::one(), svi)],
+                            vec![(T::one(), ovi)],
+                            &format!("multiplication between ({cv}) and {svi} into {ovi}"),
+                        ),
+                        R1csConstraint::symbolic(
+                            ovi,
+                            vec![(cv, 0)],
+                            vec![(T::one(), svi)],
+                            SymbolicOp::Mul,
+                        ),
+                    ]);
+                }
+                new_var
+            }
+            NumOp::Sub => {
+                let new_var = Var {
+                    index: Some(self.var_index),
+                    location: VarLocation::Constraint,
+                    value: lv.value.clone() - rv.value.clone(),
+                };
+                self.var_index += new_var.value.len();
+                if lv.location == VarLocation::Constraint {
+                    // subtracting a static from a signal
+                    for x in 0..new_var.value.len() {
+                        let svi = lv.index.unwrap() + x;
+                        // the value being subtracted
+                        let cv = rv.value.values[x].clone();
+                        let ovi = new_var.index.unwrap() + x;
+                        // (1*ovi + cv*1)*(1*1) - (1*svi) = 0
+                        // (ovi + cv)*1 - svi = 0
+                        self.constraints.append(&mut vec![
+                            R1csConstraint::new(
+                                vec![(cv.clone(), 0), (T::one(), ovi)],
+                                vec![(T::one(), 0)],
+                                vec![(T::one(), svi)],
+                                &format!("subtraction between {svi} and ({cv}) into {ovi}"),
+                            ),
+                            R1csConstraint::symbolic(
+                                ovi,
+                                vec![(T::one(), svi), (-cv.clone(), 0)],
+                                vec![(T::one(), 0)],
+                                SymbolicOp::Mul,
+                            ),
+                        ]);
+                    }
+                } else {
+                    // subtracting a signal from a static
+                    for x in 0..new_var.value.len() {
+                        let lv = lv.value.values[x].clone();
+                        // the static being subtracted
+                        let rvi = rv.index.unwrap() + x;
+                        let ovi = new_var.index.unwrap() + x;
+                        // (1*rvi + 1*ovi)*(1*1) - (lv*1) = 0
+                        // (rvi + ovi)*1 - lv = 0
+                        self.constraints.append(&mut vec![
+                            R1csConstraint::new(
+                                vec![(T::one(), rvi), (T::one(), ovi)],
+                                vec![(T::one(), 0)],
+                                vec![(lv.clone(), 0)],
+                                &format!("subtraction between ({lv}) and {rvi} into {ovi}"),
+                            ),
+                            R1csConstraint::symbolic(
+                                ovi,
+                                vec![(lv, 0), (-T::one(), rvi)],
+                                vec![(T::one(), 0)],
+                                SymbolicOp::Mul,
+                            ),
+                        ]);
+                    }
+                }
+                new_var
+            }
+            NumOp::Inv => {
+                log::error!("division by signal and static not supported");
+            }
+        }
     }
 
     fn eval_numop_signals(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Var<T> {
