@@ -1,5 +1,4 @@
 (_) -> [1]
 
-pop 1
 write_io 1
 return

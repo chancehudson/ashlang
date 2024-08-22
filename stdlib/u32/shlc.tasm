@@ -3,7 +3,6 @@
 # shift left circular
 # shift must be < 32 places
 
-pop 1
 push 2
 pow
 mul

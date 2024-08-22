@@ -1,5 +1,6 @@
 (_, _) -> _
 
+push 0
 # lte impl
 swap 2
 dup 1

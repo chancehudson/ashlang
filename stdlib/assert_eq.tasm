@@ -1,6 +1,5 @@
 (_, _) -> _
 
-pop 1
 eq
 assert
 push 0

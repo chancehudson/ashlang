@@ -241,7 +241,7 @@ impl Compiler {
                 use crate::tasm::vm::VM;
                 // step 1: compile the entrypoint to assembly
                 let mut vm = VM::new(&mut self.state);
-                vm.eval_ast(parser.ast, vec![]);
+                vm.eval_ast(parser.ast, vec![], None);
                 let mut asm = vm.asm.clone();
                 asm.push("halt".to_string());
 

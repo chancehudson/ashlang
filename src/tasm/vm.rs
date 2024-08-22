@@ -195,6 +195,9 @@ impl<'a> VM<'a> {
         if i == 0 {
             return;
         }
+        if i > 16 {
+            panic!("cannot swap more than 16 elements deep");
+        }
         self.asm.push(format!("swap {}", i));
     }
 
@@ -347,6 +350,7 @@ impl<'a> VM<'a> {
                 dimensions: v.dimensions.clone(),
                 value: v.value,
             });
+            self.stack_pop(self.stack.len());
         } else {
             // put the top of the stack at the bottom
             self.stack_swap(self.stack.len() - 1);
@@ -355,12 +359,12 @@ impl<'a> VM<'a> {
                 dimensions: vec![],
                 value: None,
             });
+            self.stack_pop(self.stack.len() - 1);
         }
         // when we're done executing a block we clear
         // everything on the stack so that when we return
         // to the previous position the stack is in a
         // predictable state
-        self.stack_pop(self.stack.len() - 1);
         self.has_returned = true;
     }
 
@@ -374,9 +378,9 @@ impl<'a> VM<'a> {
             return;
         }
         self.return_type = Some(ArgType {
-            location: VarLocation::Static,
+            location: VarLocation::Memory,
             dimensions: vec![],
-            value: Some(vec![0]),
+            value: None,
         });
         self.stack_pop(self.stack.len());
         self.has_returned = true;
@@ -835,11 +839,8 @@ impl<'a> VM<'a> {
                 } else {
                     let fn_ast = self.compiler_state.fn_to_ast.get(name).unwrap().clone();
                     let mut vm = VM::new(&mut self.compiler_state);
-                    vm.eval_ast(fn_ast, arg_types.clone());
+                    vm.eval_ast(fn_ast.clone(), arg_types.clone(), None);
                     vm.return_if_needed();
-                    let mut asm = vm.asm.clone();
-                    asm.push("return".to_string());
-                    // let no_return_call = call.clone();
                     if let Some(return_type) = vm.return_type {
                         call.return_type = Some(return_type);
                     } else {
@@ -848,6 +849,14 @@ impl<'a> VM<'a> {
                             name
                         ), &format!("you may be calling a tasm function with the wrong number or type of arguments"));
                     }
+                    // re-evaluate the function with the return type
+                    // set from the beginning
+                    let mut vm = VM::new(&mut self.compiler_state);
+                    vm.eval_ast(fn_ast, arg_types.clone(), call.return_type.clone());
+                    vm.return_if_needed();
+                    let mut asm = vm.asm.clone();
+                    asm.push("return".to_string());
+                    // let no_return_call = call.clone();
                     self.compiler_state.compiled_fn.insert(call.clone(), asm);
                     // self.compiler_state
                     //     .fn_return_types
@@ -861,22 +870,11 @@ impl<'a> VM<'a> {
                     })
                     .or_insert_with(|| 1);
                 // the function pops all arguments off the stack before it returns
-                // we push the return memory index for every call
-                // it's not used if the return type is stack
-                if is_returning {
-                    if let Some(v) = self.vars.get(RETURN_VAR) {
-                        self.stack_dup(v.stack_index.unwrap());
-                    } else {
-                        panic!("no return memory address");
-                    }
-                } else if call.return_type.clone().unwrap().location != VarLocation::Static {
-                    self.stack_push((self.memory_start + self.memory_index).try_into().unwrap());
-                }
-                for _ in 0..stack_arg_count {
-                    self.stack.pop();
-                }
                 match call.return_type.clone().unwrap().location {
                     VarLocation::Static => {
+                        for _ in 0..stack_arg_count {
+                            self.stack.pop();
+                        }
                         return Some(Var {
                             stack_index: None,
                             location: VarLocation::Static,
@@ -887,17 +885,33 @@ impl<'a> VM<'a> {
                         });
                     }
                     VarLocation::Stack => {
+                        for _ in 0..stack_arg_count {
+                            self.stack.pop();
+                        }
+                        self.stack.push("".to_string());
                         // if the return value is a stack variable
                         // we need to increment the virtual stack
                         self.asm.push(format!("call {}", call.typed_name()));
                         return None;
                     }
                     VarLocation::Memory => {
+                        if is_returning {
+                            if let Some(v) = self.vars.get(RETURN_VAR) {
+                                self.stack_dup(v.stack_index.unwrap());
+                            } else {
+                                panic!("no return memory address");
+                            }
+                        } else {
+                            self.stack_push(
+                                (self.memory_start + self.memory_index).try_into().unwrap(),
+                            );
+                        }
+                        for _ in 0..stack_arg_count {
+                            self.stack.pop();
+                        }
+                        self.stack.pop();
                         self.asm.push(format!("call {}", call.typed_name()));
                         if is_returning {
-                            // TODO: test this code, it's currently only used
-                            // in the return function above
-                            // the stack index calculated below is likely wrong
                             if let Some(v) = self.vars.get(RETURN_VAR) {
                                 return Some(Var {
                                     stack_index: Some(self.stack.len() - v.stack_index.unwrap()),
@@ -1075,7 +1089,12 @@ impl<'a> VM<'a> {
         }
     }
 
-    pub fn eval_ast(&mut self, ast: Vec<AstNode>, arg_types: Vec<ArgType>) {
+    pub fn eval_ast(
+        &mut self,
+        ast: Vec<AstNode>,
+        arg_types: Vec<ArgType>,
+        return_type: Option<ArgType>,
+    ) {
         for v in ast {
             match v {
                 AstNode::AssignVec(name, indices, expr) => {
@@ -1148,11 +1167,7 @@ impl<'a> VM<'a> {
                 }
                 AstNode::ExprUnassigned(expr) => {
                     let o = self.eval(expr, false);
-                    if let Some(v) = o {
-                        if let Some(_) = v.stack_index {
-                            self.stack_pop(1);
-                        }
-                    } else {
+                    if let None = o {
                         self.stack_pop(1);
                     }
                 }
@@ -1167,14 +1182,27 @@ impl<'a> VM<'a> {
                     for x in 0..vars.len() {
                         self.fn_var(vars[x].clone(), arg_types[x].clone());
                     }
-                    self.fn_var(
-                        RETURN_VAR.to_string(),
-                        ArgType {
-                            location: VarLocation::Stack,
-                            dimensions: vec![],
-                            value: None,
-                        },
-                    );
+                    if let Some(t) = return_type.clone() {
+                        if t.location == VarLocation::Memory {
+                            self.fn_var(
+                                RETURN_VAR.to_string(),
+                                ArgType {
+                                    location: VarLocation::Stack,
+                                    dimensions: vec![],
+                                    value: None,
+                                },
+                            );
+                        }
+                    } else {
+                        self.fn_var(
+                            RETURN_VAR.to_string(),
+                            ArgType {
+                                location: VarLocation::Stack,
+                                dimensions: vec![],
+                                value: None,
+                            },
+                        );
+                    }
                 }
                 AstNode::Rtrn(expr) => {
                     self.return_expr(expr);
@@ -1200,7 +1228,7 @@ impl<'a> VM<'a> {
                     let start_asm_len = self.asm.len();
                     self.begin_block();
                     // blocks can't take args
-                    self.eval_ast(block_ast, vec![]);
+                    self.eval_ast(block_ast, vec![], None);
                     self.end_block();
                     // pull the resulting asm as the block asm
                     let mut block_asm = self.asm.drain(start_asm_len..).collect::<Vec<String>>();
@@ -1220,7 +1248,7 @@ impl<'a> VM<'a> {
 
                     for _ in 0..o.value.clone().unwrap()[0] {
                         self.begin_block();
-                        self.eval_ast(block_ast.clone(), vec![]);
+                        self.eval_ast(block_ast.clone(), vec![], None);
                         self.end_block();
                     }
                 }

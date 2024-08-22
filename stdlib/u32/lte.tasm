@@ -1,5 +1,6 @@
 (_, _) -> _
 
+push 0
 # use memory out argument as swap space
 swap 2
 dup 1

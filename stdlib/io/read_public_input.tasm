@@ -1,6 +1,5 @@
 () -> _
 
-pop 1
 read_io 1
 
 return
