@@ -336,22 +336,22 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 if lv.location == VarLocation::Constraint {
                     // subtracting a static from a signal
                     for x in 0..new_var.value.len() {
-                        let svi = lv.index.unwrap() + x;
+                        let lvi = lv.index.unwrap() + x;
                         // the value being subtracted
                         let cv = rv.value.values[x].clone();
                         let ovi = new_var.index.unwrap() + x;
-                        // (1*ovi + cv*1)*(1*1) - (1*svi) = 0
-                        // (ovi + cv)*1 - svi = 0
+                        // (cv*1 + 1*ovi)*(1*1) - (1*lvi) = 0
+                        // (cv + ovi)*1 - lvi = 0
                         self.constraints.append(&mut vec![
                             R1csConstraint::new(
                                 vec![(cv.clone(), 0), (T::one(), ovi)],
                                 vec![(T::one(), 0)],
-                                vec![(T::one(), svi)],
-                                &format!("subtraction between {svi} and ({cv}) into {ovi}"),
+                                vec![(T::one(), lvi)],
+                                &format!("subtraction between {lvi} and ({cv}) into {ovi}"),
                             ),
                             R1csConstraint::symbolic(
                                 ovi,
-                                vec![(T::one(), svi), (-cv.clone(), 0)],
+                                vec![(T::one(), lvi), (-cv.clone(), 0)],
                                 vec![(T::one(), 0)],
                                 SymbolicOp::Mul,
                             ),
@@ -385,7 +385,90 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 new_var
             }
             NumOp::Inv => {
-                log::error!("division by signal and static not supported");
+                let new_var = Var {
+                    index: Some(self.var_index),
+                    location: VarLocation::Constraint,
+                    value: lv.value.clone() / rv.value.clone(),
+                };
+                self.var_index += new_var.value.len();
+                if lv.location == VarLocation::Constraint {
+                    // can statically inv
+                    // subtracting a static from a signal
+                    for x in 0..new_var.value.len() {
+                        let lvi = lv.index.unwrap() + x;
+                        // this is a static value
+                        let cv = rv.value.values[x].clone();
+                        let icv = T::one() / cv.clone();
+                        let ovi = new_var.index.unwrap() + x;
+                        // (icv*lvi)*(1*1) - (1*ovi) = 0
+                        // (icv*lvi)*1 - ovi = 0
+                        self.constraints.append(&mut vec![
+                            R1csConstraint::new(
+                                vec![(icv.clone(), lvi)],
+                                vec![(T::one(), 0)],
+                                vec![(T::one(), ovi)],
+                                &format!("modinv between {lvi} and ({cv}) into {ovi}"),
+                            ),
+                            R1csConstraint::symbolic(
+                                ovi,
+                                vec![(icv.clone(), lvi)],
+                                vec![(T::one(), 0)],
+                                SymbolicOp::Mul,
+                            ),
+                        ]);
+                    }
+                } else {
+                    // must inv in a signal first
+                    let inv_var = Var {
+                        index: Some(self.var_index),
+                        location: VarLocation::Constraint,
+                        value: rv.value.invert(),
+                    };
+                    self.var_index += inv_var.value.len();
+                    for x in 0..inv_var.value.len() {
+                        // first invert into a signal
+                        // let lv = lv.value.values[x].clone();
+                        let rvi = rv.index.unwrap() + x;
+                        let ovi = inv_var.index.unwrap() + x;
+                        // (1*rvi)*(1*ovi) - (1*1) = 0
+                        // rvi*ovi - 1 = 0
+                        self.constraints.append(&mut vec![
+                            R1csConstraint::new(
+                                vec![(T::one(), rvi)],
+                                vec![(T::one(), ovi)],
+                                vec![(T::one(), 0)],
+                                &format!("modinv {rvi} into {ovi}"),
+                            ),
+                            R1csConstraint::symbolic(
+                                ovi,
+                                vec![(T::one(), rvi)],
+                                vec![],
+                                SymbolicOp::Inv,
+                            ),
+                        ]);
+                        // now constrain the new_var
+                        let lv = lv.value.values[x].clone();
+                        let rvi = inv_var.index.unwrap() + x;
+                        let ovi = new_var.index.unwrap() + x;
+                        // (lv*rvi)*(1*1) - (1*ovi) = 0
+                        // (lv*rvi)*1 - ovi = 0
+                        self.constraints.append(&mut vec![
+                            R1csConstraint::new(
+                                vec![(lv.clone(), rvi)],
+                                vec![(T::one(), 0)],
+                                vec![(T::one(), ovi)],
+                                &format!("multiply {rvi} and ({lv}) into {ovi}"),
+                            ),
+                            R1csConstraint::symbolic(
+                                ovi,
+                                vec![(lv.clone(), rvi)],
+                                vec![(T::one(), 0)],
+                                SymbolicOp::Mul,
+                            ),
+                        ]);
+                    }
+                }
+                new_var
             }
         }
     }

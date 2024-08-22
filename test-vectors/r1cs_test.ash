@@ -24,6 +24,12 @@ static z02 = x - y
 static z03 = x / y
 
 # test signal operations with statics
+_ = z0 * x
+_ = z0 - x
+_ = x - z0
+_ = z0 + x
+_ = z0 / x
+_ = x / z0
 
 # test signal operations
 _ = z0 + z1

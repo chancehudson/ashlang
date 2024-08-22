@@ -1,0 +1,6 @@
+(a, b)
+
+[(1,a)][(1,0)][(1,b)]
+
+# no symbolic constraint necessary
+# only operating on known values
