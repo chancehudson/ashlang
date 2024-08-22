@@ -7,7 +7,8 @@ loop 10 {
 
 assert_eq(v, 10)
 
-loop add(5, 1) {
+static c = 5
+loop add(c, 1) {
   v = v + 1
 }
 assert_eq(v, 16)
