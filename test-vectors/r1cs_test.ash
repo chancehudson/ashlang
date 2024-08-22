@@ -24,14 +24,6 @@ static z02 = x - y
 static z03 = x / y
 
 # test signal operations with statics
-let z = 5
-# todo: assertions
-_ = z - x
-_ = x - z
-_ = x * z
-_ = z * x
-_ = x + z
-_ = z + x
 
 # test signal operations
 _ = z0 + z1

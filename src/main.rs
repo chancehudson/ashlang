@@ -110,7 +110,12 @@ fn main() {
             compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
             let asm = compiler.compile(entry_fn, target);
 
-            let instructions = triton_vm::parser::parse(&asm).unwrap();
+            let instructions = triton_vm::parser::parse(&asm);
+            if let Err(e) = instructions {
+                println!("Failed to parse tasm: {:?}", e);
+                std::process::exit(1);
+            }
+            let instructions = instructions.unwrap();
             let l_instructions =
                 triton_vm::parser::to_labelled_instructions(instructions.as_slice());
             let program = triton_vm::program::Program::new(l_instructions.as_slice());

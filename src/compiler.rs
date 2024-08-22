@@ -17,6 +17,7 @@ pub struct CompilerState {
     pub memory_offset: usize,
     pub called_fn: HashMap<FnCall, u64>,
     pub fn_return_types: HashMap<FnCall, FnCall>,
+    pub is_fn_ash: HashMap<String, bool>,
     pub compiled_fn: HashMap<FnCall, Vec<String>>,
     pub fn_to_ast: HashMap<String, Vec<AstNode>>,
     pub block_counter: usize,
@@ -31,6 +32,7 @@ impl CompilerState {
             fn_return_types: HashMap::new(),
             compiled_fn: HashMap::new(),
             fn_to_ast: HashMap::new(),
+            is_fn_ash: HashMap::new(),
             block_counter: 0,
             block_fn_asm: vec![],
         }
@@ -193,6 +195,7 @@ impl Compiler {
                                 included_fn.insert(fn_name, count);
                             }
                         }
+                        self.state.is_fn_ash.insert(fn_name.clone(), true);
                         self.state.fn_to_ast.insert(fn_name, parser.ast);
                     }
                     "tasm" => {

@@ -37,6 +37,7 @@ impl AsmParser {
                                 arg_types.push(ArgType {
                                     location: VarLocation::Stack,
                                     dimensions: vec![],
+                                    value: None,
                                 });
                             }
                             Rule::dimension => {
@@ -48,6 +49,7 @@ impl AsmParser {
                                 arg_types.push(ArgType {
                                     location: VarLocation::Memory,
                                     dimensions,
+                                    value: None,
                                 });
                             }
                             _ => panic!("unexpected type_header rule: {:?}", v.as_rule()),
