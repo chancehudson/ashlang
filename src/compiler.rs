@@ -260,13 +260,30 @@ impl Compiler {
                 }
                 asm.push("\n".to_string());
 
+                // trivial optimizations
+                let mut final_asm = vec![];
+                final_asm.push(asm[0].clone());
+                for x in 1..asm.len() {
+                    let last = &asm[x - 1];
+                    let curr = &asm[x];
+                    if last == "push 0" && curr == "add" {
+                        final_asm.pop();
+                        continue;
+                    }
+                    if last == "push 1" && curr == "mul" {
+                        final_asm.pop();
+                        continue;
+                    }
+                    final_asm.push(asm[x].clone());
+                }
+
                 if self.print_asm {
                     // prints the assembly
-                    for l in &asm {
+                    for l in &final_asm {
                         println!("{}", l);
                     }
                 }
-                asm.clone().join("\n")
+                final_asm.clone().join("\n")
             }
             _ => {
                 log::error!(&format!("unexpected target: {target}"));
