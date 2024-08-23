@@ -4,6 +4,8 @@ use crate::r1cs::parser::R1csParser;
 use anyhow::Result;
 use std::collections::HashMap;
 
+use super::constraint::R1csConstraint;
+
 pub fn verify<T: FieldElement>(r1cs: &str, witness: Vec<T>) -> Result<()> {
     // confirm that the witness is correct
     let r1cs: R1csParser<T> = R1csParser::new(&r1cs);
@@ -33,14 +35,21 @@ pub fn verify<T: FieldElement>(r1cs: &str, witness: Vec<T>) -> Result<()> {
     Ok(())
 }
 
+pub fn build_str<T: FieldElement>(r1cs: &str, inputs: Vec<T>) -> Result<Vec<T>> {
+    build(&R1csParser::new(r1cs).constraints, inputs)
+}
+
 // Attempt to validate the constraints
 // in an r1cs
-pub fn build<T: FieldElement>(r1cs: &str) -> Result<Vec<T>> {
-    let r1cs: R1csParser<T> = R1csParser::new(&r1cs);
+pub fn build<T: FieldElement>(r1cs: &Vec<R1csConstraint<T>>, inputs: Vec<T>) -> Result<Vec<T>> {
+    // let r1cs: R1csParser<T> = R1csParser::new(&r1cs);
     let mut vars: HashMap<usize, T> = HashMap::new();
     vars.insert(0, T::one());
+    for x in 0..inputs.len() {
+        vars.insert(x + 1, inputs[x].clone());
+    }
     // build the witness
-    for c in &r1cs.constraints {
+    for c in r1cs {
         if !c.symbolic {
             continue;
         }

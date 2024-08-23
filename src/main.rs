@@ -9,6 +9,7 @@ use r1cs::witness;
 use triton_vm::prelude::*;
 
 mod compiler;
+mod folding;
 mod log;
 mod math;
 mod parser;
@@ -73,6 +74,8 @@ fn parse_inputs(inputs: Option<&String>) -> Vec<BFieldElement> {
 }
 
 fn main() {
+    folding::prove();
+    return;
     let matches = cli().get_matches();
     let entry_fn = matches
         .get_one::<String>("ENTRY_FN")
@@ -152,7 +155,7 @@ fn main() {
             }
             compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
             let constraints = compiler.compile(entry_fn, target);
-            let witness = witness::build::<Bn254FieldElement>(&constraints);
+            let witness = witness::build_str::<Bn254FieldElement>(&constraints, vec![]);
             if let Err(e) = witness {
                 println!("Failed to build witness: {:?}", e);
                 std::process::exit(1);

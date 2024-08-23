@@ -51,6 +51,7 @@ pub struct Compiler<T: FieldElement> {
     pub print_asm: bool,
     state: CompilerState<T>,
     extensions: Vec<String>,
+    included_fn: HashMap<String, u64>,
 }
 
 /**
@@ -70,6 +71,7 @@ impl<T: FieldElement> Compiler<T> {
             print_asm: false,
             state: CompilerState::new(),
             extensions,
+            included_fn: HashMap::new(),
         }
     }
 
@@ -152,6 +154,27 @@ impl<T: FieldElement> Compiler<T> {
         Ok(())
     }
 
+    pub fn register_ash_fn(&mut self, fn_name: &str, src: &str) {
+        let parser = AshParser::parse(src, fn_name);
+        for (fn_name, count) in parser.fn_names {
+            if let Some(x) = self.included_fn.get_mut(&fn_name) {
+                *x += count;
+            } else {
+                self.included_fn.insert(fn_name, count);
+            }
+        }
+        self.state.is_fn_ash.insert(fn_name.to_string(), true);
+        self.state.fn_to_ast.insert(fn_name.to_string(), parser.ast);
+    }
+
+    pub fn register_ar1cs_fn(&mut self, fn_name: &str, src: &str) {
+        let parser: R1csParser<T> = R1csParser::new(src);
+        self.state.fn_to_ast.insert(fn_name.to_string(), vec![]);
+        self.state
+            .fn_to_r1cs_parser
+            .insert(fn_name.to_string(), parser);
+    }
+
     // loads, parses, and returns an ashlang function by name
     // returns the function as an ast
     pub fn parse_fn(&self, fn_name: &str) -> (String, String) {
@@ -175,34 +198,30 @@ impl<T: FieldElement> Compiler<T> {
     // parse it and determine what other files are needed
     // repeat until all files have been parsed
     pub fn compile(&mut self, entry_fn_name: &str, target: &str) -> String {
-        let parser = AshParser::parse(&self.parse_fn(entry_fn_name).0, entry_fn_name);
+        let entry_ast;
+        if let Some(ast) = self.state.fn_to_ast.get(entry_fn_name) {
+            entry_ast = ast.clone();
+        } else {
+            let parser = AshParser::parse(&self.parse_fn(entry_fn_name).0, entry_fn_name);
+            entry_ast = parser.ast;
+        }
 
         // tracks total number of includes for a fn in all sources
-        let mut included_fn: HashMap<String, u64> = parser.fn_names.clone();
         // step 1: build ast for all functions
         // each function has a single ast, but multiple implementations
         // based on argument types it is called with
         loop {
-            if included_fn.len() == self.state.fn_to_ast.len() {
+            if self.included_fn.len() == self.state.fn_to_ast.len() {
                 break;
             }
-            for (fn_name, _) in included_fn.clone() {
+            for (fn_name, _) in self.included_fn.clone() {
                 if self.state.fn_to_ast.contains_key(&fn_name) {
                     continue;
                 }
                 let (text, ext) = self.parse_fn(&fn_name);
                 match ext.as_str() {
                     "ash" => {
-                        let parser = AshParser::parse(&text, &fn_name);
-                        for (fn_name, count) in parser.fn_names {
-                            if let Some(x) = included_fn.get_mut(&fn_name) {
-                                *x += count;
-                            } else {
-                                included_fn.insert(fn_name, count);
-                            }
-                        }
-                        self.state.is_fn_ash.insert(fn_name.clone(), true);
-                        self.state.fn_to_ast.insert(fn_name, parser.ast);
+                        self.register_ash_fn(&fn_name, &text);
                     }
                     "tasm" => {
                         let parser = AsmParser::parse(&text, &fn_name);
@@ -217,9 +236,7 @@ impl<T: FieldElement> Compiler<T> {
                             .insert(call_no_return, parser.asm.clone());
                     }
                     "ar1cs" => {
-                        let parser: R1csParser<T> = R1csParser::new(&text);
-                        self.state.fn_to_ast.insert(fn_name.clone(), vec![]);
-                        self.state.fn_to_r1cs_parser.insert(fn_name.clone(), parser);
+                        self.register_ar1cs_fn(&fn_name, &text);
                     }
                     _ => {
                         log::error!(&format!("unexpected file extension: {ext}"));
@@ -232,7 +249,7 @@ impl<T: FieldElement> Compiler<T> {
                 use crate::r1cs::vm::VM;
                 let mut vm: VM<T> = VM::new(&mut self.state);
                 // build constraints from the AST
-                vm.eval_ast(parser.ast);
+                vm.eval_ast(entry_ast);
                 let mut final_constraints: Vec<R1csConstraint<T>> = Vec::new();
                 final_constraints.append(
                     &mut vm
@@ -268,7 +285,7 @@ impl<T: FieldElement> Compiler<T> {
                 use crate::tasm::vm::VM;
                 // step 1: compile the entrypoint to assembly
                 let mut vm: VM<T> = VM::new(&mut self.state);
-                vm.eval_ast(parser.ast, vec![], None);
+                vm.eval_ast(entry_ast, vec![], None);
                 let mut asm = vm.asm.clone();
                 asm.push("halt".to_string());
 
