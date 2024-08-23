@@ -33,12 +33,10 @@ let y = 43
 let v = x * y + x / y - 10
 
 assert_eq(v, 9008875010644336127)
-
-let _ = pow5(v)
-assert_eq(_, 5346463557705224609)
+assert_eq(pow5(v), v * v * v * v * v)
 ```
 
-where `pow5` is implemented as so:
+where [`pow5`](../../stdlib/pow5.ash) is implemented as so:
 ```
 (v)
 
@@ -46,6 +44,13 @@ let v2 = v * v
 let v4 = v2 * v2
 
 return v4 * v
+```
+
+and [`assert_eq`](../../stdlib/assert_eq.ar1cs) is implemented as so:
+```
+(a, b) -> ()
+
+(1*a) * (1*one) - (1*b) # assert equality
 ```
 
 This program compiles to the following `ar1cs`:
@@ -62,7 +67,10 @@ x8 = (9008875010644336127*one) + (0*one) # assert_eq()
 x9 = (1*x7) * (1*x7)                    # let v2
 x10 = (1*x9) * (1*x9)                   # let v4
 x11 = (1*x10) * (1*x7)                  # return call in pow5
-x12 = (5346463557705224609*one) + (0*one) # assert_eq()
+x12 = (1*x7) * (1*x7)                   # return call in pow5
+x13 = (1*x12) * (1*x7)                  # return call in pow5
+x14 = (1*x13) * (1*x7)                  # return call in pow5
+x15 = (1*x14) * (1*x7)                  # return call in pow5
 (18446744069414584320*one) * (18446744069414584320*one) - (1*one) # field safety constraint
 (1*x1) * (1*one) - (99*one)             # assigning literal (99) to signal 1
 (1*x2) * (1*one) - (43*one)             # assigning literal (43) to signal 2
@@ -76,8 +84,11 @@ x12 = (5346463557705224609*one) + (0*one) # assert_eq()
 (1*x7) * (1*x7) - (1*x9)                # multiplication between 7 and 7 into 9
 (1*x9) * (1*x9) - (1*x10)               # multiplication between 9 and 9 into 10
 (1*x10) * (1*x7) - (1*x11)              # multiplication between 10 and 7 into 11
-(1*x12) * (1*one) - (5346463557705224609*one) # assigning literal (5346463557705224609) to signal 12
-(1*x11 + 0*one) * (1*one) - (1*x12)     #
+(1*x7) * (1*x7) - (1*x12)               # multiplication between 7 and 7 into 12
+(1*x12) * (1*x7) - (1*x13)              # multiplication between 12 and 7 into 13
+(1*x13) * (1*x7) - (1*x14)              # multiplication between 13 and 7 into 14
+(1*x14) * (1*x7) - (1*x15)              # multiplication between 14 and 7 into 15
+(1*x11 + 0*one) * (1*one) - (1*x15)     #
 ```
 
 Looking through the constraints it's possible to see how each assignment is constrained and used. For more info on the field safety constraint see [here](https://github.com/chancehudson/ashlang/issues/29).
