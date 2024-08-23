@@ -12,11 +12,19 @@ Constraints are expressed as fixed sequence of `a*b-c` operations. Each of these
 
 Each variable in the line is the dot product of any number of signals.
 
+Example: `(1*x7) * (1*one) - (1*x8)`
+
+Explanation: A signal `x7` is being constrained as equal to `x8`
+
 ### Symbolic constraints
 
 Symbolic constraints allow a prover to calculate a witness without needing a special implementation for each circuit. They define the value of a variable relative to other known variables. Symbolic constraints are discarded by the prover once the witness is calculated.
 
-Symbolic constraints are expressed similarly to constraints, but are written as equalities with the lhs being the signal being defined.
+Symbolic constraints are expressed similarly to constraints, but are written as equalities where the lhs is the signal being defined.
+
+Example: `x3 = (1*x1) * (1*x2)`
+
+Explanation: A signal `x3` is being assigned the value `x1 * x2`
 
 ### Comments
 
