@@ -30,8 +30,8 @@ pub enum AstNode {
 #[derive(Debug, Clone)]
 pub enum Expr {
     VecVec(Vec<Expr>),
-    VecLit(Vec<u64>),
-    Lit(u64),
+    VecLit(Vec<String>),
+    Lit(String),
     Val(String, Vec<Expr>),
     FnCall(String, Vec<Box<Expr>>),
     NumOp {
@@ -172,7 +172,7 @@ impl AshParser {
                         for i in indices {
                             match i {
                                 Expr::Lit(v) => {
-                                    indices_static.push(usize::try_from(v).unwrap());
+                                    indices_static.push(v.parse::<usize>().unwrap());
                                 }
                                 _ => {
                                     anyhow::bail!(
@@ -294,7 +294,7 @@ impl AshParser {
                 }
                 Ok(Expr::Val(name, indices))
             }
-            Rule::literal_dec => Ok(Expr::Lit(pair.as_str().parse::<u64>().unwrap())),
+            Rule::literal_dec => Ok(Expr::Lit(pair.as_str().to_string())),
             Rule::vec => {
                 let mut pair = pair.into_inner();
                 let next = AshParser::next_or_error(&mut pair)?;
@@ -307,10 +307,10 @@ impl AshParser {
                     }
                     Ok(Expr::VecVec(out))
                 } else {
-                    let mut out: Vec<u64> = Vec::new();
-                    out.push(next.as_str().parse::<u64>().unwrap());
+                    let mut out: Vec<String> = Vec::new();
+                    out.push(next.as_str().to_string());
                     for next in pair {
-                        out.push(next.as_str().parse::<u64>().unwrap());
+                        out.push(next.as_str().to_string());
                     }
                     Ok(Expr::VecLit(out))
                 }
@@ -342,7 +342,7 @@ impl AshParser {
                         }
                         Ok(Expr::Val(name, indices))
                     }
-                    Rule::literal_dec => Ok(Expr::Lit(n.as_str().parse::<u64>().unwrap())),
+                    Rule::literal_dec => Ok(Expr::Lit(n.as_str().to_string())),
                     _ => anyhow::bail!("invalid atom"),
                 }
             }

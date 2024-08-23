@@ -11,6 +11,7 @@ use std::ops::Sub;
 use std::ops::SubAssign;
 use std::str::FromStr;
 
+pub mod field_254;
 pub mod field_64;
 pub mod matrix;
 
@@ -33,4 +34,6 @@ pub trait FieldElement:
 {
     fn one() -> Self;
     fn zero() -> Self;
+    fn serialize(&self) -> String;
+    fn deserialize(str: &str) -> Self;
 }

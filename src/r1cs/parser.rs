@@ -111,19 +111,13 @@ impl<T: FieldElement> R1csParser<T> {
                 }
                 if let Some(v) = self.arg_name_index.get(var_index) {
                     // if signal is a variable
-                    out_terms.push((T::from(coef.parse::<u64>().unwrap()), *v));
+                    out_terms.push((T::deserialize(coef), *v));
                 } else {
                     // if coef is a literal
-                    out_terms.push((
-                        T::from(coef.parse::<u64>().unwrap()),
-                        string_to_index(var_index),
-                    ));
+                    out_terms.push((T::deserialize(coef), string_to_index(var_index)));
                 }
             } else {
-                out_terms.push((
-                    T::from(coef.parse::<u64>().unwrap()),
-                    string_to_index(var_index),
-                ));
+                out_terms.push((T::deserialize(coef), string_to_index(var_index)));
             }
         }
         out_terms

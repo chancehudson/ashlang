@@ -85,7 +85,7 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
             out.push_str("(");
             for i in 0..self.a.len() {
                 let (coef, index) = &self.a[i];
-                out.push_str(&format!("{}*{}", coef, index_to_string(index)));
+                out.push_str(&format!("{}*{}", coef.serialize(), index_to_string(index)));
                 if i < self.a.len() - 1 {
                     out.push_str(" + ");
                 }
@@ -96,7 +96,7 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
             ));
             for i in 0..self.b.len() {
                 let (coef, index) = &self.b[i];
-                out.push_str(&format!("{}*{}", coef, index_to_string(index)));
+                out.push_str(&format!("{}*{}", coef.serialize(), index_to_string(index)));
                 if i < self.b.len() - 1 {
                     out.push_str(" + ");
                 }
@@ -114,7 +114,7 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
             out.push_str("(");
             for i in 0..self.a.len() {
                 let (coef, index) = &self.a[i];
-                out.push_str(&format!("{}*{}", coef, index_to_string(index)));
+                out.push_str(&format!("{}*{}", coef.serialize(), index_to_string(index)));
                 if i < self.a.len() - 1 {
                     out.push_str(" + ");
                 }
@@ -122,7 +122,7 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
             out.push_str(") * (");
             for i in 0..self.b.len() {
                 let (coef, index) = &self.b[i];
-                out.push_str(&format!("{}*{}", coef, index_to_string(index)));
+                out.push_str(&format!("{}*{}", coef.serialize(), index_to_string(index)));
                 if i < self.b.len() - 1 {
                     out.push_str(" + ");
                 }
@@ -130,7 +130,7 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
             out.push_str(") - (");
             for i in 0..self.c.len() {
                 let (coef, index) = &self.c[i];
-                out.push_str(&format!("{}*{}", coef, index_to_string(index)));
+                out.push_str(&format!("{}*{}", coef.serialize(), index_to_string(index)));
                 if i < self.c.len() - 1 {
                     out.push_str(" + ");
                 }

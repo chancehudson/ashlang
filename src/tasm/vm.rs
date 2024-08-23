@@ -263,7 +263,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         location: VarLocation::Static,
                         memory_index: None,
                         dimensions: vec![],
-                        value: Some(vec![*v]),
+                        value: Some(vec![(*v).parse::<u64>().unwrap()]),
                     },
                 );
             }
@@ -631,7 +631,11 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
             }
             Expr::VecLit(v) => {
-                let mut vv = v.clone();
+                let mut vv = v
+                    .clone()
+                    .iter()
+                    .map(|v| v.parse::<u64>().unwrap())
+                    .collect();
                 out.append(&mut vv);
             }
             _ => panic!("asf"),
@@ -726,7 +730,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
         let indices = indices
             .iter()
             .map(|v| match v {
-                Expr::Lit(v) => usize::try_from(*v).unwrap(),
+                Expr::Lit(v) => (*v).parse::<usize>().unwrap(),
                 _ => {
                     log::error!("only literals are allowed as static indices");
                 }
@@ -957,7 +961,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     dimensions: vec![],
                     memory_index: None,
                     block_index: self.block_depth,
-                    value: Some(vec![v.clone()]),
+                    value: Some(vec![v.parse::<u64>().unwrap()]),
                 });
             }
             Expr::NumOp { lhs, op, rhs } => {

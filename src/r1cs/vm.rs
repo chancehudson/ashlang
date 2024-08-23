@@ -107,8 +107,8 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         for v in &new_var.value.values {
                             // assigning a constant
                             self.constraints.push(R1csConstraint::new(
-                                vec![(T::from(1), new_var.index.unwrap())],
-                                vec![(T::from(1), 0)],
+                                vec![(T::one(), new_var.index.unwrap())],
+                                vec![(T::one(), 0)],
                                 vec![(v.clone(), 0)],
                                 &format!(
                                     "assigning literal ({v}) to signal {}",
@@ -118,7 +118,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                             self.constraints.push(R1csConstraint::symbolic(
                                 new_var.index.unwrap(),
                                 vec![(v.clone(), 0)],
-                                vec![(T::from(0), 0)],
+                                vec![(T::zero(), 0)],
                                 SymbolicOp::Add,
                                 self.compiler_state.messages[0].clone(),
                             ));
@@ -204,8 +204,8 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                     let index = self.var_index;
                                     self.var_index += 1;
                                     self.constraints.push(R1csConstraint::new(
-                                        vec![(T::from(1), index)],
-                                        vec![(T::from(1), 0)],
+                                        vec![(T::one(), index)],
+                                        vec![(T::one(), 0)],
                                         vec![(v.value.values[0].clone(), 0)],
                                         &format!(
                                             "assigning literal ({}) to signal {index}",
@@ -215,7 +215,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                     self.constraints.push(R1csConstraint::symbolic(
                                         index,
                                         vec![(v.value.values[0].clone(), 0)],
-                                        vec![(T::from(0), 0)],
+                                        vec![(T::zero(), 0)],
                                         SymbolicOp::Add,
                                         self.compiler_state.messages[0].clone(),
                                     ));
@@ -269,7 +269,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
             Expr::Lit(val) => Var {
                 index: None,
                 location: VarLocation::Static,
-                value: Matrix::from(T::from(*val)),
+                value: Matrix::from(T::deserialize(&val)),
             },
             _ => {
                 log::error!("unimplemented expression case");

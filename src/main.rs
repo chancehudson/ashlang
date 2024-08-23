@@ -3,16 +3,17 @@ use clap::arg;
 use clap::Arg;
 use clap::Command;
 use compiler::Compiler;
+use math::field_254::Bn254FieldElement;
 use math::field_64::FoiFieldElement;
 use r1cs::witness;
 use triton_vm::prelude::*;
 
-pub mod compiler;
+mod compiler;
 mod log;
-pub mod math;
-pub mod parser;
-pub mod r1cs;
-pub mod tasm;
+mod math;
+mod parser;
+mod r1cs;
+mod tasm;
 
 fn cli() -> Command {
     Command::new("acc")
@@ -138,7 +139,7 @@ fn main() {
             }
         }
         "r1cs" => {
-            let mut compiler: Compiler<FoiFieldElement> =
+            let mut compiler: Compiler<Bn254FieldElement> =
                 Compiler::new(vec!["ash".to_string(), "ar1cs".to_string()]);
             for p in include_paths {
                 if p.is_empty() {
@@ -151,14 +152,14 @@ fn main() {
             }
             compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
             let constraints = compiler.compile(entry_fn, target);
-            let witness = witness::build::<FoiFieldElement>(&constraints);
+            let witness = witness::build::<Bn254FieldElement>(&constraints);
             if let Err(e) = witness {
                 println!("Failed to build witness: {:?}", e);
                 std::process::exit(1);
             }
             let witness = witness.unwrap();
 
-            if let Err(e) = witness::verify::<FoiFieldElement>(&constraints, witness) {
+            if let Err(e) = witness::verify::<Bn254FieldElement>(&constraints, witness) {
                 println!("Failed to solve r1cs: {:?}", e);
                 std::process::exit(1);
             } else {
