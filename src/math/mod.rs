@@ -12,6 +12,7 @@ use std::ops::SubAssign;
 use std::str::FromStr;
 
 pub mod alt_bn128;
+pub mod curve_25519;
 pub mod foi;
 pub mod matrix;
 
