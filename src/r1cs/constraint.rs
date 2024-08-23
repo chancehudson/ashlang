@@ -28,10 +28,10 @@ pub enum SymbolicOp {
 impl From<&str> for SymbolicOp {
     fn from(input: &str) -> Self {
         match input {
-            "inv" => SymbolicOp::Inv,
-            "mul" => SymbolicOp::Mul,
-            "add" => SymbolicOp::Add,
-            _ => panic!("bad symbolic_op input"),
+            "/" => SymbolicOp::Inv,
+            "*" => SymbolicOp::Mul,
+            "+" => SymbolicOp::Add,
+            _ => panic!("bad symbolic_op input \"{input}\""),
         }
     }
 }
@@ -39,58 +39,106 @@ impl From<&str> for SymbolicOp {
 impl ToString for SymbolicOp {
     fn to_string(&self) -> String {
         match self {
-            SymbolicOp::Inv => "inv".to_owned(),
-            SymbolicOp::Mul => "mul".to_owned(),
-            SymbolicOp::Add => "add".to_owned(),
+            SymbolicOp::Inv => "/".to_owned(),
+            SymbolicOp::Mul => "*".to_owned(),
+            SymbolicOp::Add => "+".to_owned(),
         }
     }
 }
+
+pub fn index_to_string(i: &usize) -> String {
+    if i == &0 {
+        return "one".to_owned();
+    }
+    format!("x{i}")
+}
+
+pub fn string_to_index(s: &str) -> usize {
+    if s == "one" {
+        return 0;
+    }
+    s[1..].parse::<usize>().unwrap()
+}
+
+fn comment_space(s: &str) -> String {
+    if LINE_WIDTH > s.len() {
+        vec![" "; LINE_WIDTH - s.len()].join("")
+    } else {
+        " ".to_string()
+    }
+}
+
+static LINE_WIDTH: usize = 40;
 
 impl<T: FieldElement> ToString for R1csConstraint<T> {
     fn to_string(&self) -> String {
         if self.symbolic {
             let mut out = "".to_owned();
-            out.push_str("{");
-            for (coef, index) in &self.a {
-                out.push_str(&format!("({},{})", coef, index));
-            }
-            out.push_str("}{");
-            for (coef, index) in &self.b {
-                out.push_str(&format!("({},{})", coef, index));
-            }
-            out.push_str("}{");
             // push the signal that should be assigned
             // and the operation that should be applied
             out.push_str(&format!(
-                "({},{})",
-                self.symbolic_op.as_ref().unwrap().to_string(),
-                self.out_i.unwrap()
+                "{} = ",
+                // self.symbolic_op.as_ref().unwrap().to_string(),
+                index_to_string(&self.out_i.unwrap())
             ));
 
-            out.push_str("}");
+            out.push_str("(");
+            for i in 0..self.a.len() {
+                let (coef, index) = &self.a[i];
+                out.push_str(&format!("{}*{}", coef, index_to_string(index)));
+                if i < self.a.len() - 1 {
+                    out.push_str(" + ");
+                }
+            }
+            out.push_str(&format!(
+                ") {} (",
+                self.symbolic_op.as_ref().unwrap().to_string()
+            ));
+            for i in 0..self.b.len() {
+                let (coef, index) = &self.b[i];
+                out.push_str(&format!("{}*{}", coef, index_to_string(index)));
+                if i < self.b.len() - 1 {
+                    out.push_str(" + ");
+                }
+            }
+            out.push_str(")");
+            out.push_str(&comment_space(&out));
             if let Some(comment) = &self.comment {
-                out.push_str(&format!(" # {}", comment));
+                out.push_str(&format!("# {}", comment));
             } else {
-                out.push_str(&format!(" # symbolic"));
+                out.push_str(&format!("# symbolic"));
             }
             out
         } else {
             let mut out = "".to_owned();
-            out.push_str("[");
-            for (coef, index) in &self.a {
-                out.push_str(&format!("({},{})", coef, index));
+            out.push_str("(");
+            for i in 0..self.a.len() {
+                let (coef, index) = &self.a[i];
+                out.push_str(&format!("{}*{}", coef, index_to_string(index)));
+                if i < self.a.len() - 1 {
+                    out.push_str(" + ");
+                }
             }
-            out.push_str("][");
-            for (coef, index) in &self.b {
-                out.push_str(&format!("({},{})", coef, index));
+            out.push_str(") * (");
+            for i in 0..self.b.len() {
+                let (coef, index) = &self.b[i];
+                out.push_str(&format!("{}*{}", coef, index_to_string(index)));
+                if i < self.b.len() - 1 {
+                    out.push_str(" + ");
+                }
             }
-            out.push_str("][");
-            for (coef, index) in &self.c {
-                out.push_str(&format!("({},{})", coef, index));
+            out.push_str(") - (");
+            for i in 0..self.c.len() {
+                let (coef, index) = &self.c[i];
+                out.push_str(&format!("{}*{}", coef, index_to_string(index)));
+                if i < self.c.len() - 1 {
+                    out.push_str(" + ");
+                }
             }
-            out.push_str("]");
+            out.push_str(")");
             if let Some(comment) = &self.comment {
-                out.push_str(&format!(" # {}", comment));
+                out.push_str(&comment_space(&out));
+                out.push_str(&format!("# {}", comment));
             }
             out
         }
@@ -110,13 +158,19 @@ impl<T: FieldElement> R1csConstraint<T> {
         }
     }
 
-    pub fn symbolic(out_i: usize, a: Vec<(T, usize)>, b: Vec<(T, usize)>, op: SymbolicOp) -> Self {
+    pub fn symbolic(
+        out_i: usize,
+        a: Vec<(T, usize)>,
+        b: Vec<(T, usize)>,
+        op: SymbolicOp,
+        comment: String,
+    ) -> Self {
         Self {
             a,
             b,
             c: vec![],
             out_i: Some(out_i),
-            comment: None,
+            comment: Some(comment),
             symbolic: true,
             symbolic_op: Some(op),
         }

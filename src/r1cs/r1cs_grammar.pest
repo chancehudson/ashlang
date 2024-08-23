@@ -6,12 +6,14 @@ type_header = { tuple ~ "->" ~ tuple ~ "\n" }
 
 tuple = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
 
-constraint_line = { constraint ~ constraint ~ constraint ~ COMMENT? }
-symbolic_line = { symbolic ~ symbolic ~ symbolic ~ COMMENT? }
+constraint_line = { constraint ~ "*" ~ constraint ~ "-" ~ constraint ~ COMMENT? }
+symbolic_line = { varname ~ "=" ~ symbolic ~ symbolic_op ~ symbolic ~ COMMENT? }
 
-constraint = { "[" ~ constraint_inner* ~ "]" }
-symbolic = { "{" ~ constraint_inner* ~ "}" }
-constraint_inner = _{ "(" ~ literal ~ "," ~ varname ~ ")" }
+constraint = { "(" ~ (constraint_inner ~ ("+" | ")"))* | ")" }
+constraint_inner = _{ literal ~ "*" ~ varname }
+
+symbolic = { "(" ~ constraint_inner* ~ ")" }
+symbolic_op = { "+" | "*" | "/" }
 
 varname = @{ char+ }
 char = _{ ASCII_ALPHANUMERIC | "_"  }

@@ -32,7 +32,7 @@ pub fn solve(r1cs: &str) -> Result<()> {
                 vars.insert(c.out_i.unwrap(), a * b);
             }
             SymbolicOp::Inv => {
-                vars.insert(c.out_i.unwrap(), FoiFieldElement::one() / a);
+                vars.insert(c.out_i.unwrap(), FoiFieldElement::one() / b);
             }
         }
     }

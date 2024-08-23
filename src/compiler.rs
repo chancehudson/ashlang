@@ -3,6 +3,7 @@ use crate::math::field_64::FoiFieldElement;
 use crate::math::FieldElement;
 use crate::parser::AshParser;
 use crate::parser::AstNode;
+use crate::r1cs::constraint::R1csConstraint;
 use crate::r1cs::parser::R1csParser;
 use crate::tasm::asm_parser::AsmParser;
 use crate::tasm::vm::FnCall;
@@ -25,6 +26,7 @@ pub struct CompilerState<T: FieldElement> {
     pub block_counter: usize,
     pub block_fn_asm: Vec<Vec<String>>,
     pub fn_to_r1cs_parser: HashMap<String, R1csParser<T>>,
+    pub messages: Vec<String>,
 }
 
 impl<T: FieldElement> CompilerState<T> {
@@ -39,6 +41,7 @@ impl<T: FieldElement> CompilerState<T> {
             block_counter: 0,
             block_fn_asm: vec![],
             fn_to_r1cs_parser: HashMap::new(),
+            messages: vec![],
         }
     }
 }
@@ -217,15 +220,7 @@ impl<T: FieldElement> Compiler<T> {
                     "ar1cs" => {
                         let parser: R1csParser<T> = R1csParser::new(&text);
                         self.state.fn_to_ast.insert(fn_name.clone(), vec![]);
-                        // let mut call_no_return = parser.call_type.clone();
-                        // call_no_return.return_type = None;
-                        // self.state
-                        //     .fn_return_types
-                        //     .insert(call_no_return.clone(), parser.call_type.clone());
                         self.state.fn_to_r1cs_parser.insert(fn_name.clone(), parser);
-                        // self.state
-                        //     .compiled_fn
-                        //     .insert(call_no_return, parser.constraints.m);
                     }
                     _ => {
                         log::error!(&format!("unexpected file extension: {ext}"));
@@ -239,13 +234,32 @@ impl<T: FieldElement> Compiler<T> {
                 let mut vm: VM<T> = VM::new(&mut self.state);
                 // build constraints from the AST
                 vm.eval_ast(parser.ast);
+                let mut final_constraints: Vec<R1csConstraint<T>> = Vec::new();
+                final_constraints.append(
+                    &mut vm
+                        .constraints
+                        .iter()
+                        .filter(|v| v.symbolic)
+                        .map(|v| v.clone())
+                        .collect::<Vec<R1csConstraint<T>>>()
+                        .to_vec(),
+                );
+                final_constraints.append(
+                    &mut vm
+                        .constraints
+                        .iter()
+                        .filter(|v| !v.symbolic)
+                        .map(|v| v.clone())
+                        .collect::<Vec<R1csConstraint<T>>>()
+                        .to_vec(),
+                );
                 if self.print_asm {
                     // prints the raw constraints
-                    for c in &vm.constraints {
+                    for c in &final_constraints {
                         println!("{}", c.to_string());
                     }
                 }
-                vm.constraints
+                final_constraints
                     .iter()
                     .map(|v| v.to_string())
                     .collect::<Vec<String>>()

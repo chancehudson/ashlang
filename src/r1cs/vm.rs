@@ -33,6 +33,7 @@ pub struct VM<'a, T: FieldElement> {
     pub constraints: Vec<R1csConstraint<T>>,
     pub args: Vec<Var<T>>,
     pub return_val: Option<Var<T>>,
+    pub name: String,
 }
 
 impl<'a, T: FieldElement> VM<'a, T> {
@@ -47,7 +48,9 @@ impl<'a, T: FieldElement> VM<'a, T> {
             vec![(T::one(), 0)],
             "field safety constraint",
         )];
+        compiler_state.messages.push("".to_string());
         VM {
+            name: "entrypoint".to_string(),
             var_index: 1,
             vars: HashMap::new(),
             compiler_state,
@@ -57,7 +60,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
         }
     }
 
-    pub fn from(vm: &'a mut VM<T>, args: Vec<Var<T>>) -> Self {
+    pub fn from(vm: &'a mut VM<T>, args: Vec<Var<T>>, name: &str) -> Self {
         VM {
             var_index: vm.var_index,
             vars: HashMap::new(),
@@ -65,6 +68,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
             constraints: Vec::new(),
             args,
             return_val: None,
+            name: name.to_string(),
         }
     }
 
@@ -76,6 +80,15 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         log::error!(&format!("variable already defined: {name}"));
                     } else if !is_let && !self.vars.contains_key(&name) {
                         log::error!(&format!("variable does not exist in scope: {name}"));
+                    }
+                    if is_let {
+                        self.compiler_state
+                            .messages
+                            .insert(0, format!("let {name}"));
+                    } else {
+                        self.compiler_state
+                            .messages
+                            .insert(0, format!("re-assign {name}"));
                     }
                     let v = self.eval(&expr);
                     if v.location == VarLocation::Constraint {
@@ -107,6 +120,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                 vec![(v.clone(), 0)],
                                 vec![(T::from(0), 0)],
                                 SymbolicOp::Add,
+                                self.compiler_state.messages[0].clone(),
                             ));
                         }
                         self.vars.insert(name, new_var);
@@ -125,6 +139,9 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     }
                 }
                 AstNode::Rtrn(expr) => {
+                    self.compiler_state
+                        .messages
+                        .insert(0, format!("return call in {}", self.name));
                     if self.return_val.is_some() {
                         log::error!(
                             "return value already set",
@@ -144,6 +161,9 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     self.vars.insert(name, v);
                 }
                 AstNode::ExprUnassigned(expr) => {
+                    self.compiler_state
+                        .messages
+                        .insert(0, format!("unassigned expression"));
                     self.eval(&expr);
                 }
                 _ => {
@@ -162,6 +182,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 panic!("matrix literals must be assigned before operation");
             }
             Expr::FnCall(name, vars) => {
+                self.compiler_state.messages.insert(0, format!("{name}()"));
                 let args: Vec<Var<T>> = vars.into_iter().map(|v| self.eval(&*v)).collect::<_>();
                 // look for an ar1cs implementation first
                 if let Some(v) = self.compiler_state.fn_to_r1cs_parser.get(name) {
@@ -196,6 +217,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                         vec![(v.value.values[0].clone(), 0)],
                                         vec![(T::from(0), 0)],
                                         SymbolicOp::Add,
+                                        self.compiler_state.messages[0].clone(),
                                     ));
                                     return index;
                                 }
@@ -214,7 +236,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     log::error!("function not found: {name}");
                 }
                 let fn_ast = fn_ast.unwrap().clone();
-                let mut vm = VM::from(self, args);
+                let mut vm = VM::from(self, args, name);
                 vm.eval_ast(fn_ast);
                 let return_val = vm.return_val;
                 let new_var_index = vm.var_index;
@@ -339,6 +361,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                             vec![(cv, 0), (T::one(), svi)],
                             vec![(T::one(), 0)],
                             SymbolicOp::Mul,
+                            self.compiler_state.messages[0].clone(),
                         ),
                     ]);
                 }
@@ -370,6 +393,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                             vec![(cv, 0)],
                             vec![(T::one(), svi)],
                             SymbolicOp::Mul,
+                            self.compiler_state.messages[0].clone(),
                         ),
                     ]);
                 }
@@ -403,6 +427,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                 vec![(T::one(), lvi), (-cv.clone(), 0)],
                                 vec![(T::one(), 0)],
                                 SymbolicOp::Mul,
+                                self.compiler_state.messages[0].clone(),
                             ),
                         ]);
                     }
@@ -427,6 +452,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                 vec![(lv, 0), (-T::one(), rvi)],
                                 vec![(T::one(), 0)],
                                 SymbolicOp::Mul,
+                                self.compiler_state.messages[0].clone(),
                             ),
                         ]);
                     }
@@ -463,6 +489,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                 vec![(icv.clone(), lvi)],
                                 vec![(T::one(), 0)],
                                 SymbolicOp::Mul,
+                                self.compiler_state.messages[0].clone(),
                             ),
                         ]);
                     }
@@ -490,9 +517,10 @@ impl<'a, T: FieldElement> VM<'a, T> {
                             ),
                             R1csConstraint::symbolic(
                                 ovi,
+                                vec![(T::one(), 0)],
                                 vec![(T::one(), rvi)],
-                                vec![],
                                 SymbolicOp::Inv,
+                                self.compiler_state.messages[0].clone(),
                             ),
                         ]);
                         // now constrain the new_var
@@ -513,6 +541,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                 vec![(lv.clone(), rvi)],
                                 vec![(T::one(), 0)],
                                 SymbolicOp::Mul,
+                                self.compiler_state.messages[0].clone(),
                             ),
                         ]);
                     }
@@ -551,6 +580,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                             vec![(T::one(), lvi), (T::one(), rvi)],
                             vec![(T::one(), 0)],
                             SymbolicOp::Mul,
+                            self.compiler_state.messages[0].clone(),
                         ),
                     ]);
                 }
@@ -581,6 +611,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                             vec![(T::one(), lvi)],
                             vec![(T::one(), rvi)],
                             SymbolicOp::Mul,
+                            self.compiler_state.messages[0].clone(),
                         ),
                     ]);
                 }
@@ -611,6 +642,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                             vec![(T::one(), lvi), (T::one().neg(), rvi)],
                             vec![(T::one(), 0)],
                             SymbolicOp::Mul,
+                            self.compiler_state.messages[0].clone(),
                         ),
                     ]);
                 }
@@ -638,9 +670,10 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         ),
                         R1csConstraint::symbolic(
                             ovi,
+                            vec![(T::one(), 0)],
                             vec![(T::one(), rvi)],
-                            vec![],
                             SymbolicOp::Inv,
+                            self.compiler_state.messages[0].clone(),
                         ),
                     ]);
                 }
@@ -669,6 +702,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                             vec![(T::one(), lvi)],
                             vec![(T::one(), rvi)],
                             SymbolicOp::Mul,
+                            self.compiler_state.messages[0].clone(),
                         ),
                     ]);
                 }

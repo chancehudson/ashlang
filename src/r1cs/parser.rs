@@ -1,7 +1,8 @@
+use super::constraint::string_to_index;
+use super::constraint::R1csConstraint;
+use super::constraint::SymbolicOp;
 use crate::log;
 use crate::math::FieldElement;
-use crate::r1cs::constraint::R1csConstraint;
-use crate::r1cs::constraint::SymbolicOp;
 use pest::Parser;
 use pest_derive::Parser;
 use std::collections::HashMap;
@@ -116,17 +117,22 @@ impl<T: FieldElement> R1csParser<T> {
                 }
                 Rule::symbolic_line => {
                     let mut pair = pair.into_inner();
+                    let o = pair.next().unwrap();
                     let a = pair.next().unwrap();
                     let a = out.parse_inner(a);
-                    let b = pair.next().unwrap();
-                    let b = out.parse_inner(b);
-                    let c = pair.next().unwrap();
-                    let mut pair = c.into_inner();
                     let op = pair.next().unwrap();
                     let op = SymbolicOp::from(op.as_str());
-                    let out_index = pair.next().unwrap().as_str().parse::<usize>().unwrap();
+                    let b = pair.next().unwrap();
+                    let b = out.parse_inner(b);
+                    let out_index = string_to_index(o.as_str());
+                    let comment;
+                    if let Some(n) = pair.next() {
+                        comment = n.as_str().to_string();
+                    } else {
+                        comment = "".to_string();
+                    }
                     out.constraints
-                        .push(R1csConstraint::symbolic(out_index, a, b, op));
+                        .push(R1csConstraint::symbolic(out_index, a, b, op, comment));
                 }
                 Rule::COMMENT => {}
                 Rule::EOI => {}
@@ -155,13 +161,13 @@ impl<T: FieldElement> R1csParser<T> {
                     // if coef is a literal
                     out_constraint.push((
                         T::from(coef.parse::<u64>().unwrap()),
-                        var_index.parse::<usize>().unwrap(),
+                        string_to_index(var_index),
                     ));
                 }
             } else {
                 out_constraint.push((
                     T::from(coef.parse::<u64>().unwrap()),
-                    var_index.parse::<usize>().unwrap(),
+                    string_to_index(var_index),
                 ));
             }
         }
