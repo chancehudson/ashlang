@@ -42,7 +42,7 @@ impl<T: FieldElement> R1csParser<T> {
                     let mut args_tuple = args.into_inner();
                     while let Some(v) = args_tuple.next() {
                         let varname = v.as_str().to_string();
-                        if let Some(v) = out.arg_name_index.get(&varname) {
+                        if let Some(_) = out.arg_name_index.get(&varname) {
                             println!("ar1cs parse error: duplicate arg name: {}", varname);
                             panic!();
                         }
@@ -50,13 +50,13 @@ impl<T: FieldElement> R1csParser<T> {
                             .insert(varname.clone(), out.arg_name_index.len());
                         out.arg_names.push(varname);
                     }
-                    let returns = pair.next().unwrap();
-                    let mut returns_tuple = returns.into_inner();
-                    while let Some(v) = args_tuple.next() {
-                        // varname
-                        let varname = v.as_str();
-                        println!("{varname}");
-                    }
+                    // let returns = pair.next().unwrap();
+                    // let mut returns_tuple = returns.into_inner();
+                    // while let Some(v) = args_tuple.next() {
+                    //     // varname
+                    //     let varname = v.as_str();
+                    //     println!("{varname}");
+                    // }
                 }
                 Rule::constraint_line => {
                     let mut pair = pair.into_inner();

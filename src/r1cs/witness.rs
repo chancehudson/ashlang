@@ -1,4 +1,3 @@
-use crate::math::field_64::FoiFieldElement;
 use crate::math::FieldElement;
 use crate::r1cs::constraint::SymbolicOp;
 use crate::r1cs::parser::R1csParser;

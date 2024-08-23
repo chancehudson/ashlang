@@ -1,5 +1,4 @@
 use crate::log;
-use crate::math::field_64::FoiFieldElement;
 use crate::math::FieldElement;
 use crate::parser::AshParser;
 use crate::parser::AstNode;
