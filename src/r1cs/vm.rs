@@ -186,7 +186,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 let args: Vec<Var<T>> = vars.into_iter().map(|v| self.eval(&*v)).collect::<_>();
                 // look for an ar1cs implementation first
                 if let Some(v) = self.compiler_state.fn_to_r1cs_parser.get(name) {
-                    let mut out_constraints = v.constraints_for_args(
+                    let mut out_constraints = v.signals_as_args(
                         args.iter()
                             .map(|v| {
                                 if let Some(i) = v.index {
@@ -262,7 +262,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 if let Some(v) = self.vars.get(name) {
                     return v.clone();
                 } else {
-                    log::error!("variable not found: {name}");
+                    log::error!(&format!("variable not found: {name}"));
                 }
             }
             Expr::NumOp { lhs, op, rhs } => self.eval_numop(&*lhs, op, &*rhs),

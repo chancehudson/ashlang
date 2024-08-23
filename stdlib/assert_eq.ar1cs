@@ -7,7 +7,7 @@
 #
 # an extra (0,one) is added below
 # this evaluates to 0 and is thus a no-op
-(1*a + 0*one) * (0*one) - (1*b) # assert equality
+(1*a + 0*one) * (1*one) - (1*b) # assert equality
 
 # no symbolic constraint necessary
 # only operating on known values

@@ -28,11 +28,14 @@ Consider the following program:
 
 ```
 let x = 99
-let y = 1
+let y = 43
 
 let v = x * y + x / y - 10
 
+assert_eq(v, 9008875010644336127)
+
 let _ = pow5(v)
+assert_eq(_, 5346463557705224609)
 ```
 
 where `pow5` is implemented as so:
@@ -49,26 +52,32 @@ This program compiles to the following `ar1cs`:
 
 ```
 x1 = (99*one) + (0*one)                 # let x
-x2 = (1*one) + (0*one)                  # let y
+x2 = (43*one) + (0*one)                 # let y
 x3 = (1*x1) * (1*x2)                    # let v
 x4 = (1*one) / (1*x2)                   # let v
 x5 = (1*x1) * (1*x4)                    # let v
 x6 = (1*x3 + 1*x5) * (1*one)            # let v
 x7 = (1*x6 + 18446744069414584311*one) * (1*one) # let v
-x8 = (1*x7) * (1*x7)                    # let v2
-x9 = (1*x8) * (1*x8)                    # let v4
-x10 = (1*x9) * (1*x7)                   # return call in pow5
+x8 = (9008875010644336127*one) + (0*one) # assert_eq()
+x9 = (1*x7) * (1*x7)                    # let v2
+x10 = (1*x9) * (1*x9)                   # let v4
+x11 = (1*x10) * (1*x7)                  # return call in pow5
+x12 = (5346463557705224609*one) + (0*one) # assert_eq()
 (18446744069414584320*one) * (18446744069414584320*one) - (1*one) # field safety constraint
 (1*x1) * (1*one) - (99*one)             # assigning literal (99) to signal 1
-(1*x2) * (1*one) - (1*one)              # assigning literal (1) to signal 2
+(1*x2) * (1*one) - (43*one)             # assigning literal (43) to signal 2
 (1*x1) * (1*x2) - (1*x3)                # multiplication between 1 and 2 into 3
 (1*x2) * (1*x4) - (1*one)               # inversion of 2 into 4 (1/2)
 (1*x1) * (1*x4) - (1*x5)                # multiplication of 1 and 4 into 5 (2/2)
 (1*x3 + 1*x5) * (1*one) - (1*x6)        # addition between 3 and 5 into 6
 (10*one + 1*x7) * (1*one) - (1*x6)      # subtraction between 6 and (10) into 7
-(1*x7) * (1*x7) - (1*x8)                # multiplication between 7 and 7 into 8
-(1*x8) * (1*x8) - (1*x9)                # multiplication between 8 and 8 into 9
-(1*x9) * (1*x7) - (1*x10)               # multiplication between 9 and 7 into 10
+(1*x8) * (1*one) - (9008875010644336127*one) # assigning literal (9008875010644336127) to signal 8
+(1*x7 + 0*one) * (1*one) - (1*x8)       #
+(1*x7) * (1*x7) - (1*x9)                # multiplication between 7 and 7 into 9
+(1*x9) * (1*x9) - (1*x10)               # multiplication between 9 and 9 into 10
+(1*x10) * (1*x7) - (1*x11)              # multiplication between 10 and 7 into 11
+(1*x12) * (1*one) - (5346463557705224609*one) # assigning literal (5346463557705224609) to signal 12
+(1*x11 + 0*one) * (1*one) - (1*x12)     #
 ```
 
 Looking through the constraints it's possible to see how each assignment is constrained and used. For more info on the field safety constraint see [here](https://github.com/chancehudson/ashlang/issues/29).

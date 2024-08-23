@@ -19,53 +19,6 @@ pub struct R1csParser<T: FieldElement> {
 }
 
 impl<T: FieldElement> R1csParser<T> {
-    pub fn constraints_for_args(&self, mut args: Vec<usize>) -> Vec<R1csConstraint<T>> {
-        // map self.constraints signal indices to a argument indices
-        let mut signal_map: HashMap<usize, usize> = HashMap::new();
-        // push the 1 signal to the front of the arg list
-        args.insert(0, 0);
-        if args.len() != self.arg_names.len() {
-            log::error!(&format!(
-                "error calling function, incorrect number of arguments, got {} expected {}",
-                args.len(),
-                self.arg_names.len()
-            ));
-        }
-        for x in 0..args.len() {
-            let local_index = self.arg_name_index.get(&self.arg_names[x]);
-            if let Some(local_index) = local_index {
-                signal_map.insert(*local_index, args[x]);
-            } else {
-                unreachable!();
-            }
-        }
-        self.constraints
-            .iter()
-            .map(|constraint| {
-                let mut new_constraint = constraint.clone();
-                new_constraint.a = constraint
-                    .a
-                    .clone()
-                    .iter()
-                    .map(|v| (v.0.clone(), *signal_map.get(&v.1).unwrap()))
-                    .collect::<Vec<_>>();
-                new_constraint.b = constraint
-                    .b
-                    .clone()
-                    .iter()
-                    .map(|v| (v.0.clone(), *signal_map.get(&v.1).unwrap()))
-                    .collect::<Vec<_>>();
-                new_constraint.c = constraint
-                    .c
-                    .clone()
-                    .iter()
-                    .map(|v| (v.0.clone(), *signal_map.get(&v.1).unwrap()))
-                    .collect::<Vec<_>>();
-                new_constraint
-            })
-            .collect::<Vec<_>>()
-    }
-
     pub fn new(source: &str) -> Self {
         let mut out = R1csParser {
             constraints: Vec::new(),
@@ -144,8 +97,11 @@ impl<T: FieldElement> R1csParser<T> {
 
     pub fn parse_inner(&mut self, p: pest::iterators::Pair<Rule>) -> Vec<(T, usize)> {
         let mut pair = p.into_inner();
-        let mut out_constraint = Vec::new();
+        let mut out_terms = Vec::new();
         while let Some(v) = pair.next() {
+            if v.as_rule() == Rule::COMMENT {
+                break;
+            }
             let coef = v.as_str();
             let var_index = pair.next().unwrap().as_str();
             if self.is_function {
@@ -154,23 +110,69 @@ impl<T: FieldElement> R1csParser<T> {
                     panic!("cannot access signals by literal in ar1cs source");
                 }
                 if let Some(v) = self.arg_name_index.get(var_index) {
-                    // if coef is a variable
-                    out_constraint.push((T::from(coef.parse::<u64>().unwrap()), *v));
+                    // if signal is a variable
+                    out_terms.push((T::from(coef.parse::<u64>().unwrap()), *v));
                 } else {
-                    println!("{}", var_index);
                     // if coef is a literal
-                    out_constraint.push((
+                    out_terms.push((
                         T::from(coef.parse::<u64>().unwrap()),
                         string_to_index(var_index),
                     ));
                 }
             } else {
-                out_constraint.push((
+                out_terms.push((
                     T::from(coef.parse::<u64>().unwrap()),
                     string_to_index(var_index),
                 ));
             }
         }
-        out_constraint
+        out_terms
+    }
+
+    pub fn signals_as_args(&self, mut args: Vec<usize>) -> Vec<R1csConstraint<T>> {
+        // map self.constraints signal indices to a argument indices
+        let mut signal_map: HashMap<usize, usize> = HashMap::new();
+        // push the 1 signal to the front of the arg list
+        args.insert(0, 0);
+        if args.len() != self.arg_names.len() {
+            log::error!(&format!(
+                "error calling function, incorrect number of arguments, got {} expected {}",
+                args.len(),
+                self.arg_names.len()
+            ));
+        }
+        for x in 0..args.len() {
+            let local_index = self.arg_name_index.get(&self.arg_names[x]);
+            if let Some(local_index) = local_index {
+                signal_map.insert(*local_index, args[x]);
+            } else {
+                unreachable!();
+            }
+        }
+        self.constraints
+            .iter()
+            .map(|constraint| {
+                let mut new_constraint = constraint.clone();
+                new_constraint.a = constraint
+                    .a
+                    .clone()
+                    .iter()
+                    .map(|v| (v.0.clone(), *signal_map.get(&v.1).unwrap()))
+                    .collect::<Vec<_>>();
+                new_constraint.b = constraint
+                    .b
+                    .clone()
+                    .iter()
+                    .map(|v| (v.0.clone(), *signal_map.get(&v.1).unwrap()))
+                    .collect::<Vec<_>>();
+                new_constraint.c = constraint
+                    .c
+                    .clone()
+                    .iter()
+                    .map(|v| (v.0.clone(), *signal_map.get(&v.1).unwrap()))
+                    .collect::<Vec<_>>();
+                new_constraint
+            })
+            .collect::<Vec<_>>()
     }
 }
