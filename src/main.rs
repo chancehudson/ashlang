@@ -4,14 +4,15 @@ use clap::Arg;
 use clap::Command;
 use compiler::Compiler;
 use math::field_64::FoiFieldElement;
+use r1cs::witness;
 use triton_vm::prelude::*;
 
-mod compiler;
+pub mod compiler;
 mod log;
-mod math;
-mod parser;
-mod r1cs;
-mod tasm;
+pub mod math;
+pub mod parser;
+pub mod r1cs;
+pub mod tasm;
 
 fn cli() -> Command {
     Command::new("acc")
@@ -150,9 +151,19 @@ fn main() {
             }
             compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
             let constraints = compiler.compile(entry_fn, target);
-            if let Err(e) = r1cs::solver::solve(&constraints) {
+            let witness = witness::build::<FoiFieldElement>(&constraints);
+            if let Err(e) = witness {
+                println!("Failed to build witness: {:?}", e);
+                std::process::exit(1);
+            }
+            let witness = witness.unwrap();
+
+            if let Err(e) = witness::verify::<FoiFieldElement>(&constraints, witness) {
                 println!("Failed to solve r1cs: {:?}", e);
                 std::process::exit(1);
+            } else {
+                println!("");
+                println!("R1CS: built and validated witness ✅");
             }
         }
         _ => {
