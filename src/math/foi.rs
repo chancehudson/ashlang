@@ -14,6 +14,10 @@ impl FieldElement for BFieldElement {
         BFieldElement::from(1)
     }
 
+    fn prime() -> num_bigint::BigUint {
+        num_bigint::BigUint::from(BFieldElement::P)
+    }
+
     fn serialize(&self) -> String {
         self.value().to_string()
     }

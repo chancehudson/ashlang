@@ -243,6 +243,7 @@ dependencies = [
  "ff",
  "lazy_static",
  "num-bigint",
+ "num-integer",
  "pest",
  "pest_derive",
  "triton-vm",

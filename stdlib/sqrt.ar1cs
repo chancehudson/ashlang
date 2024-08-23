@@ -1,0 +1,8 @@
+(a, b) -> ()
+
+# radix = √
+# square (2) root
+b = (2*one)radix(a*a)
+
+# constrain that b*b = a
+(1*b)*(1*b) - (1*a)

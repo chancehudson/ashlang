@@ -6,6 +6,7 @@ use compiler::Compiler;
 use math::alt_bn128::Bn128FieldElement;
 use math::curve_25519::Curve25519FieldElement;
 use math::foi::FoiFieldElement;
+use math::FieldElement;
 use r1cs::witness;
 use triton_vm::prelude::*;
 
@@ -74,6 +75,10 @@ fn parse_inputs(inputs: Option<&String>) -> Vec<BFieldElement> {
 }
 
 fn main() {
+    let root = math::sqrt::<FoiFieldElement>(FoiFieldElement::from(100_u32));
+    println!("roots: {} {}", root, -root);
+    println!("{}", root * -root);
+    return;
     let matches = cli().get_matches();
     let entry_fn = matches
         .get_one::<String>("ENTRY_FN")

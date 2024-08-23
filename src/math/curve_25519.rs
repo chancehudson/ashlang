@@ -27,6 +27,10 @@ impl FieldElement for Curve25519FieldElement {
         Self::from(Curve25519FieldElement(Scalar::ONE))
     }
 
+    fn prime() -> BigUint {
+        BigUint::from_str(Scalar::MODULUS).unwrap()
+    }
+
     fn serialize(&self) -> String {
         self.clone().to_string()
     }
