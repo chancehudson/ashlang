@@ -1,6 +1,6 @@
 use crate::compiler::CompilerState;
 use crate::log;
-use crate::math::field_64::FoiFieldElement;
+use crate::math::foi::FoiFieldElement;
 use crate::math::FieldElement;
 use crate::parser::AstNode;
 use crate::parser::BoolOp;

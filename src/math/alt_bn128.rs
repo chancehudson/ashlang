@@ -2,7 +2,7 @@ use super::FieldElement;
 use ark_bn254::Fr;
 use ark_std::str::FromStr;
 
-pub type Bn254FieldElement = Fr;
+pub type Bn128FieldElement = Fr;
 
 impl FieldElement for Fr {
     fn zero() -> Self {

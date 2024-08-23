@@ -11,8 +11,8 @@ use std::ops::Sub;
 use std::ops::SubAssign;
 use std::str::FromStr;
 
-pub mod field_254;
-pub mod field_64;
+pub mod alt_bn128;
+pub mod foi;
 pub mod matrix;
 
 pub trait FieldElement:
