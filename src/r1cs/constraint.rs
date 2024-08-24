@@ -209,7 +209,7 @@ impl<T: FieldElement> R1csConstraint<T> {
                     b.sqrt()
                 } else {
                     crate::log::error!(&format!(
-                        "cannot take square root of residue element: {}",
+                        "cannot take square root of non-residue element: {}",
                         b.serialize()
                     ));
                 }

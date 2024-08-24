@@ -140,7 +140,7 @@ fn main() {
             }
         }
         "r1cs" => {
-            let mut compiler: Compiler<Curve25519FieldElement> =
+            let mut compiler: Compiler<FoiFieldElement> =
                 Compiler::new(vec!["ash".to_string(), "ar1cs".to_string()]);
             for p in include_paths {
                 if p.is_empty() {
@@ -153,14 +153,14 @@ fn main() {
             }
             compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
             let constraints = compiler.compile(entry_fn, target);
-            let witness = witness::build::<Curve25519FieldElement>(&constraints);
+            let witness = witness::build::<FoiFieldElement>(&constraints);
             if let Err(e) = witness {
                 println!("Failed to build witness: {:?}", e);
                 std::process::exit(1);
             }
             let witness = witness.unwrap();
 
-            if let Err(e) = witness::verify::<Curve25519FieldElement>(&constraints, witness) {
+            if let Err(e) = witness::verify::<FoiFieldElement>(&constraints, witness) {
                 println!("Failed to solve r1cs: {:?}", e);
                 std::process::exit(1);
             } else {
