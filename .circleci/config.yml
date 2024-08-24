@@ -1,20 +1,34 @@
 version: 2.1
 workflows:
-  test:
+  all:
     jobs:
       - lint
       - clippy
+      - r1cs
+      - tasm
       - tests:
           matrix:
             parameters:
-              rust-version: ["stable", "beta", "nightly"]
+              rust-version: ["1.79.0", "beta", "nightly"]
 
 step_defs:
   - run: &rust_version
-      name: Set Rust version
+      name: Set Rust version stable
       command: |
+        curl -o rustup https://sh.rustup.rs
+        bash rustup -y
+        . "$HOME/.cargo/env"
         rustup update << parameters.rust-version >>
         rustup default << parameters.rust-version >>
+        rustup component add clippy
+  - run: &build_version_stable
+      name: Set Rust version
+      command: |
+        curl -o rustup https://sh.rustup.rs
+        bash rustup -y
+        . "$HOME/.cargo/env"
+        rustup update 1.79.0
+        rustup default 1.79.0
         rustup component add clippy
 
 jobs:
@@ -23,7 +37,7 @@ jobs:
       image: ubuntu-2204:current
     steps:
       - checkout
-      - run: *rust_version
+      - run: *build_version_stable
       - run:
           name: Clippy
           command: cargo clippy
@@ -32,11 +46,14 @@ jobs:
       image: ubuntu-2204:current
     steps:
       - checkout
-      - run: *rust_version
+      - run: *build_version_stable
       - run:
           name: Lint
           command: cargo fmt --all -- --check
   tests:
+    parameters:
+      rust-version:
+        type: string
     machine:
       image: ubuntu-2204:current
     steps:
@@ -48,3 +65,33 @@ jobs:
       - run:
           name: Test
           command: cargo test
+  compile-r1cs:
+    machine:
+      image: ubuntu-2204:current
+    steps:
+      - checkout
+      - run: *build_version_stable
+      - run:
+          name: Build
+          command: cargo build --release
+      - run:
+          name: Run r1cs test
+          command: cargo run --release -- r1cs_test -t r1cs -i ./test-vectors -i stdlib -v -f foi
+      - run:
+          name: Run r1cs readme test
+          command: cargo run --release -- r1cs_readme -t r1cs -i ./test-vectors -i stdlib -v -f foi
+  compile-tasm:
+    machine:
+      image: ubuntu-2204:current
+    steps:
+      - checkout
+      - run: *build_version_stable
+      - run:
+          name: Build
+          command: cargo build --release
+      - run:
+          name: Build
+          command: cargo build --release
+      - run:
+          name: Run TritonVM tests
+          command: sh ./test.sh
