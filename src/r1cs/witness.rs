@@ -1,5 +1,4 @@
 use crate::math::FieldElement;
-use crate::r1cs::constraint::SymbolicOp;
 use crate::r1cs::parser::R1csParser;
 use anyhow::Result;
 use std::collections::HashMap;
@@ -44,25 +43,7 @@ pub fn build<T: FieldElement>(r1cs: &str) -> Result<Vec<T>> {
         if !c.symbolic {
             continue;
         }
-        let mut a = T::zero();
-        for (coef, index) in &c.a {
-            a += coef.clone() * vars.get(&index).unwrap().clone();
-        }
-        let mut b = T::zero();
-        for (coef, index) in &c.b {
-            b += coef.clone() * vars.get(&index).unwrap().clone();
-        }
-        match c.symbolic_op.as_ref().unwrap() {
-            SymbolicOp::Add => {
-                vars.insert(c.out_i.unwrap(), a + b);
-            }
-            SymbolicOp::Mul => {
-                vars.insert(c.out_i.unwrap(), a * b);
-            }
-            SymbolicOp::Inv => {
-                vars.insert(c.out_i.unwrap(), T::one() / b);
-            }
-        }
+        vars.insert(c.out_i.unwrap(), c.solve_symbolic(&vars));
     }
     let mut out = vars.keys().map(|k| *k).collect::<Vec<usize>>();
     out.sort();

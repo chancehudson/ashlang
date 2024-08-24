@@ -77,3 +77,8 @@ static b = pow5_static(2)
 assert_eq(b, 32)
 
 a = b
+
+# test sqrt
+
+let out = sqrt(9)
+assert_eq(out, 3)
