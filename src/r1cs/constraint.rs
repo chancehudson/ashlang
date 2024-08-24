@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::math::FieldElement;
 
 // a b and c represent values in
@@ -23,6 +25,7 @@ pub enum SymbolicOp {
     Inv,
     Mul,
     Add,
+    Sqrt,
 }
 
 impl From<&str> for SymbolicOp {
@@ -31,6 +34,7 @@ impl From<&str> for SymbolicOp {
             "/" => SymbolicOp::Inv,
             "*" => SymbolicOp::Mul,
             "+" => SymbolicOp::Add,
+            "radix" => SymbolicOp::Sqrt,
             _ => panic!("bad symbolic_op input \"{input}\""),
         }
     }
@@ -42,6 +46,7 @@ impl ToString for SymbolicOp {
             SymbolicOp::Inv => "/".to_owned(),
             SymbolicOp::Mul => "*".to_owned(),
             SymbolicOp::Add => "+".to_owned(),
+            SymbolicOp::Sqrt => "radix".to_owned(),
         }
     }
 }
@@ -173,6 +178,31 @@ impl<T: FieldElement> R1csConstraint<T> {
             comment: Some(comment),
             symbolic: true,
             symbolic_op: Some(op),
+        }
+    }
+
+    pub fn solve_symbolic(&self, vars: &HashMap<usize, T>) -> T {
+        if !self.symbolic {
+            panic!("not a symbolic constraint");
+        }
+        let mut a = T::zero();
+        for (coef, index) in &self.a {
+            a += coef.clone() * vars.get(&index).unwrap().clone();
+        }
+        let mut b = T::zero();
+        for (coef, index) in &self.b {
+            b += coef.clone() * vars.get(&index).unwrap().clone();
+        }
+        match self.symbolic_op.as_ref().unwrap() {
+            SymbolicOp::Add => a + b,
+            SymbolicOp::Mul => a * b,
+            SymbolicOp::Inv => T::one() / b,
+            SymbolicOp::Sqrt => {
+                if a != (T::one() + T::one()) {
+                    panic!("Cannot calculate non-square root");
+                }
+                b.sqrt()
+            }
         }
     }
 }

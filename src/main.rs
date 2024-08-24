@@ -3,7 +3,7 @@ use clap::arg;
 use clap::Arg;
 use clap::Command;
 use compiler::Compiler;
-use math::alt_bn128::Bn128FieldElement;
+// use math::alt_bn128::Bn128FieldElement;
 use math::curve_25519::Curve25519FieldElement;
 use math::foi::FoiFieldElement;
 use r1cs::witness;

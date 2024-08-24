@@ -19,6 +19,20 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+  test:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.79.0
+          override: true
+      - name: Build
+        run: cargo build
+      - name: Test
+        run: cargo test
   compile-r1cs:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name

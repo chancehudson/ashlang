@@ -1,19 +1,19 @@
 program = _{ SOI ~ stmt }
 
-stmt = _{ type_header? ~ "\n"* ~ (constraint_line | symbolic_line | "\n")* ~ ("\n" | EOI) }
+stmt = _{ type_header? ~ "\n"* ~ (((constraint_line | symbolic_line | comment_line) ~ comment?) | "\n")* ~ ("\n" | EOI) }
 
 type_header = { tuple ~ "->" ~ tuple ~ "\n" }
 
 tuple = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
 
-constraint_line = { constraint ~ "*" ~ constraint ~ "-" ~ constraint ~ COMMENT? }
-symbolic_line   = { varname ~ "=" ~ symbolic ~ symbolic_op ~ symbolic ~ COMMENT? }
+constraint_line = { constraint ~ "*" ~ constraint ~ "-" ~ constraint }
+symbolic_line   = { varname ~ "=" ~ symbolic ~ symbolic_op ~ symbolic }
 
-constraint       = { "(" ~ (constraint_inner ~ ("+" | ")"))+ | ")" }
+constraint       =  { "(" ~ (constraint_inner ~ ("+" | ")"))+ | ")" }
 constraint_inner = _{ literal ~ "*" ~ varname }
 
 symbolic    = { "(" ~ (constraint_inner ~ ("+" | ")"))+ | ")" }
-symbolic_op =  { "+" | "*" | "/" }
+symbolic_op = { "+" | "*" | "/" | "radix" }
 
 varname = @{ char+ }
 char    = _{ ASCII_ALPHANUMERIC | "_" }
@@ -21,5 +21,9 @@ char    = _{ ASCII_ALPHANUMERIC | "_" }
 literal     = @{ ASCII_ALPHANUMERIC+ }
 literal_dec = @{ ASCII_DIGIT+ }
 
-COMMENT    =  { "#" ~ (!"\n" ~ ANY)* }
-WHITESPACE = _{ " " }
+comment_text = { (!"\n" ~ ANY)* }
+comment      = { "#" ~ comment_text }
+// use an identical separate rule for lines
+// so we can ignore them
+comment_line =  { "#" ~ comment_text }
+WHITESPACE   = _{ " " }

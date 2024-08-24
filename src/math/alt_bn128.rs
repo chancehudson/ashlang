@@ -1,5 +1,6 @@
 use super::FieldElement;
 use ark_bn254::Fr;
+use ark_ff::PrimeField;
 use ark_std::str::FromStr;
 
 pub type Bn128FieldElement = Fr;
@@ -11,6 +12,10 @@ impl FieldElement for Fr {
 
     fn one() -> Self {
         Self::from_str("1").unwrap()
+    }
+
+    fn prime() -> num_bigint::BigUint {
+        Self::MODULUS.into()
     }
 
     // why does arkworks serialize 0 to an empty string?

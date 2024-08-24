@@ -182,54 +182,65 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 panic!("matrix literals must be assigned before operation");
             }
             Expr::FnCall(name, vars) => {
+                // TODO: break this into separate functions
                 self.compiler_state.messages.insert(0, format!("{name}()"));
                 let args: Vec<Var<T>> = vars.into_iter().map(|v| self.eval(&*v)).collect::<_>();
                 // look for an ar1cs implementation first
                 if let Some(v) = self.compiler_state.fn_to_r1cs_parser.get(name) {
-                    let mut out_constraints = v.signals_as_args(
-                        args.iter()
-                            .map(|v| {
-                                if let Some(i) = v.index {
-                                    return i;
-                                } else {
-                                    if v.value.len() != 1 {
-                                        log::error!(
-                                            "cannot pass a vector static to an r1cs function"
-                                        );
-                                    }
-                                    // if we get a static variable we need to
-                                    // assert equality of it's current value
-                                    // to turn it into a signal
-                                    // log::error!("cannot pass a static variable to a r1cs function");
-                                    let index = self.var_index;
-                                    self.var_index += 1;
-                                    self.constraints.push(R1csConstraint::new(
-                                        vec![(T::one(), index)],
-                                        vec![(T::one(), 0)],
-                                        vec![(v.value.values[0].clone(), 0)],
-                                        &format!(
-                                            "assigning literal ({}) to signal {index}",
-                                            v.value.values[0]
-                                        ),
-                                    ));
-                                    self.constraints.push(R1csConstraint::symbolic(
-                                        index,
-                                        vec![(v.value.values[0].clone(), 0)],
-                                        vec![(T::zero(), 0)],
-                                        SymbolicOp::Add,
-                                        self.compiler_state.messages[0].clone(),
-                                    ));
-                                    return index;
-                                }
-                            })
-                            .collect::<Vec<_>>(),
-                    );
-                    self.constraints.append(&mut out_constraints);
-                    return Var {
-                        index: None,
-                        location: VarLocation::Static,
-                        value: Matrix::from(T::one()),
-                    };
+                    let constrain_args_if_needed = args
+                        .iter()
+                        .map(|v| {
+                            if let Some(i) = v.index {
+                                return i;
+                            }
+                            if v.value.len() != 1 {
+                                log::error!("cannot pass a vector static to an r1cs function");
+                            }
+                            // if we get a static variable we need to
+                            // assert equality of it's current value
+                            // to turn it into a signal
+                            // log::error!("cannot pass a static variable to a r1cs function");
+                            let index = self.var_index;
+                            self.var_index += 1;
+                            self.constraints.push(R1csConstraint::new(
+                                vec![(T::one(), index)],
+                                vec![(T::one(), 0)],
+                                vec![(v.value.values[0].clone(), 0)],
+                                &format!(
+                                    "assigning literal ({}) to signal {index}",
+                                    v.value.values[0]
+                                ),
+                            ));
+                            self.constraints.push(R1csConstraint::symbolic(
+                                index,
+                                vec![(v.value.values[0].clone(), 0)],
+                                vec![(T::zero(), 0)],
+                                SymbolicOp::Add,
+                                self.compiler_state.messages[0].clone(),
+                            ));
+                            return index;
+                        })
+                        .collect::<Vec<_>>();
+                    let out_constraints =
+                        v.signals_as_args(self.var_index, constrain_args_if_needed);
+                    self.constraints.append(&mut out_constraints.clone());
+                    let return_index = self.var_index;
+                    self.var_index += v.return_names.len();
+                    if v.return_names.len() > 0 {
+                        return Var {
+                            index: Some(return_index),
+                            location: VarLocation::Constraint,
+                            // TODO: determine a value here
+                            // use the symbolic constraint to determine the value
+                            value: Matrix::from(T::zero()),
+                        };
+                    } else {
+                        return Var {
+                            index: None,
+                            location: VarLocation::Static,
+                            value: Matrix::from(T::one()),
+                        };
+                    }
                 }
                 let fn_ast = self.compiler_state.fn_to_ast.get(name);
                 if fn_ast.is_none() {
