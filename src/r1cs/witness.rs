@@ -5,10 +5,10 @@ use std::collections::HashMap;
 
 pub fn verify<T: FieldElement>(r1cs: &str, witness: Vec<T>) -> Result<()> {
     // confirm that the witness is correct
-    let r1cs: R1csParser<T> = R1csParser::new(&r1cs);
+    let r1cs: R1csParser<T> = R1csParser::new(r1cs);
     let mut vars: HashMap<usize, T> = HashMap::new();
-    for x in 0..witness.len() {
-        vars.insert(x, witness[x].clone());
+    for (i, v) in witness.iter().enumerate() {
+        vars.insert(i, v.clone());
     }
 
     for c in &r1cs.constraints {
@@ -17,15 +17,15 @@ pub fn verify<T: FieldElement>(r1cs: &str, witness: Vec<T>) -> Result<()> {
         }
         let mut a_lc = T::zero();
         for (coef, index) in &c.a {
-            a_lc += coef.clone() * vars.get(&index).unwrap().clone();
+            a_lc += coef.clone() * vars.get(index).unwrap().clone();
         }
         let mut b_lc = T::zero();
         for (coef, index) in &c.b {
-            b_lc += coef.clone() * vars.get(&index).unwrap().clone();
+            b_lc += coef.clone() * vars.get(index).unwrap().clone();
         }
         let mut c_lc = T::zero();
         for (coef, index) in &c.c {
-            c_lc += coef.clone() * vars.get(&index).unwrap().clone();
+            c_lc += coef.clone() * vars.get(index).unwrap().clone();
         }
         if a_lc.clone() * b_lc.clone() != c_lc {
             anyhow::bail!("Constraint failed: {:?}", c)
@@ -37,7 +37,7 @@ pub fn verify<T: FieldElement>(r1cs: &str, witness: Vec<T>) -> Result<()> {
 // Attempt to validate the constraints
 // in an r1cs
 pub fn build<T: FieldElement>(r1cs: &str) -> Result<Vec<T>> {
-    let r1cs: R1csParser<T> = R1csParser::new(&r1cs);
+    let r1cs: R1csParser<T> = R1csParser::new(r1cs);
     let mut vars: HashMap<usize, T> = HashMap::new();
     vars.insert(0, T::one());
     // build the witness
@@ -47,7 +47,7 @@ pub fn build<T: FieldElement>(r1cs: &str) -> Result<Vec<T>> {
         }
         vars.insert(c.out_i.unwrap(), c.solve_symbolic(&vars));
     }
-    let mut out = vars.keys().map(|k| *k).collect::<Vec<usize>>();
+    let mut out = vars.keys().copied().collect::<Vec<usize>>();
     out.sort();
     Ok(out
         .iter()

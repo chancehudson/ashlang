@@ -26,7 +26,7 @@ pub fn compile_error(msg: &str, details: Option<&str>) {
 pub fn parse_error<T: pest::RuleType>(err: pest::error::Error<T>, filename: &str) {
     println!("{}", "Parse error".red().bold());
     println!("In function {filename}");
-    println!("");
+    println!();
     println!("{err}");
     std::process::exit(1);
 }

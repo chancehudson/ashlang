@@ -20,11 +20,11 @@ pub struct Curve25519FieldElement(Scalar);
 
 impl FieldElement for Curve25519FieldElement {
     fn zero() -> Self {
-        Self::from(Curve25519FieldElement(Scalar::ZERO))
+        Curve25519FieldElement(Scalar::ZERO)
     }
 
     fn one() -> Self {
-        Self::from(Curve25519FieldElement(Scalar::ONE))
+        Curve25519FieldElement(Scalar::ONE)
     }
 
     fn prime() -> BigUint {
@@ -47,13 +47,7 @@ impl PartialOrd for Curve25519FieldElement {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         let a = BigUint::from_str(&self.serialize()).unwrap();
         let b = BigUint::from_str(&other.serialize()).unwrap();
-        if a == b {
-            Some(std::cmp::Ordering::Equal)
-        } else if a < b {
-            Some(std::cmp::Ordering::Less)
-        } else {
-            Some(std::cmp::Ordering::Greater)
-        }
+        Some(a.cmp(&b))
     }
 }
 
@@ -73,15 +67,13 @@ impl FromStr for Curve25519FieldElement {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::from(Curve25519FieldElement(
-            Scalar::from_str_vartime(s).unwrap(),
-        )))
+        Ok(Curve25519FieldElement(Scalar::from_str_vartime(s).unwrap()))
     }
 }
 
 impl From<u64> for Curve25519FieldElement {
     fn from(value: u64) -> Self {
-        Self::from(Curve25519FieldElement(Scalar::from(value)))
+        Curve25519FieldElement(Scalar::from(value))
     }
 }
 
@@ -89,7 +81,7 @@ impl Add for Curve25519FieldElement {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
-        Self::from(Curve25519FieldElement(self.0 + other.0))
+        Curve25519FieldElement(self.0 + other.0)
     }
 }
 
@@ -97,7 +89,7 @@ impl Sub for Curve25519FieldElement {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
-        Self::from(Curve25519FieldElement(self.0 - other.0))
+        Curve25519FieldElement(self.0 - other.0)
     }
 }
 
@@ -105,15 +97,16 @@ impl Mul for Curve25519FieldElement {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
-        Self::from(Curve25519FieldElement(self.0 * other.0))
+        Curve25519FieldElement(self.0 * other.0)
     }
 }
 
+#[allow(clippy::suspicious_arithmetic_impl)]
 impl Div for Curve25519FieldElement {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
-        Self::from(Curve25519FieldElement(self.0 * other.0.invert()))
+        Curve25519FieldElement(self.0 * other.0.invert())
     }
 }
 
@@ -139,6 +132,6 @@ impl Neg for Curve25519FieldElement {
     type Output = Self;
 
     fn neg(self) -> Self {
-        Self::from(Curve25519FieldElement(-self.0))
+        Curve25519FieldElement(-self.0)
     }
 }

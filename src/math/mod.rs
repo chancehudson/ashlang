@@ -56,7 +56,7 @@ pub trait FieldElement:
         let a = BigUint::from_str(&self.serialize()).unwrap();
         let l = a.modpow(&e_bigint, &Self::prime());
         if l == neg_one {
-            return -1;
+            -1
         } else if l == one {
             return 1;
         } else {
@@ -83,7 +83,7 @@ pub trait FieldElement:
                 non_residue = x.clone();
                 break;
             }
-            x = x + Self::one();
+            x += Self::one();
         }
         let b = BigUint::from_str(&non_residue.serialize()).unwrap();
 
@@ -104,7 +104,7 @@ pub trait FieldElement:
                 &Self::prime(),
             );
             if (a_ * b_) % Self::prime() == Self::prime() - 1_u32 {
-                bpow = bpow + m.clone();
+                bpow += m.clone();
             }
         }
         apow = (apow + Self::one()) / two.clone();
@@ -120,7 +120,11 @@ pub trait FieldElement:
         let o = (a_ * b_) % Self::prime();
         let root = Self::deserialize(&o.to_string());
         let other_root = -root.clone();
-        return if root > other_root { other_root } else { root };
+        if root > other_root {
+            other_root
+        } else {
+            root
+        }
     }
 }
 
@@ -137,7 +141,7 @@ mod tests {
             let square = x.clone() * x.clone();
             let root = square.sqrt();
             assert_eq!(square, root.clone() * root.clone());
-            x = x + T::one();
+            x += T::one();
         }
     }
 

@@ -29,6 +29,12 @@ pub struct CompilerState<T: FieldElement> {
     pub messages: Vec<String>,
 }
 
+impl<T: FieldElement> Default for CompilerState<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: FieldElement> CompilerState<T> {
     pub fn new() -> Self {
         CompilerState {
@@ -81,7 +87,7 @@ impl<T: FieldElement> Compiler<T> {
 
     pub fn include_many(&mut self, paths: &Vec<Utf8PathBuf>) -> Result<()> {
         for path in paths {
-            self.include(&path)?;
+            self.include(path)?;
         }
         Ok(())
     }
@@ -95,7 +101,7 @@ impl<T: FieldElement> Compiler<T> {
     // walked and passed to this function
     pub fn include(&mut self, path: &Utf8PathBuf) -> Result<()> {
         // first check if it's a directory
-        let metadata = fs::metadata(&path)
+        let metadata = fs::metadata(path)
             .map_err(|_| anyhow::anyhow!("Failed to stat metadata for include path: {:?}", path))?;
         if metadata.is_file() {
             let ext = path.extension();
@@ -130,10 +136,11 @@ impl<T: FieldElement> Compiler<T> {
                 }
                 if existing_path.parent() != path.canonicalize_utf8()?.parent() {
                     log::error!(&format!(
-                        "{}\n{}\n{}",
-                        format!("Duplicate file/function names detected: {name_str}"),
-                        format!("Path 1: {:?}", &path),
-                        format!("Path 2: {:?}", self.fn_to_path.get(&name_str).unwrap())
+                        "Duplicate file/function names detected: {name_str}
+Path 1: {:?}
+Path 2: {:?}",
+                        &path,
+                        self.fn_to_path.get(&name_str).unwrap()
                     ));
                 }
                 let existing_extension = existing_path.extension().unwrap();
@@ -153,7 +160,7 @@ impl<T: FieldElement> Compiler<T> {
             self.fn_to_path.insert(name_str.clone(), path.clone());
             self.path_to_fn.insert(path.clone(), name_str);
         } else if metadata.is_dir() {
-            let files = fs::read_dir(&path)
+            let files = fs::read_dir(path)
                 .unwrap_or_else(|_| panic!("Failed to read directory: {:?}", &path));
             for entry in files {
                 let next_path = entry
@@ -252,7 +259,7 @@ impl<T: FieldElement> Compiler<T> {
                         .constraints
                         .iter()
                         .filter(|v| v.symbolic)
-                        .map(|v| v.clone())
+                        .cloned()
                         .collect::<Vec<R1csConstraint<T>>>()
                         .to_vec(),
                 );
@@ -261,14 +268,14 @@ impl<T: FieldElement> Compiler<T> {
                         .constraints
                         .iter()
                         .filter(|v| !v.symbolic)
-                        .map(|v| v.clone())
+                        .cloned()
                         .collect::<Vec<R1csConstraint<T>>>()
                         .to_vec(),
                 );
                 if self.print_asm {
                     // prints the raw constraints
                     for c in &final_constraints {
-                        println!("{}", c.to_string());
+                        println!("{}", c);
                     }
                 }
                 final_constraints

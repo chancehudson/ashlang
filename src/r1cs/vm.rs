@@ -127,15 +127,15 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     }
                 }
                 AstNode::FnVar(names) => {
-                    for x in 0..names.len() {
-                        let name = &names[x];
+                    for (i, v) in names[0..names.len()].iter().enumerate() {
+                        let name = v;
                         if self.vars.contains_key(name) {
                             log::error!(
                                 &format!("variable already defined: {name}"),
                                 "attempting to define variable in function header"
                             );
                         }
-                        self.vars.insert(name.clone(), self.args[x].clone());
+                        self.vars.insert(name.clone(), self.args[i].clone());
                     }
                 }
                 AstNode::Rtrn(expr) => {
@@ -163,7 +163,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 AstNode::ExprUnassigned(expr) => {
                     self.compiler_state
                         .messages
-                        .insert(0, format!("unassigned expression"));
+                        .insert(0, "unassigned expression".to_string());
                     self.eval(&expr);
                 }
                 _ => {
@@ -184,7 +184,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
             Expr::FnCall(name, vars) => {
                 // TODO: break this into separate functions
                 self.compiler_state.messages.insert(0, format!("{name}()"));
-                let args: Vec<Var<T>> = vars.into_iter().map(|v| self.eval(&*v)).collect::<_>();
+                let args: Vec<Var<T>> = vars.iter().map(|v| self.eval(v)).collect::<_>();
                 // look for an ar1cs implementation first
                 if let Some(v) = self.compiler_state.fn_to_r1cs_parser.get(name) {
                     let constrain_args_if_needed = args
@@ -218,7 +218,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                 SymbolicOp::Add,
                                 self.compiler_state.messages[0].clone(),
                             ));
-                            return index;
+                            index
                         })
                         .collect::<Vec<_>>();
                     let out_constraints =
@@ -226,7 +226,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     self.constraints.append(&mut out_constraints.clone());
                     let return_index = self.var_index;
                     self.var_index += v.return_names.len();
-                    if v.return_names.len() > 0 {
+                    if !v.return_names.is_empty() {
                         return Var {
                             index: Some(return_index),
                             location: VarLocation::Constraint,
@@ -255,7 +255,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 self.constraints.append(&mut out_constraints);
                 self.var_index = new_var_index;
                 if let Some(v) = return_val {
-                    return v;
+                    v
                 } else {
                     Var {
                         index: None,
@@ -265,22 +265,22 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
             }
             Expr::Val(name, indices) => {
-                if indices.len() > 0 {
+                if !indices.is_empty() {
                     log::error!(
                         "indices not supported in r1cs, accessing indices on variable: {name}"
                     );
                 }
                 if let Some(v) = self.vars.get(name) {
-                    return v.clone();
+                    v.clone()
                 } else {
                     log::error!(&format!("variable not found: {name}"));
                 }
             }
-            Expr::NumOp { lhs, op, rhs } => self.eval_numop(&*lhs, op, &*rhs),
+            Expr::NumOp { lhs, op, rhs } => self.eval_numop(lhs, op, rhs),
             Expr::Lit(val) => Var {
                 index: None,
                 location: VarLocation::Static,
-                value: Matrix::from(T::deserialize(&val)),
+                value: Matrix::from(T::deserialize(val)),
             },
             _ => {
                 log::error!("unimplemented expression case");

@@ -33,7 +33,7 @@ pub enum Expr {
     VecLit(Vec<String>),
     Lit(String),
     Val(String, Vec<Expr>),
-    FnCall(String, Vec<Box<Expr>>),
+    FnCall(String, Vec<Expr>),
     NumOp {
         lhs: Box<Expr>,
         op: NumOp,
@@ -289,7 +289,7 @@ impl AshParser {
                 let mut pair = pair.into_inner();
                 let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
                 let mut indices: Vec<Expr> = Vec::new();
-                while let Some(v) = pair.next() {
+                for v in pair {
                     indices.push(self.build_expr_from_pair(v)?);
                 }
                 Ok(Expr::Val(name, indices))
@@ -320,9 +320,9 @@ impl AshParser {
                 let next = AshParser::next_or_error(&mut pair)?;
                 let fn_name = next.as_str().to_string();
                 let arg_pair = AshParser::next_or_error(&mut pair)?.into_inner();
-                let mut vars: Vec<Box<Expr>> = Vec::new();
+                let mut vars: Vec<Expr> = Vec::new();
                 for v in arg_pair {
-                    vars.push(Box::new(self.build_expr_from_pair(v)?));
+                    vars.push(self.build_expr_from_pair(v)?);
                 }
                 self.mark_fn_call(fn_name.clone());
                 Ok(Expr::FnCall(fn_name, vars))
@@ -337,7 +337,7 @@ impl AshParser {
                         let mut pair = n.into_inner();
                         let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
                         let mut indices: Vec<Expr> = Vec::new();
-                        while let Some(v) = pair.next() {
+                        for v in pair {
                             indices.push(self.build_expr_from_pair(v)?);
                         }
                         Ok(Expr::Val(name, indices))

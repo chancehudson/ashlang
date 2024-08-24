@@ -16,6 +16,7 @@ pub struct Config {
     pub field: String,
 }
 
+#[allow(dead_code)]
 pub fn parse() -> Config {
     let matches = cli().get_matches();
     let entry_fn = matches
@@ -28,7 +29,7 @@ pub fn parse() -> Config {
         .unwrap_or_default()
         .map(|v| v.as_str())
         .filter(|v| !v.is_empty())
-        .map(|v| Utf8PathBuf::from(v))
+        .map(Utf8PathBuf::from)
         .collect::<Vec<_>>();
     let inputs = matches.get_one::<String>("public_inputs");
     let secret_inputs = matches.get_one::<String>("secret_inputs");
