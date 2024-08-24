@@ -1,4 +1,4 @@
-# ashlang
+# ashlang [![CircleCI](https://dl.circleci.com/status-badge/img/gh/chancehudson/ashlang/tree/main.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/gh/chancehudson/ashlang/tree/main)
 
 A language designed to run on any computer that can exist.
 
@@ -13,12 +13,14 @@ If I did would the file extension stand for "arithmetic symbol hierarchy"?
 ashlang is a scripting language for expressing mathematical relations between scalars and vectors.
 
 The language is untyped, with each variable being one of the following:
+
 - scalar
 - vector
 - matrix (of any dimension)
 - function
 
 ashlang is designed to be written in conjunction with a lower level language, such as assembly or r1cs.
+
 - each file is a function
   - files may be written in any language
 - functions can only be called from `.ash` files
@@ -34,12 +36,14 @@ The assembler is designed to be multi-stage/partially re-usable.
 ## Language
 
 The language is designed to efficiently express mathematical relationships between scalars and vectors in a finite field. Main features:
+
 - element-wise vector operations
 - throws if vectors of mismatched size are used in an operation e.g. `val[0..10] * lav[0..5]`
 - functions cannot be declared, each file is a single function
 - files are not imported, function calls match the filename and tell the compiler what files are needed
 
 Below is the [poseidon](https://eprint.iacr.org/2019/458.pdf) hash function implemented in a few different languages:
+
 - [circom](https://github.com/vimwitch/poseidon-hash/blob/main/circom/poseidon.circom)
 - [solidity (naive)](https://github.com/vimwitch/poseidon-solidity/blob/db5b345bc2ab542537f02ef0c07137d62e46b3cf/contracts/Poseidon.sol)
 - [solidity (optimized)](https://github.com/vimwitch/poseidon-solidity/blob/main/contracts/PoseidonT3.sol)
