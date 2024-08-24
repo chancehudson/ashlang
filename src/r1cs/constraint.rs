@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use crate::math::FieldElement;
 
@@ -40,14 +40,15 @@ impl From<&str> for SymbolicOp {
     }
 }
 
-impl ToString for SymbolicOp {
-    fn to_string(&self) -> String {
-        match self {
+impl Display for SymbolicOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let out = match self {
             SymbolicOp::Inv => "/".to_owned(),
             SymbolicOp::Mul => "*".to_owned(),
             SymbolicOp::Add => "+".to_owned(),
             SymbolicOp::Sqrt => "radix".to_owned(),
-        }
+        };
+        write!(f, "{}", out)
     }
 }
 
@@ -75,10 +76,10 @@ fn comment_space(s: &str) -> String {
 
 static LINE_WIDTH: usize = 40;
 
-impl<T: FieldElement> ToString for R1csConstraint<T> {
-    fn to_string(&self) -> String {
+impl<T: FieldElement> Display for R1csConstraint<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut out = "".to_owned();
         if self.symbolic {
-            let mut out = "".to_owned();
             // push the signal that should be assigned
             // and the operation that should be applied
             out.push_str(&format!(
@@ -97,7 +98,7 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
             }
             out.push_str(&format!(
                 ") {} (",
-                self.symbolic_op.as_ref().unwrap().to_string()
+                self.symbolic_op.as_ref().unwrap()
             ));
             for i in 0..self.b.len() {
                 let (coef, index) = &self.b[i];
@@ -113,9 +114,7 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
             } else {
                 out.push_str("# symbolic");
             }
-            out
         } else {
-            let mut out = "".to_owned();
             out.push_str("0 = (");
             for i in 0..self.a.len() {
                 let (coef, index) = &self.a[i];
@@ -145,8 +144,8 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
                 out.push_str(&comment_space(&out));
                 out.push_str(&format!("# {}", comment));
             }
-            out
         }
+        write!(f, "{}", out)
     }
 }
 

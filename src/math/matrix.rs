@@ -22,6 +22,11 @@ impl<T: FieldElement> Matrix<T> {
         self.values.len()
     }
 
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
     pub fn mul_scalar(&self, v: T) -> Self {
         let values = self.values.iter().map(|x| x.clone() * v.clone()).collect();
         Matrix {

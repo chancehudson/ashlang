@@ -14,7 +14,6 @@ use std::str::FromStr;
 use super::FieldElement;
 use num_bigint::BigUint;
 use twenty_first::math::b_field_element::BFieldElement;
-use twenty_first::math::traits::Inverse;
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq, Debug)]
 pub struct FoiFieldElement(BFieldElement);
@@ -45,13 +44,7 @@ impl PartialOrd for FoiFieldElement {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         let a = BigUint::from_str(&self.serialize()).unwrap();
         let b = BigUint::from_str(&other.serialize()).unwrap();
-        if a == b {
-            Some(std::cmp::Ordering::Equal)
-        } else if a < b {
-            Some(std::cmp::Ordering::Less)
-        } else {
-            Some(std::cmp::Ordering::Greater)
-        }
+        Some(a.cmp(&b))
     }
 }
 
@@ -65,9 +58,7 @@ impl FromStr for FoiFieldElement {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(FoiFieldElement(
-            BFieldElement::from_str(s).unwrap(),
-        ))
+        Ok(FoiFieldElement(BFieldElement::from_str(s).unwrap()))
     }
 }
 
@@ -105,7 +96,7 @@ impl Div for FoiFieldElement {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
-        FoiFieldElement(self.0 * other.0.inverse())
+        FoiFieldElement(self.0 / other.0)
     }
 }
 

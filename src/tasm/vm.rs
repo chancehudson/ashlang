@@ -967,16 +967,12 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 // for now
                 let mut lv = self.eval(*lhs.clone(), false);
                 let mut rv = self.eval(*rhs.clone(), false);
-                if lv.is_some() && rv.is_none() {
-                    if self.static_to_stack(&lv.clone().unwrap()).is_ok() {
-                        lv = None;
-                        self.asm.push("swap 1".to_string());
-                    }
+                if lv.is_some() && rv.is_none() && self.static_to_stack(&lv.clone().unwrap()).is_ok() {
+                    lv = None;
+                    self.asm.push("swap 1".to_string());
                 }
-                if rv.is_some() && lv.is_none() {
-                    if self.static_to_stack(&rv.clone().unwrap()).is_ok() {
-                        rv = None;
-                    }
+                if rv.is_some() && lv.is_none() && self.static_to_stack(&rv.clone().unwrap()).is_ok() {
+                    rv = None;
                 }
                 if lv.is_none() != rv.is_none() {
                     log::error!("type mismatch in numeric operation");

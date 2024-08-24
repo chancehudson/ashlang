@@ -101,6 +101,7 @@ impl Mul for Curve25519FieldElement {
     }
 }
 
+#[allow(clippy::suspicious_arithmetic_impl)]
 impl Div for Curve25519FieldElement {
     type Output = Self;
 

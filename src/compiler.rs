@@ -275,7 +275,7 @@ Path 2: {:?}",
                 if self.print_asm {
                     // prints the raw constraints
                     for c in &final_constraints {
-                        println!("{}", c.to_string());
+                        println!("{}", c);
                     }
                 }
                 final_constraints

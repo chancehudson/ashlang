@@ -46,7 +46,7 @@ impl<T: FieldElement> R1csParser<T> {
                     let args_tuple = args.into_inner();
                     for v in args_tuple {
                         let varname = v.as_str().to_string();
-                        if out.arg_name_index.get(&varname).is_some() {
+                        if out.arg_name_index.contains_key(&varname) {
                             println!("ar1cs parse error: duplicate arg name: {}", varname);
                             panic!();
                         }
@@ -59,14 +59,14 @@ impl<T: FieldElement> R1csParser<T> {
                     for v in returns_tuple {
                         // varname
                         let varname = v.as_str();
-                        if out.arg_name_index.get(varname).is_some() {
+                        if out.arg_name_index.contains_key(varname) {
                             println!(
                                 "ar1cs parse error: return arg name is not unique: {}",
                                 varname
                             );
                             panic!();
                         }
-                        if out.return_name_index.get(varname).is_some() {
+                        if out.return_name_index.contains_key(varname) {
                             println!(
                                 "ar1cs parse error: return arg name is not unique: {}",
                                 varname
