@@ -1,3 +1,4 @@
+mod cli;
 pub mod compiler;
 pub mod log;
 pub mod math;

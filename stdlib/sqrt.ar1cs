@@ -1,5 +1,8 @@
 (a) -> (b)
 
+# the witness generator will always return the
+# lower root
+
 # radix = √
 # square (2) root
 b = (2*one) radix (1*a) # b is the square root of a
