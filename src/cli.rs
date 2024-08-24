@@ -3,6 +3,8 @@ use clap::arg;
 use clap::Arg;
 use clap::Command;
 
+use crate::log;
+
 pub struct Config {
     pub include_paths: Vec<Utf8PathBuf>,
     pub verbosity: u8,
@@ -11,19 +13,16 @@ pub struct Config {
     pub target: String,
     pub extension_priorities: Vec<String>,
     pub entry_fn: String,
+    pub field: String,
 }
-impl Config {}
 
 pub fn parse() -> Config {
     let matches = cli().get_matches();
     let entry_fn = matches
         .get_one::<String>("ENTRY_FN")
         .expect("Failed to get ENTRY_FN");
-    let target = matches
-        .get_many::<String>("target")
-        .unwrap_or_default()
-        .map(|v| v.as_str())
-        .collect::<Vec<_>>();
+    let target = matches.get_one::<String>("target");
+    let field = matches.get_one::<String>("field");
     let include_paths = matches
         .get_many::<String>("include")
         .unwrap_or_default()
@@ -37,17 +36,24 @@ pub fn parse() -> Config {
     if *matches.get_one::<bool>("print_asm").unwrap_or(&false) {
         verbosity = 1;
     }
-    if target.len() > 1 {
-        println!("Multiple targets not supported yet");
-        std::process::exit(1);
+    if target.is_none() {
+        log::error!(
+            "No target specified",
+            "specify a target using -t [r1cs | tasm]"
+        );
     }
-    if target.is_empty() {
-        println!("No target specified");
-        std::process::exit(1);
+    if field.is_none() {
+        log::error!(
+            "No field specified",
+            "specify a field using -f [foi | alt_bn128 | curve25519]"
+        );
     }
+    let target = target.unwrap().clone();
+    let field = field.unwrap().clone();
     Config {
         include_paths,
-        target: target[0].to_string(),
+        target,
+        field,
         verbosity,
         inputs: parse_inputs(inputs),
         secret_inputs: parse_inputs(secret_inputs),
@@ -80,6 +86,13 @@ fn cli() -> Command {
                 .required(false)
                 .help("the output compile target")
                 .action(clap::ArgAction::Append),
+        )
+        .arg(
+            Arg::new("field")
+                .short('f')
+                .long("scalar field to execute in")
+                .required(false)
+                .help("the name of the scalar field that should be used for proving: foi (goldilocks), alt_bn128, curve25519"),
         )
         .arg(
             Arg::new("include")

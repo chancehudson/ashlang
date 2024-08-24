@@ -1,10 +1,10 @@
-use compiler::Compiler;
-use std::str::FromStr;
-// use math::alt_bn128::Bn128FieldElement;
 use cli::Config;
+use compiler::Compiler;
+use math::alt_bn128::Bn128FieldElement;
 use math::curve_25519::Curve25519FieldElement;
 use math::foi::FoiFieldElement;
 use math::FieldElement;
+use std::str::FromStr;
 
 use r1cs::witness;
 use triton_vm::prelude::*;
@@ -21,11 +21,31 @@ fn main() {
     let mut config = cli::parse();
     match config.target.as_str() {
         "tasm" => {
+            if config.field != "foi" && config.field != "goldilocks" {
+                log::error!(
+                    &format!("Unsupported field for target tasm: {}", config.field),
+                    "tasm only support execution in the foi (goldilocks) field"
+                );
+            }
             compile_tasm(&mut config);
         }
-        "r1cs" => {
-            compile_r1cs::<FoiFieldElement>(&mut config);
-        }
+        "r1cs" => match config.field.as_str() {
+            "foi" => {
+                compile_r1cs::<FoiFieldElement>(&mut config);
+            }
+            "curve25519" => {
+                compile_r1cs::<Curve25519FieldElement>(&mut config);
+            }
+            "alt_bn128" => {
+                compile_r1cs::<Bn128FieldElement>(&mut config);
+            }
+            _ => {
+                log::error!(&format!(
+                    "Unsupported field for target r1cs: {}",
+                    config.field
+                ));
+            }
+        },
         _ => {
             println!("Unsupported target: {}", config.target);
             std::process::exit(1);
