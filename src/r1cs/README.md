@@ -12,7 +12,7 @@ Constraints are expressed as fixed sequence of `a*b-c` operations. Each of these
 
 Each variable in the line is the dot product of any number of signals.
 
-Example: `(1*x7) * (1*one) - (1*x8)`
+Example: `0 = (1*x7) * (1*one) - (1*x8)`
 
 Explanation: A signal `x7` is being constrained as equal to `x8`
 
