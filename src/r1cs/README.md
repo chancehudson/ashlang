@@ -34,7 +34,7 @@ Comments are preceded by the `#` character and end at the newline.
 
 Consider the following program:
 
-```
+```bash
 let x = 99
 let y = 43
 
@@ -62,7 +62,7 @@ assert_eq(0 - square, root * high_root)
 
 where [`pow5`](../../stdlib/pow5.ash) is implemented as so:
 
-```
+```bash
 (v)
 
 let v2 = v * v
@@ -73,7 +73,7 @@ return v4 * v
 
 and [`assert_eq`](../../stdlib/assert_eq.ar1cs) is implemented as so:
 
-```
+```bash
 (a, b) -> ()
 
 (1*a) * (1*one) - (1*b) # assert equality
@@ -81,7 +81,7 @@ and [`assert_eq`](../../stdlib/assert_eq.ar1cs) is implemented as so:
 
 and [`sqrt`](../../stdlib/sqrt.ar1cs) is implemented as so:
 
-```
+```bash
 (a) -> (b)
 
 # radix = √
@@ -93,7 +93,7 @@ b = (2*one) radix (1*a) # b is the square root of a
 
 This program compiles to the following `ar1cs`:
 
-```
+```bash
 x1 = (99*one) + (0*one)                 # let x
 x2 = (43*one) + (0*one)                 # let y
 x3 = (1*x1) * (1*x2)                    # let v
@@ -156,4 +156,19 @@ Looking through the constraints it's possible to see how each assignment is cons
 
 Run this program by cloning and running:
 
-`cargo run -- r1cs_readme -t r1cs -i ./stdlib -i ./test-vectors -v`
+`cargo run -- r1cs_readme -t r1cs -i ./stdlib -i ./test-vectors -v -f foi`
+
+## Other curves
+
+You can compile this example for other curves by changing the `-f` argument. e.g.
+
+`cargo run -- r1cs_readme -t r1cs -i ./stdlib -i ./test-vectors -v -f alt_bn128`
+
+Changing the field and compiling the above example outputs the following:
+
+```
+Compile error
+cannot take square root of non-residue element: 21941893
+```
+
+Can you figure out why?
