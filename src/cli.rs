@@ -28,7 +28,7 @@ pub fn parse() -> Config {
         .unwrap_or_default()
         .map(|v| v.as_str())
         .filter(|v| !v.is_empty())
-        .map(|v| Utf8PathBuf::from(v))
+        .map(Utf8PathBuf::from)
         .collect::<Vec<_>>();
     let inputs = matches.get_one::<String>("public_inputs");
     let secret_inputs = matches.get_one::<String>("secret_inputs");

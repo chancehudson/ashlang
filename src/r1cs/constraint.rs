@@ -87,7 +87,7 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
                 index_to_string(&self.out_i.unwrap())
             ));
 
-            out.push_str("(");
+            out.push('(');
             for i in 0..self.a.len() {
                 let (coef, index) = &self.a[i];
                 out.push_str(&format!("{}*{}", coef.serialize(), index_to_string(index)));
@@ -106,12 +106,12 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
                     out.push_str(" + ");
                 }
             }
-            out.push_str(")");
+            out.push(')');
             out.push_str(&comment_space(&out));
             if let Some(comment) = &self.comment {
                 out.push_str(&format!("# {}", comment));
             } else {
-                out.push_str(&format!("# symbolic"));
+                out.push_str("# symbolic");
             }
             out
         } else {
@@ -140,7 +140,7 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
                     out.push_str(" + ");
                 }
             }
-            out.push_str(")");
+            out.push(')');
             if let Some(comment) = &self.comment {
                 out.push_str(&comment_space(&out));
                 out.push_str(&format!("# {}", comment));
@@ -187,11 +187,11 @@ impl<T: FieldElement> R1csConstraint<T> {
         }
         let mut a = T::zero();
         for (coef, index) in &self.a {
-            a += coef.clone() * vars.get(&index).unwrap().clone();
+            a += coef.clone() * vars.get(index).unwrap().clone();
         }
         let mut b = T::zero();
         for (coef, index) in &self.b {
-            b += coef.clone() * vars.get(&index).unwrap().clone();
+            b += coef.clone() * vars.get(index).unwrap().clone();
         }
         match self.symbolic_op.as_ref().unwrap() {
             SymbolicOp::Add => a + b,

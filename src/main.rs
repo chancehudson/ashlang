@@ -70,7 +70,7 @@ fn compile_r1cs<T: FieldElement>(config: &mut Config) {
         println!("Failed to solve r1cs: {:?}", e);
         std::process::exit(1);
     } else {
-        println!("");
+        println!();
         println!("R1CS: built and validated witness ✅");
     }
 }

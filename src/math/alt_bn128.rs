@@ -22,7 +22,7 @@ impl FieldElement for Fr {
     // why would you do that?
     fn serialize(&self) -> String {
         let s = self.clone().to_string();
-        if s.len() == 0 {
+        if s.is_empty() {
             "0".to_string()
         } else {
             s

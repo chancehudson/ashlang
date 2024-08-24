@@ -43,10 +43,10 @@ impl<T: FieldElement> R1csParser<T> {
                     out.is_function = true;
                     let mut pair = pair.into_inner();
                     let args = pair.next().unwrap();
-                    let mut args_tuple = args.into_inner();
-                    while let Some(v) = args_tuple.next() {
+                    let args_tuple = args.into_inner();
+                    for v in args_tuple {
                         let varname = v.as_str().to_string();
-                        if let Some(_) = out.arg_name_index.get(&varname) {
+                        if out.arg_name_index.get(&varname).is_some() {
                             println!("ar1cs parse error: duplicate arg name: {}", varname);
                             panic!();
                         }
@@ -55,18 +55,18 @@ impl<T: FieldElement> R1csParser<T> {
                         out.arg_names.push(varname);
                     }
                     let returns = pair.next().unwrap();
-                    let mut returns_tuple = returns.into_inner();
-                    while let Some(v) = returns_tuple.next() {
+                    let returns_tuple = returns.into_inner();
+                    for v in returns_tuple {
                         // varname
                         let varname = v.as_str();
-                        if let Some(_) = out.arg_name_index.get(varname) {
+                        if out.arg_name_index.get(varname).is_some() {
                             println!(
                                 "ar1cs parse error: return arg name is not unique: {}",
                                 varname
                             );
                             panic!();
                         }
-                        if let Some(_) = out.return_name_index.get(varname) {
+                        if out.return_name_index.get(varname).is_some() {
                             println!(
                                 "ar1cs parse error: return arg name is not unique: {}",
                                 varname
@@ -125,7 +125,7 @@ impl<T: FieldElement> R1csParser<T> {
                         continue;
                     }
                     let text = text.unwrap().as_str().to_string();
-                    if out.constraints.len() > 0 {
+                    if !out.constraints.is_empty() {
                         out.constraints.last_mut().unwrap().comment = Some(text);
                     }
                 }
@@ -205,7 +205,7 @@ impl<T: FieldElement> R1csParser<T> {
             .map(|constraint| {
                 let mut new_constraint = constraint.clone();
                 if let Some(i) = constraint.out_i {
-                    new_constraint.out_i = Some(signal_map.get(&i).unwrap().clone());
+                    new_constraint.out_i = Some(*signal_map.get(&i).unwrap());
                 }
                 new_constraint.a = constraint
                     .a

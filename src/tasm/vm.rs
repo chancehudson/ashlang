@@ -57,14 +57,14 @@ pub struct FnCall {
 impl FnCall {
     pub fn typed_name(&self) -> String {
         let mut out = self.name.to_owned();
-        if self.arg_types.len() > 0 {
+        if !self.arg_types.is_empty() {
             out.push_str("____");
         }
         for arg in &self.arg_types {
-            out.push_str("_");
-            if arg.dimensions.len() == 0 && arg.value.is_none() {
-                out.push_str("s");
-            } else if arg.dimensions.len() == 0 && arg.value.is_some() {
+            out.push('_');
+            if arg.dimensions.is_empty() && arg.value.is_none() {
+                out.push('s');
+            } else if arg.dimensions.is_empty() && arg.value.is_some() {
                 out.push_str(
                     &arg.value
                         .clone()
@@ -77,7 +77,7 @@ impl FnCall {
             }
             for d_index in 0..arg.dimensions.len() {
                 if d_index > 0 {
-                    out.push_str("x");
+                    out.push('x');
                 }
                 out.push_str(arg.dimensions[d_index].to_string().as_str());
             }
@@ -135,7 +135,7 @@ pub struct VM<'a, T: FieldElement> {
 
 impl<'a, T: FieldElement> VM<'a, T> {
     pub fn new(compiler_state: &'a mut CompilerState<T>) -> Self {
-        let memory_start = compiler_state.memory_offset.clone();
+        let memory_start = compiler_state.memory_offset;
         compiler_state.memory_offset += 2_usize.pow(32);
         VM {
             vars: HashMap::new(),
@@ -250,7 +250,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
         if self.vars.contains_key(&name) {
             log::error!(
                 &format!("variable name \"{name}\" is already in use"),
-                &format!("you're attempting to define a static variable with the same name as another variable")
+                "you're attempting to define a static variable with the same name as another variable"
             );
         }
         match &expr {
@@ -268,7 +268,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 );
             }
             Expr::Val(ref_name, indices) => {
-                if indices.len() > 0 {
+                if !indices.is_empty() {
                     log::error!("static var index assignment not supported");
                 }
                 if let Some(v) = self.vars.get(&ref_name.clone()) {
@@ -760,7 +760,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
 
     pub fn eval_to_stack(&mut self, expr: Expr, is_returning: bool) -> Option<Var> {
         if let Some(v) = self.eval(expr, is_returning) {
-            if let Ok(_) = self.static_to_stack(&v) {
+            if self.static_to_stack(&v).is_ok() {
                 return None;
             }
             return Some(v);
@@ -842,7 +842,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     call.return_type = Some(call_type.return_type.as_ref().unwrap().clone());
                 } else {
                     let fn_ast = self.compiler_state.fn_to_ast.get(name).unwrap().clone();
-                    let mut vm = VM::new(&mut self.compiler_state);
+                    let mut vm = VM::new(self.compiler_state);
                     vm.eval_ast(fn_ast.clone(), arg_types.clone(), None);
                     vm.return_if_needed();
                     if let Some(return_type) = vm.return_type {
@@ -851,11 +851,11 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         log::error!(&format!(
                             "unable to determine return type for function \"{}\"",
                             name
-                        ), &format!("you may be calling a tasm function with the wrong number or type of arguments"));
+                        ), "you may be calling a tasm function with the wrong number or type of arguments");
                     }
                     // re-evaluate the function with the return type
                     // set from the beginning
-                    let mut vm = VM::new(&mut self.compiler_state);
+                    let mut vm = VM::new(self.compiler_state);
                     vm.eval_ast(fn_ast, arg_types.clone(), call.return_type.clone());
                     vm.return_if_needed();
                     let mut asm = vm.asm.clone();
@@ -879,14 +879,14 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         for _ in 0..stack_arg_count {
                             self.stack.pop();
                         }
-                        return Some(Var {
+                        Some(Var {
                             stack_index: None,
                             location: VarLocation::Static,
                             dimensions: call.return_type.clone().unwrap().dimensions,
                             memory_index: None,
                             block_index: self.block_depth,
                             value: call.return_type.unwrap().value,
-                        });
+                        })
                     }
                     VarLocation::Stack => {
                         for _ in 0..stack_arg_count {
@@ -896,7 +896,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         // if the return value is a stack variable
                         // we need to increment the virtual stack
                         self.asm.push(format!("call {}", call.typed_name()));
-                        return None;
+                        None
                     }
                     VarLocation::Memory => {
                         if is_returning {
@@ -917,14 +917,14 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         self.asm.push(format!("call {}", call.typed_name()));
                         if is_returning {
                             if let Some(v) = self.vars.get(RETURN_VAR) {
-                                return Some(Var {
+                                Some(Var {
                                     stack_index: Some(self.stack.len() - v.stack_index.unwrap()),
                                     location: VarLocation::Memory,
                                     dimensions: call.return_type.unwrap().dimensions.clone(),
                                     memory_index: None,
                                     block_index: self.block_depth,
                                     value: None,
-                                });
+                                })
                             } else {
                                 panic!("no return memory address");
                             }
@@ -934,14 +934,14 @@ impl<'a, T: FieldElement> VM<'a, T> {
                             );
                             let memory_index = self.memory_start + self.memory_index;
                             self.memory_index += len;
-                            return Some(Var {
+                            Some(Var {
                                 stack_index: None,
                                 location: VarLocation::Memory,
                                 dimensions: call.return_type.unwrap().dimensions.clone(),
                                 memory_index: Some(memory_index),
                                 block_index: self.block_depth,
                                 value: None,
-                            });
+                            })
                         }
                     }
                 }
@@ -955,14 +955,14 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 self.load_variable(&v, indices)
             }
             Expr::Lit(v) => {
-                return Some(Var {
+                Some(Var {
                     stack_index: None,
                     location: VarLocation::Static,
                     dimensions: vec![],
                     memory_index: None,
                     block_index: self.block_depth,
                     value: Some(vec![v.parse::<u64>().unwrap()]),
-                });
+                })
             }
             Expr::NumOp { lhs, op, rhs } => {
                 // only allow variables of same dimensions
@@ -1037,7 +1037,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     // adds 1
                     // so we have a net effect of a single pop
                     NumOp::Add => {
-                        self.asm.push(format!("add"));
+                        self.asm.push("add".to_string());
                         self.stack.pop();
                     }
                     NumOp::Sub => {
@@ -1049,7 +1049,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         self.stack.pop();
                     }
                     NumOp::Mul => {
-                        self.asm.push(format!("mul"));
+                        self.asm.push("mul".to_string());
                         self.stack.pop();
                     }
                     NumOp::Inv => {
@@ -1058,7 +1058,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         self.stack.pop();
                     }
                 }
-                return None;
+                None
             }
             Expr::BoolOp { lhs, bool_op, rhs } => {
                 let lv = self.eval_to_stack(*lhs.clone(), false);
@@ -1066,7 +1066,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 if lv.is_none() != rv.is_none() {
                     log::error!("cannot apply boolean operation to stack and memory vars");
                 }
-                if !lv.is_none() {
+                if lv.is_some() {
                     log::error!("cannot apply boolean operation to memory vars");
                 }
                 match bool_op {
@@ -1089,7 +1089,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     }
                     _ => panic!("boolean operation not supported"),
                 }
-                return None;
+                None
             }
         }
     }
@@ -1124,7 +1124,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         // we're accessing a scalar, move it to the stack
                         if let Some(mem_index) = v.memory_index {
                             self.stack_push(mem_index.try_into().unwrap());
-                            self.asm.push(format!("add"));
+                            self.asm.push("add".to_string());
                             self.stack.pop();
                             self.stack_write_mem(1);
                             self.stack_pop(1);
@@ -1172,7 +1172,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
                 AstNode::ExprUnassigned(expr) => {
                     let o = self.eval(expr, false);
-                    if let None = o {
+                    if o.is_none() {
                         self.stack_pop(1);
                     }
                 }
@@ -1221,7 +1221,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
                 AstNode::If(expr, block_ast) => {
                     let v = self.eval_to_stack(expr, false);
-                    if let Some(_) = v {
+                    if v.is_some() {
                         panic!();
                     }
                     let block_name = format!("block_____{}", self.compiler_state.block_counter);
@@ -1243,7 +1243,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
                 AstNode::Loop(expr, block_ast) => {
                     let o = self.eval(expr, false);
-                    if let None = o {
+                    if o.is_none() {
                         log::error!("loop condition must be static");
                     }
                     let o = o.unwrap();
@@ -1266,7 +1266,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
         match v.location {
             VarLocation::Stack => {
                 if offset.is_some() {
-                    log::error!(&format!("attempting to access stack variable by index"));
+                    log::error!("attempting to access stack variable by index");
                 }
                 self.stack_dup(v.stack_index.unwrap());
             }
@@ -1311,13 +1311,11 @@ impl<'a, T: FieldElement> VM<'a, T> {
     fn load_variable(&mut self, v: &Var, indices: &Vec<Expr>) -> Option<Var> {
         match v.location {
             VarLocation::Stack => {
-                if indices.len() > 0 {
-                    log::error!(&format!(
-                        "attempting to access stack variable \"unknown\" by index"
-                    ));
+                if !indices.is_empty() {
+                    log::error!("attempting to access stack variable \"unknown\" by index");
                 }
                 self.stack_dup(v.stack_index.unwrap());
-                return None;
+                None
             }
             VarLocation::Memory => {
                 // return a subset of the original variable based on the
@@ -1348,7 +1346,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     } else {
                         panic!("unexpected: variable has no memory or stack index");
                     }
-                    return None;
+                    None
                 } else {
                     let offset = VM::<T>::calc_vec_offset_static(&v.dimensions, indices);
                     // we're accessing a vec/mat, leave it in memory
@@ -1358,14 +1356,14 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                 "memory variable should not have a stack and memory index defined"
                             );
                         }
-                        return Some(Var {
+                        Some(Var {
                             stack_index: None,
                             block_index: v.block_index,
                             location: v.location.clone(),
                             memory_index: Some(mem_index + offset),
                             dimensions: v.dimensions[indices.len()..].to_vec(),
                             value: None,
-                        });
+                        })
                     } else if offset == 0 {
                         if v.stack_index.is_none() {
                             panic!("memory variable has neither stack nor memory index defined");
@@ -1389,14 +1387,14 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
                 let value = v.value.as_ref().unwrap();
                 let offset = VM::<T>::calc_vec_offset_static(&v.dimensions, indices);
-                return Some(Var {
+                Some(Var {
                     stack_index: v.stack_index,
                     block_index: v.block_index,
                     location: v.location.clone(),
                     memory_index: v.memory_index,
                     dimensions: v.dimensions[indices.len()..].to_vec(),
                     value: Some(value[offset..].to_vec()),
-                });
+                })
             }
         }
     }

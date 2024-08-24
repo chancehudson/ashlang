@@ -65,15 +65,15 @@ impl FromStr for FoiFieldElement {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::from(FoiFieldElement(
+        Ok(FoiFieldElement(
             BFieldElement::from_str(s).unwrap(),
-        )))
+        ))
     }
 }
 
 impl From<u64> for FoiFieldElement {
     fn from(value: u64) -> Self {
-        Self::from(FoiFieldElement(BFieldElement::from(value)))
+        FoiFieldElement(BFieldElement::from(value))
     }
 }
 
@@ -81,7 +81,7 @@ impl Add for FoiFieldElement {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
-        Self::from(FoiFieldElement(self.0 + other.0))
+        FoiFieldElement(self.0 + other.0)
     }
 }
 
@@ -89,7 +89,7 @@ impl Sub for FoiFieldElement {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
-        Self::from(FoiFieldElement(self.0 - other.0))
+        FoiFieldElement(self.0 - other.0)
     }
 }
 
@@ -97,7 +97,7 @@ impl Mul for FoiFieldElement {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
-        Self::from(FoiFieldElement(self.0 * other.0))
+        FoiFieldElement(self.0 * other.0)
     }
 }
 
@@ -105,7 +105,7 @@ impl Div for FoiFieldElement {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
-        Self::from(FoiFieldElement(self.0 * other.0.inverse()))
+        FoiFieldElement(self.0 * other.0.inverse())
     }
 }
 
@@ -131,6 +131,6 @@ impl Neg for FoiFieldElement {
     type Output = Self;
 
     fn neg(self) -> Self {
-        Self::from(FoiFieldElement(-self.0))
+        FoiFieldElement(-self.0)
     }
 }

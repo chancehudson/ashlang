@@ -29,6 +29,12 @@ pub struct CompilerState<T: FieldElement> {
     pub messages: Vec<String>,
 }
 
+impl<T: FieldElement> Default for CompilerState<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: FieldElement> CompilerState<T> {
     pub fn new() -> Self {
         CompilerState {
@@ -81,7 +87,7 @@ impl<T: FieldElement> Compiler<T> {
 
     pub fn include_many(&mut self, paths: &Vec<Utf8PathBuf>) -> Result<()> {
         for path in paths {
-            self.include(&path)?;
+            self.include(path)?;
         }
         Ok(())
     }
@@ -95,7 +101,7 @@ impl<T: FieldElement> Compiler<T> {
     // walked and passed to this function
     pub fn include(&mut self, path: &Utf8PathBuf) -> Result<()> {
         // first check if it's a directory
-        let metadata = fs::metadata(&path)
+        let metadata = fs::metadata(path)
             .map_err(|_| anyhow::anyhow!("Failed to stat metadata for include path: {:?}", path))?;
         if metadata.is_file() {
             let ext = path.extension();
@@ -153,7 +159,7 @@ impl<T: FieldElement> Compiler<T> {
             self.fn_to_path.insert(name_str.clone(), path.clone());
             self.path_to_fn.insert(path.clone(), name_str);
         } else if metadata.is_dir() {
-            let files = fs::read_dir(&path)
+            let files = fs::read_dir(path)
                 .unwrap_or_else(|_| panic!("Failed to read directory: {:?}", &path));
             for entry in files {
                 let next_path = entry
@@ -251,8 +257,7 @@ impl<T: FieldElement> Compiler<T> {
                     &mut vm
                         .constraints
                         .iter()
-                        .filter(|v| v.symbolic)
-                        .map(|v| v.clone())
+                        .filter(|v| v.symbolic).cloned()
                         .collect::<Vec<R1csConstraint<T>>>()
                         .to_vec(),
                 );
@@ -260,8 +265,7 @@ impl<T: FieldElement> Compiler<T> {
                     &mut vm
                         .constraints
                         .iter()
-                        .filter(|v| !v.symbolic)
-                        .map(|v| v.clone())
+                        .filter(|v| !v.symbolic).cloned()
                         .collect::<Vec<R1csConstraint<T>>>()
                         .to_vec(),
                 );

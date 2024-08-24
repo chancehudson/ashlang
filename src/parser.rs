@@ -289,7 +289,7 @@ impl AshParser {
                 let mut pair = pair.into_inner();
                 let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
                 let mut indices: Vec<Expr> = Vec::new();
-                while let Some(v) = pair.next() {
+                for v in pair {
                     indices.push(self.build_expr_from_pair(v)?);
                 }
                 Ok(Expr::Val(name, indices))
@@ -337,7 +337,7 @@ impl AshParser {
                         let mut pair = n.into_inner();
                         let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
                         let mut indices: Vec<Expr> = Vec::new();
-                        while let Some(v) = pair.next() {
+                        for v in pair {
                             indices.push(self.build_expr_from_pair(v)?);
                         }
                         Ok(Expr::Val(name, indices))

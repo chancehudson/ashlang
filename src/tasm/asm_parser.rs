@@ -55,7 +55,7 @@ impl AsmParser {
                             _ => panic!("unexpected type_header rule: {:?}", v.as_rule()),
                         }
                     }
-                    if arg_types.len() == 0 {
+                    if arg_types.is_empty() {
                         panic!("unexpected: bad arg types")
                     }
                     let return_type = arg_types.pop().unwrap();
