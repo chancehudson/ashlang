@@ -120,7 +120,11 @@ pub trait FieldElement:
         let o = (a_ * b_) % Self::prime();
         let root = Self::deserialize(&o.to_string());
         let other_root = -root.clone();
-        if root > other_root { other_root } else { root }
+        if root > other_root {
+            other_root
+        } else {
+            root
+        }
     }
 }
 

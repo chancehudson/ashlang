@@ -96,10 +96,7 @@ impl<T: FieldElement> Display for R1csConstraint<T> {
                     out.push_str(" + ");
                 }
             }
-            out.push_str(&format!(
-                ") {} (",
-                self.symbolic_op.as_ref().unwrap()
-            ));
+            out.push_str(&format!(") {} (", self.symbolic_op.as_ref().unwrap()));
             for i in 0..self.b.len() {
                 let (coef, index) = &self.b[i];
                 out.push_str(&format!("{}*{}", coef.serialize(), index_to_string(index)));
