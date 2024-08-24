@@ -1,0 +1,50 @@
+version: 2.1
+workflows:
+  test:
+    jobs:
+      - lint
+      - clippy
+      - tests:
+          matrix:
+            parameters:
+              rust-version: ["stable", "beta", "nightly"]
+
+step_defs:
+  - run: &rust_version
+      name: Set Rust version
+      command: |
+        rustup update << parameters.rust-version >>
+        rustup default << parameters.rust-version >>
+        rustup component add clippy
+
+jobs:
+  clippy:
+    machine:
+      image: ubuntu-2204:current
+    steps:
+      - checkout
+      - run: *rust_version
+      - run:
+          name: Clippy
+          command: cargo clippy
+  lint:
+    machine:
+      image: ubuntu-2204:current
+    steps:
+      - checkout
+      - run: *rust_version
+      - run:
+          name: Lint
+          command: cargo fmt --all -- --check
+  tests:
+    machine:
+      image: ubuntu-2204:current
+    steps:
+      - checkout
+      - run: *rust_version
+      - run:
+          name: Build
+          command: cargo build
+      - run:
+          name: Test
+          command: cargo test
