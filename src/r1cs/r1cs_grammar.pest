@@ -6,7 +6,7 @@ type_header = { tuple ~ "->" ~ tuple ~ "\n" }
 
 tuple = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
 
-constraint_line = { constraint ~ "*" ~ constraint ~ "-" ~ constraint }
+constraint_line = { "0 = " ~ constraint ~ "*" ~ constraint ~ "-" ~ constraint }
 symbolic_line   = { varname ~ "=" ~ symbolic ~ symbolic_op ~ symbolic }
 
 constraint       =  { "(" ~ (constraint_inner ~ ("+" | ")"))+ | ")" }

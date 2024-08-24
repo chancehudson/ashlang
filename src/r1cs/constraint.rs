@@ -116,7 +116,7 @@ impl<T: FieldElement> ToString for R1csConstraint<T> {
             out
         } else {
             let mut out = "".to_owned();
-            out.push_str("(");
+            out.push_str("0 = (");
             for i in 0..self.a.len() {
                 let (coef, index) = &self.a[i];
                 out.push_str(&format!("{}*{}", coef.serialize(), index_to_string(index)));
