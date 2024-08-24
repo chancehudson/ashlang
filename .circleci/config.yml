@@ -4,8 +4,8 @@ workflows:
     jobs:
       - lint
       - clippy
-      - r1cs
-      - tasm
+      - compile-r1cs
+      - compile-tasm
       - tests:
           matrix:
             parameters:
