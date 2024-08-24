@@ -1,14 +1,15 @@
-use camino::Utf8PathBuf;
-use clap::arg;
-use clap::Arg;
-use clap::Command;
 use compiler::Compiler;
+use std::str::FromStr;
 // use math::alt_bn128::Bn128FieldElement;
+use cli::Config;
 use math::curve_25519::Curve25519FieldElement;
 use math::foi::FoiFieldElement;
+use math::FieldElement;
+
 use r1cs::witness;
 use triton_vm::prelude::*;
 
+mod cli;
 mod compiler;
 mod log;
 mod math;
@@ -16,160 +17,83 @@ mod parser;
 mod r1cs;
 mod tasm;
 
-fn cli() -> Command {
-    Command::new("acc")
-        .about("ashlang compiler")
-        .subcommand_required(false)
-        .arg_required_else_help(true)
-        .arg(arg!(<ENTRY_FN> "The entrypoint function name"))
-        .arg(
-            Arg::new("target")
-                .short('t')
-                .long("target")
-                .required(false)
-                .help("the output compile target")
-                .action(clap::ArgAction::Append),
-        )
-        .arg(
-            Arg::new("include")
-                .short('i')
-                .long("include")
-                .required(false)
-                .help("specify a path to be recursively included")
-                .action(clap::ArgAction::Append),
-        )
-        .arg(
-            Arg::new("print_asm")
-                .short('v')
-                .long("print")
-                .required(false)
-                .num_args(0)
-                .help("print the compiled asm before proving"),
-        )
-        .arg(
-            Arg::new("public_inputs")
-                .short('p')
-                .long("public")
-                .required(false)
-                .help("public inputs to the program"),
-        )
-        .arg(
-            Arg::new("secret_inputs")
-                .short('s')
-                .long("secret")
-                .required(false)
-                .help("secret inputs to the program"),
-        )
-}
-
-fn parse_inputs(inputs: Option<&String>) -> Vec<BFieldElement> {
-    if let Some(i) = inputs {
-        i.split(',')
-            .filter(|v| !v.is_empty())
-            .map(|v| v.parse().unwrap())
-            .collect()
-    } else {
-        vec![]
-    }
-}
-
 fn main() {
-    let matches = cli().get_matches();
-    let entry_fn = matches
-        .get_one::<String>("ENTRY_FN")
-        .expect("Failed to get ENTRY_FN");
-    let target = matches
-        .get_many::<String>("target")
-        .unwrap_or_default()
-        .map(|v| v.as_str())
-        .collect::<Vec<_>>();
-    let include_paths = matches
-        .get_many::<String>("include")
-        .unwrap_or_default()
-        .map(|v| v.as_str())
-        .collect::<Vec<_>>();
-    let public_inputs = matches.get_one::<String>("public_inputs");
-    let secret_inputs = matches.get_one::<String>("secret_inputs");
-    if target.len() > 1 {
-        println!("Multiple targets not supported yet");
-        std::process::exit(1);
-    }
-    if target.is_empty() {
-        println!("No target specified");
-        std::process::exit(1);
-    }
-    let target = target[0];
-    match target {
+    let mut config = cli::parse();
+    match config.target.as_str() {
         "tasm" => {
-            let mut compiler: Compiler<FoiFieldElement> =
-                Compiler::new(vec!["ash".to_string(), "tasm".to_string()]);
-            for p in include_paths {
-                if p.is_empty() {
-                    continue;
-                }
-                if let Err(err) = compiler.include(Utf8PathBuf::from(p)) {
-                    println!("Failed to include path: {:?}", err);
-                    std::process::exit(1);
-                }
-            }
-            compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
-            let asm = compiler.compile(entry_fn, target);
-
-            let instructions = triton_vm::parser::parse(&asm);
-            if let Err(e) = instructions {
-                println!("Failed to parse tasm: {:?}", e);
-                std::process::exit(1);
-            }
-            let instructions = instructions.unwrap();
-            let l_instructions =
-                triton_vm::parser::to_labelled_instructions(instructions.as_slice());
-            let program = triton_vm::program::Program::new(l_instructions.as_slice());
-
-            let public_inputs = PublicInput::from(parse_inputs(public_inputs));
-            let secret_inputs = NonDeterminism::from(parse_inputs(secret_inputs));
-            match triton_vm::prove_program(&program, public_inputs, secret_inputs) {
-                Ok((_stark, _claim, _proof)) => {
-                    println!("{:?}", _stark);
-                    println!("{:?}", _claim);
-                }
-                Err(e) => {
-                    println!("Triton VM errored");
-                    println!("{e}");
-                    std::process::exit(1);
-                }
-            }
+            compile_tasm(&mut config);
         }
         "r1cs" => {
-            let mut compiler: Compiler<FoiFieldElement> =
-                Compiler::new(vec!["ash".to_string(), "ar1cs".to_string()]);
-            for p in include_paths {
-                if p.is_empty() {
-                    continue;
-                }
-                if let Err(err) = compiler.include(Utf8PathBuf::from(p)) {
-                    println!("Failed to include path: {:?}", err);
-                    std::process::exit(1);
-                }
-            }
-            compiler.print_asm = *matches.get_one::<bool>("print_asm").unwrap_or(&false);
-            let constraints = compiler.compile(entry_fn, target);
-            let witness = witness::build::<FoiFieldElement>(&constraints);
-            if let Err(e) = witness {
-                println!("Failed to build witness: {:?}", e);
-                std::process::exit(1);
-            }
-            let witness = witness.unwrap();
-
-            if let Err(e) = witness::verify::<FoiFieldElement>(&constraints, witness) {
-                println!("Failed to solve r1cs: {:?}", e);
-                std::process::exit(1);
-            } else {
-                println!("");
-                println!("R1CS: built and validated witness ✅");
-            }
+            compile_r1cs::<FoiFieldElement>(&mut config);
         }
         _ => {
-            println!("Unsupported target: {}", target);
+            println!("Unsupported target: {}", config.target);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn compile_r1cs<T: FieldElement>(config: &mut Config) {
+    config.extension_priorities.push("ar1cs".to_string());
+    let mut compiler: Compiler<FoiFieldElement> = Compiler::new(config);
+
+    let constraints = compiler.compile(&config.entry_fn, &config.target);
+
+    let witness = witness::build::<T>(&constraints);
+    if let Err(e) = witness {
+        println!("Failed to build witness: {:?}", e);
+        std::process::exit(1);
+    }
+    let witness = witness.unwrap();
+
+    if let Err(e) = witness::verify::<T>(&constraints, witness) {
+        println!("Failed to solve r1cs: {:?}", e);
+        std::process::exit(1);
+    } else {
+        println!("");
+        println!("R1CS: built and validated witness ✅");
+    }
+}
+
+fn compile_tasm(config: &mut Config) {
+    config.extension_priorities.push("tasm".to_string());
+
+    let mut compiler: Compiler<FoiFieldElement> = Compiler::new(config);
+    let asm = compiler.compile(&config.entry_fn, &config.target);
+
+    let instructions = triton_vm::parser::parse(&asm);
+    if let Err(e) = instructions {
+        println!("Failed to parse tasm: {:?}", e);
+        std::process::exit(1);
+    }
+    let instructions = instructions.unwrap();
+    let l_instructions = triton_vm::parser::to_labelled_instructions(instructions.as_slice());
+    let program = triton_vm::program::Program::new(l_instructions.as_slice());
+    let public_inputs = PublicInput::from(
+        config
+            .inputs
+            .clone()
+            .into_iter()
+            .map(|v| BFieldElement::from_str(&v).unwrap())
+            .collect::<Vec<_>>(),
+    );
+    let secret_inputs = NonDeterminism::from(
+        config
+            .secret_inputs
+            .clone()
+            .into_iter()
+            .map(|v| BFieldElement::from_str(&v).unwrap())
+            .collect::<Vec<_>>(),
+    );
+
+    match triton_vm::prove_program(&program, public_inputs, secret_inputs) {
+        Ok((_stark, _claim, _proof)) => {
+            println!("{:?}", _stark);
+            println!("{:?}", _claim);
+        }
+        Err(e) => {
+            println!("Triton VM errored");
+            println!("{e}");
             std::process::exit(1);
         }
     }

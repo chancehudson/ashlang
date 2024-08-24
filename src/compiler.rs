@@ -1,3 +1,4 @@
+use crate::cli::Config;
 use crate::log;
 use crate::math::FieldElement;
 use crate::parser::AshParser;
@@ -63,14 +64,26 @@ pub struct Compiler<T: FieldElement> {
  * a full output file.
  */
 impl<T: FieldElement> Compiler<T> {
-    pub fn new(extensions: Vec<String>) -> Self {
-        Compiler {
+    pub fn new(config: &Config) -> Self {
+        let mut compiler = Compiler {
             path_to_fn: HashMap::new(),
             fn_to_path: HashMap::new(),
             print_asm: false,
             state: CompilerState::new(),
-            extensions,
+            extensions: config.extension_priorities.clone(),
+        };
+        if let Err(e) = compiler.include_many(&config.include_paths) {
+            log::error!(&format!("Failed to include path: {:?}", e));
         }
+        compiler.print_asm = config.verbosity > 0;
+        compiler
+    }
+
+    pub fn include_many(&mut self, paths: &Vec<Utf8PathBuf>) -> Result<()> {
+        for path in paths {
+            self.include(&path)?;
+        }
+        Ok(())
     }
 
     // include a path in the build
@@ -80,7 +93,7 @@ impl<T: FieldElement> Compiler<T> {
     //
     // if the include is a directory, the directory is recursively
     // walked and passed to this function
-    pub fn include(&mut self, path: Utf8PathBuf) -> Result<()> {
+    pub fn include(&mut self, path: &Utf8PathBuf) -> Result<()> {
         // first check if it's a directory
         let metadata = fs::metadata(&path)
             .map_err(|_| anyhow::anyhow!("Failed to stat metadata for include path: {:?}", path))?;
@@ -133,12 +146,12 @@ impl<T: FieldElement> Compiler<T> {
                 if current_index > existing_index {
                     // we'll prefer the higher indexed impl
                     self.fn_to_path.insert(name_str.clone(), path.clone());
-                    self.path_to_fn.insert(path, name_str);
+                    self.path_to_fn.insert(path.clone(), name_str);
                 }
                 return Ok(());
             }
             self.fn_to_path.insert(name_str.clone(), path.clone());
-            self.path_to_fn.insert(path, name_str);
+            self.path_to_fn.insert(path.clone(), name_str);
         } else if metadata.is_dir() {
             let files = fs::read_dir(&path)
                 .unwrap_or_else(|_| panic!("Failed to read directory: {:?}", &path));
@@ -146,7 +159,7 @@ impl<T: FieldElement> Compiler<T> {
                 let next_path = entry
                     .unwrap_or_else(|_| panic!("Failed to read dir entry: {:?}", &path))
                     .path();
-                self.include(Utf8PathBuf::from_path_buf(next_path).unwrap())?;
+                self.include(&Utf8PathBuf::from_path_buf(next_path).unwrap())?;
             }
         }
         Ok(())
