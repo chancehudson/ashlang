@@ -27,7 +27,9 @@ pub fn verify<T: FieldElement>(r1cs: &str, witness: Vec<T>) -> Result<()> {
         for (coef, index) in &c.c {
             c_lc += coef.clone() * vars.get(&index).unwrap().clone();
         }
-        assert_eq!(a_lc * b_lc, c_lc);
+        if a_lc.clone() * b_lc.clone() != c_lc {
+            anyhow::bail!("Constraint failed: {:?}", c)
+        }
     }
     Ok(())
 }

@@ -15,7 +15,7 @@ use std::ops::Sub;
 use std::ops::SubAssign;
 use std::str::FromStr;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct Curve25519FieldElement(Scalar);
 
 impl FieldElement for Curve25519FieldElement {
@@ -40,6 +40,26 @@ impl FieldElement for Curve25519FieldElement {
 
     fn deserialize(str: &str) -> Self {
         Self::from_str(str).unwrap()
+    }
+}
+
+impl PartialOrd for Curve25519FieldElement {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        let a = BigUint::from_str(&self.serialize()).unwrap();
+        let b = BigUint::from_str(&other.serialize()).unwrap();
+        if a == b {
+            Some(std::cmp::Ordering::Equal)
+        } else if a < b {
+            Some(std::cmp::Ordering::Less)
+        } else {
+            Some(std::cmp::Ordering::Greater)
+        }
+    }
+}
+
+impl Debug for Curve25519FieldElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", BigUint::from_bytes_le(self.0.as_bytes()))
     }
 }
 

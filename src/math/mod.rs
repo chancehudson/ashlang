@@ -30,6 +30,7 @@ pub trait FieldElement:
     + SubAssign
     + FromStr
     + PartialEq
+    + PartialOrd
     + Clone
     + Hash
     + Debug
@@ -65,6 +66,8 @@ pub trait FieldElement:
 
     /// Kumar 08
     /// https://arxiv.org/pdf/2008.11814v4
+    /// always returns the smaller root
+    /// e.g. the positive root
     fn sqrt(&self) -> Self {
         if self == &Self::zero() {
             return Self::zero();
@@ -115,7 +118,9 @@ pub trait FieldElement:
             &Self::prime(),
         );
         let o = (a_ * b_) % Self::prime();
-        Self::deserialize(&o.to_string())
+        let root = Self::deserialize(&o.to_string());
+        let other_root = -root.clone();
+        return if root > other_root { other_root } else { root };
     }
 }
 

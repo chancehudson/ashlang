@@ -201,7 +201,18 @@ impl<T: FieldElement> R1csConstraint<T> {
                 if a != (T::one() + T::one()) {
                     panic!("Cannot calculate non-square root");
                 }
-                b.sqrt()
+                let l = b.legendre();
+                if l == 0 {
+                    T::zero()
+                } else if l == 1 {
+                    // always return the positive value
+                    b.sqrt()
+                } else {
+                    crate::log::error!(&format!(
+                        "cannot take square root of residue element: {}",
+                        b.serialize()
+                    ));
+                }
             }
         }
     }
