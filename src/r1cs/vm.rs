@@ -127,15 +127,15 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     }
                 }
                 AstNode::FnVar(names) => {
-                    for x in 0..names.len() {
-                        let name = &names[x];
+                    for (i, v) in names[0..names.len()].iter().enumerate() {
+                        let name = v;
                         if self.vars.contains_key(name) {
                             log::error!(
                                 &format!("variable already defined: {name}"),
                                 "attempting to define variable in function header"
                             );
                         }
-                        self.vars.insert(name.clone(), self.args[x].clone());
+                        self.vars.insert(name.clone(), self.args[i].clone());
                     }
                 }
                 AstNode::Rtrn(expr) => {

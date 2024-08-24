@@ -136,10 +136,11 @@ impl<T: FieldElement> Compiler<T> {
                 }
                 if existing_path.parent() != path.canonicalize_utf8()?.parent() {
                     log::error!(&format!(
-                        "{}\n{}\n{}",
-                        format!("Duplicate file/function names detected: {name_str}"),
-                        format!("Path 1: {:?}", &path),
-                        format!("Path 2: {:?}", self.fn_to_path.get(&name_str).unwrap())
+                        "Duplicate file/function names detected: {name_str}
+Path 1: {:?}
+Path 2: {:?}",
+                        &path,
+                        self.fn_to_path.get(&name_str).unwrap()
                     ));
                 }
                 let existing_extension = existing_path.extension().unwrap();
@@ -257,7 +258,8 @@ impl<T: FieldElement> Compiler<T> {
                     &mut vm
                         .constraints
                         .iter()
-                        .filter(|v| v.symbolic).cloned()
+                        .filter(|v| v.symbolic)
+                        .cloned()
                         .collect::<Vec<R1csConstraint<T>>>()
                         .to_vec(),
                 );
@@ -265,7 +267,8 @@ impl<T: FieldElement> Compiler<T> {
                     &mut vm
                         .constraints
                         .iter()
-                        .filter(|v| !v.symbolic).cloned()
+                        .filter(|v| !v.symbolic)
+                        .cloned()
                         .collect::<Vec<R1csConstraint<T>>>()
                         .to_vec(),
                 );

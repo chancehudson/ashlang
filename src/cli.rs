@@ -16,6 +16,7 @@ pub struct Config {
     pub field: String,
 }
 
+#[allow(dead_code)]
 pub fn parse() -> Config {
     let matches = cli().get_matches();
     let entry_fn = matches

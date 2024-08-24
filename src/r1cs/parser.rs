@@ -183,10 +183,10 @@ impl<T: FieldElement> R1csParser<T> {
                 self.arg_names.len()
             ));
         }
-        for x in 0..args.len() {
-            let local_index = self.arg_name_index.get(&self.arg_names[x]);
+        for (i, v) in args.iter().enumerate() {
+            let local_index = self.arg_name_index.get(&self.arg_names[i]);
             if let Some(local_index) = local_index {
-                signal_map.insert(*local_index, args[x]);
+                signal_map.insert(*local_index, *v);
             } else {
                 unreachable!();
             }

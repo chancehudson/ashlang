@@ -7,6 +7,7 @@ use crate::parser::BoolOp;
 use crate::parser::Expr;
 use crate::parser::NumOp;
 use anyhow::Result;
+use std::cmp;
 use std::collections::HashMap;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -623,11 +624,11 @@ impl<'a, T: FieldElement> VM<'a, T> {
         self.asm.push(format!("call {block_name}"));
     }
 
-    pub fn extract_literals(&mut self, expr: Expr, out: &mut Vec<u64>) {
+    pub fn extract_literals(expr: Expr, out: &mut Vec<u64>) {
         match expr {
             Expr::VecVec(v) => {
                 for a in v {
-                    self.extract_literals(a, out);
+                    Self::extract_literals(a, out);
                 }
             }
             Expr::VecLit(v) => {
@@ -670,16 +671,16 @@ impl<'a, T: FieldElement> VM<'a, T> {
         }
         // then pull all the literals into a 1 dimensional vec
         let mut vec_rep: Vec<u64> = Vec::new();
-        self.extract_literals(expr, &mut vec_rep);
+        Self::extract_literals(expr, &mut vec_rep);
         (dimensions, vec_rep)
     }
 
     // output a single stack element
-    pub fn calc_vec_offset(&mut self, dimensions: &Vec<usize>, indices: &Vec<Expr>) {
+    pub fn calc_vec_offset(&mut self, dimensions: &Vec<usize>, indices: &[Expr]) {
         let sum = |vec: &Vec<usize>, start: usize| -> usize {
             let mut out = 1;
-            for x in start..vec.len() {
-                out *= vec[x];
+            for v in &vec[start..] {
+                out *= v;
             }
             out
         };
@@ -719,11 +720,11 @@ impl<'a, T: FieldElement> VM<'a, T> {
         }
     }
 
-    pub fn calc_vec_offset_static(dimensions: &Vec<usize>, indices: &Vec<Expr>) -> usize {
+    pub fn calc_vec_offset_static(dimensions: &Vec<usize>, indices: &[Expr]) -> usize {
         let sum = |vec: &Vec<usize>, start: usize| -> usize {
             let mut out = 1;
-            for x in start..vec.len() {
-                out *= vec[x];
+            for v in &vec[start..] {
+                out *= v;
             }
             out
         };
@@ -790,12 +791,11 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 let mut stack_arg_count = 0;
                 for v in vars {
                     // if it's a stack variable the asm will be modified as needed
-                    let o;
-                    if self.compiler_state.is_fn_ash.contains_key(name) {
-                        o = self.eval(*(*v).clone(), false);
+                    let o = if self.compiler_state.is_fn_ash.contains_key(name) {
+                        self.eval((*v).clone(), false)
                     } else {
-                        o = self.eval_to_stack(*(*v).clone(), false);
-                    }
+                        self.eval_to_stack((*v).clone(), false)
+                    };
                     // let o = self.eval(Expr::Val(v.clone(), vec![]));
                     // if it's not a stack variable we'll get a return from self.eval
                     // and can add it to the arg_types. We'll then push the absolute
@@ -954,29 +954,27 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 let v = self.vars.get(name).unwrap().clone();
                 self.load_variable(&v, indices)
             }
-            Expr::Lit(v) => {
-                Some(Var {
-                    stack_index: None,
-                    location: VarLocation::Static,
-                    dimensions: vec![],
-                    memory_index: None,
-                    block_index: self.block_depth,
-                    value: Some(vec![v.parse::<u64>().unwrap()]),
-                })
-            }
+            Expr::Lit(v) => Some(Var {
+                stack_index: None,
+                location: VarLocation::Static,
+                dimensions: vec![],
+                memory_index: None,
+                block_index: self.block_depth,
+                value: Some(vec![v.parse::<u64>().unwrap()]),
+            }),
             Expr::NumOp { lhs, op, rhs } => {
                 // only allow variables of same dimensions
                 // for now
                 let mut lv = self.eval(*lhs.clone(), false);
                 let mut rv = self.eval(*rhs.clone(), false);
                 if lv.is_some() && rv.is_none() {
-                    if let Ok(_) = self.static_to_stack(&lv.clone().unwrap()) {
+                    if self.static_to_stack(&lv.clone().unwrap()).is_ok() {
                         lv = None;
                         self.asm.push("swap 1".to_string());
                     }
                 }
                 if rv.is_some() && lv.is_none() {
-                    if let Ok(_) = self.static_to_stack(&rv.clone().unwrap()) {
+                    if self.static_to_stack(&rv.clone().unwrap()).is_ok() {
                         rv = None;
                     }
                 }
@@ -996,23 +994,22 @@ impl<'a, T: FieldElement> VM<'a, T> {
                             );
                         }
                     }
-                    let out_v;
-                    if is_returning
+                    let out_v = if is_returning
                         && lvu.location != VarLocation::Static
                         && rvu.location != VarLocation::Static
                     {
                         let return_var = self.vars.get(RETURN_VAR).unwrap();
-                        out_v = Some(Var {
+                        Some(Var {
                             stack_index: Some(return_var.stack_index.unwrap()),
                             block_index: self.block_depth,
                             location: VarLocation::Memory,
                             memory_index: None,
                             dimensions: lvu.dimensions.clone(),
                             value: None,
-                        });
+                        })
                     } else {
-                        out_v = None;
-                    }
+                        None
+                    };
                     // operate on elements in a vector stored in memory
                     // store the result in memory
                     // TODO: batch memory read/write operations
@@ -1113,34 +1110,38 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     let v = self.vars.get(&name).unwrap().clone();
                     // offset is pushed onto the stack
                     self.calc_vec_offset(&v.dimensions, &indices);
-                    if indices.len() == v.dimensions.len() {
-                        // assigning a scalar into a specific index in a vec
-                        if o.is_some() {
-                            log::error!(&format!(
-                                "attempting to assign memory value to scalar \"{name}\""
-                            ));
+                    match indices.len().cmp(&v.dimensions.len()) {
+                        cmp::Ordering::Less => {
+                            panic!("cannot assign vec");
                         }
-                        // push the expr to the stack then into memory
-                        // we're accessing a scalar, move it to the stack
-                        if let Some(mem_index) = v.memory_index {
-                            self.stack_push(mem_index.try_into().unwrap());
-                            self.asm.push("add".to_string());
-                            self.stack.pop();
-                            self.stack_write_mem(1);
-                            self.stack_pop(1);
-                        } else if let Some(stack_index) = v.stack_index {
-                            self.stack_dup(stack_index);
-                            self.asm.push("add".to_string());
-                            self.stack.pop();
-                            self.stack_write_mem(1);
-                            self.stack_pop(1);
-                        } else {
-                            log::error!("unexpected: variable has no memory or stack index");
+                        cmp::Ordering::Greater => {
+                            log::error!("var dimension is too low for assignment", "you're accessing an index on a scalar, or an n+1 dimension on a vector of n dimensions");
                         }
-                    } else if indices.len() > v.dimensions.len() {
-                        log::error!("var dimension is too low for assignment", "you're accessing an index on a scalar, or an n+1 dimension on a vector of n dimensions");
-                    } else {
-                        panic!("cannot assign vec");
+                        cmp::Ordering::Equal => {
+                            // assigning a scalar into a specific index in a vec
+                            if o.is_some() {
+                                log::error!(&format!(
+                                    "attempting to assign memory value to scalar \"{name}\""
+                                ));
+                            }
+                            // push the expr to the stack then into memory
+                            // we're accessing a scalar, move it to the stack
+                            if let Some(mem_index) = v.memory_index {
+                                self.stack_push(mem_index.try_into().unwrap());
+                                self.asm.push("add".to_string());
+                                self.stack.pop();
+                                self.stack_write_mem(1);
+                                self.stack_pop(1);
+                            } else if let Some(stack_index) = v.stack_index {
+                                self.stack_dup(stack_index);
+                                self.asm.push("add".to_string());
+                                self.stack.pop();
+                                self.stack_write_mem(1);
+                                self.stack_pop(1);
+                            } else {
+                                log::error!("unexpected: variable has no memory or stack index");
+                            }
+                        }
                     }
                 }
                 AstNode::EmptyVecDef(name, dimensions) => {
@@ -1271,10 +1272,10 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 self.stack_dup(v.stack_index.unwrap());
             }
             VarLocation::Memory => {
-                if offset.is_some() {
-                    self.stack_push(offset.unwrap().try_into().unwrap());
+                if let Some(offset) = offset {
+                    self.stack_push(offset.try_into().unwrap());
                 } else {
-                    self.calc_vec_offset(&v.dimensions, &vec![]);
+                    self.calc_vec_offset(&v.dimensions, &[]);
                 }
                 // we're accessing a scalar, move it to the stack
                 if let Some(mem_index) = v.memory_index {
@@ -1308,7 +1309,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
     }
 
     // load a stack, memory or static variable and return it
-    fn load_variable(&mut self, v: &Var, indices: &Vec<Expr>) -> Option<Var> {
+    fn load_variable(&mut self, v: &Var, indices: &[Expr]) -> Option<Var> {
         match v.location {
             VarLocation::Stack => {
                 if !indices.is_empty() {

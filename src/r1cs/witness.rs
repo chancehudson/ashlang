@@ -7,8 +7,8 @@ pub fn verify<T: FieldElement>(r1cs: &str, witness: Vec<T>) -> Result<()> {
     // confirm that the witness is correct
     let r1cs: R1csParser<T> = R1csParser::new(r1cs);
     let mut vars: HashMap<usize, T> = HashMap::new();
-    for x in 0..witness.len() {
-        vars.insert(x, witness[x].clone());
+    for (i, v) in witness.iter().enumerate() {
+        vars.insert(i, v.clone());
     }
 
     for c in &r1cs.constraints {

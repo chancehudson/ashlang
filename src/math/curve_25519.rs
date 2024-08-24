@@ -47,13 +47,7 @@ impl PartialOrd for Curve25519FieldElement {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         let a = BigUint::from_str(&self.serialize()).unwrap();
         let b = BigUint::from_str(&other.serialize()).unwrap();
-        if a == b {
-            Some(std::cmp::Ordering::Equal)
-        } else if a < b {
-            Some(std::cmp::Ordering::Less)
-        } else {
-            Some(std::cmp::Ordering::Greater)
-        }
+        Some(a.cmp(&b))
     }
 }
 
@@ -73,9 +67,7 @@ impl FromStr for Curve25519FieldElement {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Curve25519FieldElement(
-            Scalar::from_str_vartime(s).unwrap(),
-        ))
+        Ok(Curve25519FieldElement(Scalar::from_str_vartime(s).unwrap()))
     }
 }
 
