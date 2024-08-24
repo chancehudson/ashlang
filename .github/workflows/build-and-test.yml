@@ -9,6 +9,9 @@ on:
       - reopened
       - ready_for_review
 
+env:
+  RUSTC_VERSION: 1.79.0
+
 jobs:
   # TODO: Add a job to run clippy
   clippy:
@@ -17,10 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.79.0
-          override: true
+        run: rustup update $RUSTC_VERSION && rustup default $RUSTC_VERSION
       - name: Run clippy
         run: cargo clippy
   lint:
@@ -37,10 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.79.0
-          override: true
+        run: rustup update $RUSTC_VERSION && rustup default $RUSTC_VERSION
       - name: Build
         run: cargo build
       - name: Test
@@ -51,10 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.79.0
-          override: true
+        run: rustup update $RUSTC_VERSION && rustup default $RUSTC_VERSION
       - name: Build compiler
         run: cargo build --release
       - name: Run test vectors
@@ -67,10 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.79.0
-          override: true
+        run: rustup update $RUSTC_VERSION && rustup default $RUSTC_VERSION
       - name: Build compiler
         run: cargo build --release
       - name: Run test vectors
