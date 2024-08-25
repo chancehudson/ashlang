@@ -1,7 +1,9 @@
-use crate::math::FieldElement;
-use crate::r1cs::parser::R1csParser;
-use anyhow::Result;
 use std::collections::HashMap;
+
+use anyhow::Result;
+use scalarff::FieldElement;
+
+use crate::r1cs::parser::R1csParser;
 
 pub fn verify<T: FieldElement>(r1cs: &str, witness: Vec<T>) -> Result<()> {
     // confirm that the witness is correct

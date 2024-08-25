@@ -6,6 +6,8 @@ edition = "2021"
 [lib]
 
 [dependencies]
+
+# misc
 anyhow = "1.0.86"
 camino = "1.1.7"
 clap = { version = "4.5.9", features = ["derive"] }
@@ -13,12 +15,9 @@ colored = "2.1.0"
 lazy_static = "1.5.0"
 pest = "2.7.11"
 pest_derive = "2.7.11"
+
+# provers
 triton-vm = "=0.41.0"
-twenty-first = "0.41.0"
-ark-ff = "=0.4.1"
-ark-bn254 = "0.4.0"
-ark-std = "0.4.0"
-curve25519-dalek = { version = "4.1.3", features = ["group"] }
-ff = "0.13.0"
-num-bigint = "0.4.6"
-num-integer = "0.1.46"
+
+# math
+scalarff = { git = "https://github.com/chancehudson/scalarff.git" }

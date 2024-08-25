@@ -1,14 +1,16 @@
+use std::cmp;
+use std::collections::HashMap;
+
+use anyhow::Result;
+use scalarff::foi::FoiFieldElement;
+use scalarff::FieldElement;
+
 use crate::compiler::CompilerState;
 use crate::log;
-use crate::math::foi::FoiFieldElement;
-use crate::math::FieldElement;
 use crate::parser::AstNode;
 use crate::parser::BoolOp;
 use crate::parser::Expr;
 use crate::parser::NumOp;
-use anyhow::Result;
-use std::cmp;
-use std::collections::HashMap;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum VarLocation {

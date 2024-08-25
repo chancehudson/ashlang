@@ -1,18 +1,17 @@
-use cli::Config;
-use compiler::Compiler;
-use math::alt_bn128::Bn128FieldElement;
-use math::curve_25519::Curve25519FieldElement;
-use math::foi::FoiFieldElement;
-use math::FieldElement;
 use std::str::FromStr;
 
+use cli::Config;
+use compiler::Compiler;
 use r1cs::witness;
+use scalarff::alt_bn128::Bn128FieldElement;
+use scalarff::curve_25519::Curve25519FieldElement;
+use scalarff::foi::FoiFieldElement;
+use scalarff::FieldElement;
 use triton_vm::prelude::*;
 
 mod cli;
 mod compiler;
 mod log;
-mod math;
 mod parser;
 mod r1cs;
 mod tasm;

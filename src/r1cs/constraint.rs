@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::math::FieldElement;
+use scalarff::FieldElement;
 
 // a b and c represent values in
 // a constraint a * b - c = 0

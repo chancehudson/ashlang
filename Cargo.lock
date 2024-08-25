@@ -233,21 +233,14 @@ name = "ashlang"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "ark-bn254",
- "ark-ff",
- "ark-std",
  "camino",
  "clap",
  "colored",
- "curve25519-dalek",
- "ff",
  "lazy_static",
- "num-bigint",
- "num-integer",
  "pest",
  "pest_derive",
+ "scalarff",
  "triton-vm",
- "twenty-first 0.41.0",
 ]
 
 [[package]]
@@ -1269,6 +1262,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "scalarff"
+version = "0.1.0"
+source = "git+https://github.com/chancehudson/scalarff.git#5d8d3a2d1d9f5d628c905fd7764ddc9872e8a768"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-ff",
+ "ark-std",
+ "colored",
+ "curve25519-dalek",
+ "ff",
+ "num-bigint",
+ "num-integer",
+ "twenty-first 0.41.0",
 ]
 
 [[package]]

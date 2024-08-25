@@ -1,16 +1,18 @@
+use std::collections::HashMap;
+use std::fs;
+
+use anyhow::Result;
+use camino::Utf8PathBuf;
+use scalarff::FieldElement;
+
 use crate::cli::Config;
 use crate::log;
-use crate::math::FieldElement;
 use crate::parser::AshParser;
 use crate::parser::AstNode;
 use crate::r1cs::constraint::R1csConstraint;
 use crate::r1cs::parser::R1csParser;
 use crate::tasm::asm_parser::AsmParser;
 use crate::tasm::vm::FnCall;
-use anyhow::Result;
-use camino::Utf8PathBuf;
-use std::collections::HashMap;
-use std::fs;
 
 // things that both Compiler and VM
 // need to modify

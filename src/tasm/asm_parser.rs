@@ -1,11 +1,11 @@
-use crate::log;
+use pest::Parser;
+use pest_derive::Parser;
 
+use crate::log;
 use crate::tasm::vm::ArgType;
 use crate::tasm::vm::FnCall;
 use crate::tasm::vm::VarLocation;
 use log::error;
-use pest::Parser;
-use pest_derive::Parser;
 
 #[derive(Parser)]
 #[grammar = "tasm/tasm_grammar.pest"] // relative to project `src`

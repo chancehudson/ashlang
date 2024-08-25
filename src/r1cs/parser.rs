@@ -2,9 +2,9 @@ use super::constraint::string_to_index;
 use super::constraint::R1csConstraint;
 use super::constraint::SymbolicOp;
 use crate::log;
-use crate::math::FieldElement;
 use pest::Parser;
 use pest_derive::Parser;
+use scalarff::FieldElement;
 use std::collections::HashMap;
 
 #[derive(Parser)]

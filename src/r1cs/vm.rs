@@ -1,13 +1,15 @@
+use std::collections::HashMap;
+
+use scalarff::matrix::Matrix;
+use scalarff::FieldElement;
+
 use crate::compiler::CompilerState;
 use crate::log;
-use crate::math::matrix::Matrix;
-use crate::math::FieldElement;
 use crate::parser::AstNode;
 use crate::parser::Expr;
 use crate::parser::NumOp;
 use crate::r1cs::constraint::R1csConstraint;
 use crate::r1cs::constraint::SymbolicOp;
-use std::collections::HashMap;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum VarLocation {

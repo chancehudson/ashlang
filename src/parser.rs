@@ -1,7 +1,6 @@
-use self::AstNode::*;
-use crate::log;
+use std::collections::HashMap;
+
 use anyhow::Result;
-use log::error;
 use pest::iterators::Pair;
 use pest::iterators::Pairs;
 use pest::pratt_parser::Assoc;
@@ -10,7 +9,10 @@ use pest::pratt_parser::PrattParser;
 use pest::Parser;
 use pest::RuleType;
 use pest_derive::Parser;
-use std::collections::HashMap;
+
+use self::AstNode::*;
+use crate::log;
+use log::error;
 
 #[derive(Debug, Clone)]
 pub enum AstNode {
