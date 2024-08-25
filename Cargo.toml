@@ -20,4 +20,4 @@ pest_derive = "2.7.11"
 triton-vm = "=0.41.0"
 
 # math
-scalarff = { git = "https://github.com/chancehudson/scalarff.git" }
+scalarff = "0.0.0"
