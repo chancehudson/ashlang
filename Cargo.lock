@@ -1266,9 +1266,9 @@ dependencies = [
 
 [[package]]
 name = "scalarff"
-version = "0.0.0"
+version = "0.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d0c175f3498084d666e142d6a4ca2da1f2f09bcaf56c3a45706a588474b559d"
+checksum = "a8f0e84063df8dd2619f683f6cf0d52e7b8a401c864c80bc5a356d4cef5a65b9"
 dependencies = [
  "anyhow",
  "ark-bn254",
