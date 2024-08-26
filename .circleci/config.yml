@@ -9,7 +9,7 @@ workflows:
       - tests:
           matrix:
             parameters:
-              rust-version: ["1.79.0", "beta", "nightly"]
+              rust-version: ["stable", "beta", "nightly"]
 
 step_defs:
   - run: &rust_version
@@ -27,14 +27,21 @@ step_defs:
         curl -o rustup https://sh.rustup.rs
         bash rustup -y
         . "$HOME/.cargo/env"
-        rustup update 1.79.0
-        rustup default 1.79.0
+        rustup update stable
+        rustup default stable
         rustup component add clippy
+
+# this RUST_MIN_STACK var the result of a bug
+# in rustc 1.80.0. Tracking here: https://github.com/chancehudson/ashlang/issues/38
+# This should be removed ASAP (hopefully in 1.81.0)
+environment: &rust_env
+  RUST_MIN_STACK: "33554432"
 
 jobs:
   clippy:
     machine:
       image: ubuntu-2204:current
+    environment: *rust_env
     steps:
       - checkout
       - run: *build_version_stable
@@ -44,6 +51,7 @@ jobs:
   lint:
     machine:
       image: ubuntu-2204:current
+    environment: *rust_env
     steps:
       - checkout
       - run: *build_version_stable
@@ -56,6 +64,7 @@ jobs:
         type: string
     machine:
       image: ubuntu-2204:current
+    environment: *rust_env
     steps:
       - checkout
       - run: *rust_version
@@ -68,6 +77,7 @@ jobs:
   compile-r1cs:
     machine:
       image: ubuntu-2204:current
+    environment: *rust_env
     steps:
       - checkout
       - run: *build_version_stable
@@ -83,6 +93,7 @@ jobs:
   compile-tasm:
     machine:
       image: ubuntu-2204:current
+    environment: *rust_env
     steps:
       - checkout
       - run: *build_version_stable
