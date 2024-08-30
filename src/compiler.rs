@@ -193,12 +193,20 @@ Path 2: {:?}",
         }
     }
 
+    pub fn compile_str(&mut self, entry_src: &str, target: &str) -> String {
+        let parser = AshParser::parse(entry_src, "entry");
+        self.compile_parser(parser, target)
+    }
+
     // start at the entry file
     // parse it and determine what other files are needed
     // repeat until all files have been parsed
     pub fn compile(&mut self, entry_fn_name: &str, target: &str) -> String {
         let parser = AshParser::parse(&self.parse_fn(entry_fn_name).0, entry_fn_name);
+        self.compile_parser(parser, target)
+    }
 
+    fn compile_parser(&mut self, parser: AshParser, target: &str) -> String {
         // tracks total number of includes for a fn in all sources
         let mut included_fn: HashMap<String, u64> = parser.fn_names.clone();
         // step 1: build ast for all functions
