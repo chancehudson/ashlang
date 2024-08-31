@@ -4,7 +4,10 @@ workflows:
     jobs:
       - lint
       - clippy
-      - compile-r1cs
+      - compile-r1cs:
+          matrix:
+            parameters:
+              field: ["foi", "curve25519", "alt_bn128"]
       - compile-tasm
       - tests:
           matrix:
@@ -78,6 +81,9 @@ jobs:
     machine:
       image: ubuntu-2204:current
     environment: *rust_env
+    parameters:
+      field:
+        type: string
     steps:
       - checkout
       - run: *build_version_stable
@@ -86,10 +92,10 @@ jobs:
           command: cargo build --release
       - run:
           name: Run r1cs test
-          command: cargo run --release -- r1cs_test -t r1cs -i ./test-vectors -i stdlib -v -f foi
+          command: cargo run --release -- r1cs_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
       - run:
           name: Run r1cs readme test
-          command: cargo run --release -- r1cs_readme -t r1cs -i ./test-vectors -i stdlib -v -f foi
+          command: cargo run --release -- r1cs_readme -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
   compile-tasm:
     machine:
       image: ubuntu-2204:current
@@ -97,9 +103,6 @@ jobs:
     steps:
       - checkout
       - run: *build_version_stable
-      - run:
-          name: Build
-          command: cargo build --release
       - run:
           name: Build
           command: cargo build --release

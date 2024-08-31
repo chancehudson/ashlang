@@ -54,7 +54,7 @@ fn main() {
 
 fn compile_r1cs<T: FieldElement>(config: &mut Config) {
     config.extension_priorities.push("ar1cs".to_string());
-    let mut compiler: Compiler<FoiFieldElement> = Compiler::new(config);
+    let mut compiler: Compiler<T> = Compiler::new(config);
 
     let constraints = compiler.compile(&config.entry_fn, &config.target);
 
