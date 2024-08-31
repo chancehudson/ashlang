@@ -4,6 +4,7 @@ workflows:
     jobs:
       - lint
       - clippy
+      - compile-r1cs-readme
       - compile-r1cs:
           matrix:
             parameters:
@@ -77,6 +78,19 @@ jobs:
       - run:
           name: Test
           command: cargo test
+  compile-r1cs-readme:
+    machine:
+      image: ubuntu-2204:current
+    environment: *rust_env
+    steps:
+      - checkout
+      - run: *build_version_stable
+      - run:
+          name: Build
+          command: cargo build --release
+      - run:
+          name: Run r1cs readme test
+          command: cargo run --release -- r1cs_readme -t r1cs -i ./test-vectors -i stdlib -v -f foi
   compile-r1cs:
     machine:
       image: ubuntu-2204:current
@@ -93,9 +107,6 @@ jobs:
       - run:
           name: Run r1cs test
           command: cargo run --release -- r1cs_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
-      - run:
-          name: Run r1cs readme test
-          command: cargo run --release -- r1cs_readme -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
   compile-tasm:
     machine:
       image: ubuntu-2204:current
