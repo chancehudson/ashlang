@@ -26,14 +26,60 @@ fn main() {
                     "tasm only support execution in the foi (goldilocks) field"
                 );
             }
-            compile_tasm(&mut config);
+            // first compile the assembly
+            let asm = compile_tasm(&mut config);
+            // then attempt to prove the assembly in TritonVM
+            let instructions = triton_vm::parser::parse(&asm);
+            if let Err(e) = instructions {
+                println!("Failed to parse tasm: {:?}", e);
+                std::process::exit(1);
+            }
+            let instructions = instructions.unwrap();
+            let l_instructions =
+                triton_vm::parser::to_labelled_instructions(instructions.as_slice());
+            let program = triton_vm::program::Program::new(l_instructions.as_slice());
+            let public_inputs = PublicInput::from(
+                config
+                    .inputs
+                    .clone()
+                    .into_iter()
+                    .map(|v| BFieldElement::from_str(&v).unwrap())
+                    .collect::<Vec<_>>(),
+            );
+            let secret_inputs = NonDeterminism::from(
+                config
+                    .secret_inputs
+                    .clone()
+                    .into_iter()
+                    .map(|v| BFieldElement::from_str(&v).unwrap())
+                    .collect::<Vec<_>>(),
+            );
+
+            match triton_vm::prove_program(&program, public_inputs, secret_inputs) {
+                Ok((_stark, _claim, _proof)) => {
+                    println!("{:?}", _stark);
+                    println!("{:?}", _claim);
+                }
+                Err(e) => {
+                    println!("Triton VM errored");
+                    println!("{e}");
+                    std::process::exit(1);
+                }
+            }
         }
         "r1cs" => match config.field.as_str() {
             "foi" => {
                 compile_r1cs::<FoiFieldElement>(&mut config);
             }
             "curve25519" => {
-                compile_r1cs::<Curve25519FieldElement>(&mut config);
+                let constraints = compile_r1cs::<Curve25519FieldElement>(&mut config);
+                let t = ashlang_spartan::transform_r1cs(&constraints);
+                let proof = ashlang_spartan::prove(t);
+                if ashlang_spartan::verify(proof) {
+                    println!("✅ spartan proof is valid");
+                } else {
+                    println!("🔴 spartan proof is NOT valid");
+                }
             }
             "alt_bn128" => {
                 compile_r1cs::<Bn128FieldElement>(&mut config);
@@ -52,7 +98,7 @@ fn main() {
     }
 }
 
-fn compile_r1cs<T: FieldElement>(config: &mut Config) {
+fn compile_r1cs<T: FieldElement>(config: &mut Config) -> String {
     config.extension_priorities.push("ar1cs".to_string());
     let mut compiler: Compiler<T> = Compiler::new(config);
 
@@ -72,48 +118,12 @@ fn compile_r1cs<T: FieldElement>(config: &mut Config) {
         println!();
         println!("R1CS: built and validated witness ✅");
     }
+    constraints
 }
 
-fn compile_tasm(config: &mut Config) {
+fn compile_tasm(config: &mut Config) -> String {
     config.extension_priorities.push("tasm".to_string());
 
     let mut compiler: Compiler<FoiFieldElement> = Compiler::new(config);
-    let asm = compiler.compile(&config.entry_fn, &config.target);
-
-    let instructions = triton_vm::parser::parse(&asm);
-    if let Err(e) = instructions {
-        println!("Failed to parse tasm: {:?}", e);
-        std::process::exit(1);
-    }
-    let instructions = instructions.unwrap();
-    let l_instructions = triton_vm::parser::to_labelled_instructions(instructions.as_slice());
-    let program = triton_vm::program::Program::new(l_instructions.as_slice());
-    let public_inputs = PublicInput::from(
-        config
-            .inputs
-            .clone()
-            .into_iter()
-            .map(|v| BFieldElement::from_str(&v).unwrap())
-            .collect::<Vec<_>>(),
-    );
-    let secret_inputs = NonDeterminism::from(
-        config
-            .secret_inputs
-            .clone()
-            .into_iter()
-            .map(|v| BFieldElement::from_str(&v).unwrap())
-            .collect::<Vec<_>>(),
-    );
-
-    match triton_vm::prove_program(&program, public_inputs, secret_inputs) {
-        Ok((_stark, _claim, _proof)) => {
-            println!("{:?}", _stark);
-            println!("{:?}", _claim);
-        }
-        Err(e) => {
-            println!("Triton VM errored");
-            println!("{e}");
-            std::process::exit(1);
-        }
-    }
+    compiler.compile(&config.entry_fn, &config.target)
 }
