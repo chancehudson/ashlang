@@ -76,9 +76,9 @@ fn main() {
                 let t = ashlang_spartan::transform_r1cs(&constraints);
                 let proof = ashlang_spartan::prove(t);
                 if ashlang_spartan::verify(proof) {
-                    println!("spartan proof is valid");
+                    println!("✅ spartan proof is valid");
                 } else {
-                    println!("spartan proof is NOT valid");
+                    println!("🔴 spartan proof is NOT valid");
                 }
             }
             "alt_bn128" => {
