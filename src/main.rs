@@ -102,7 +102,7 @@ fn compile_r1cs<T: FieldElement>(config: &mut Config) -> String {
     config.extension_priorities.push("ar1cs".to_string());
     let mut compiler: Compiler<T> = Compiler::new(config);
 
-    let constraints = compiler.compile(&config.entry_fn, &config.target);
+    let constraints = compiler.compile(&config.entry_fn);
 
     let witness = witness::build::<T>(&constraints);
     if let Err(e) = witness {
@@ -125,5 +125,5 @@ fn compile_tasm(config: &mut Config) -> String {
     config.extension_priorities.push("tasm".to_string());
 
     let mut compiler: Compiler<FoiFieldElement> = Compiler::new(config);
-    compiler.compile(&config.entry_fn, &config.target)
+    compiler.compile(&config.entry_fn)
 }

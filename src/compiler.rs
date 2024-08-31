@@ -60,6 +60,7 @@ pub struct Compiler<T: FieldElement> {
     pub print_asm: bool,
     state: CompilerState<T>,
     extensions: Vec<String>,
+    target: String,
 }
 
 /**
@@ -79,6 +80,7 @@ impl<T: FieldElement> Compiler<T> {
             print_asm: false,
             state: CompilerState::new(),
             extensions: config.extension_priorities.clone(),
+            target: config.target.clone(),
         };
         if let Err(e) = compiler.include_many(&config.include_paths) {
             log::error!(&format!("Failed to include path: {:?}", e));
@@ -194,20 +196,20 @@ Path 2: {:?}",
     }
 
     #[allow(dead_code)]
-    pub fn compile_str(&mut self, entry_src: &str, target: &str) -> String {
+    pub fn compile_str(&mut self, entry_src: &str) -> String {
         let parser = AshParser::parse(entry_src, "entry");
-        self.compile_parser(parser, target)
+        self.compile_parser(parser)
     }
 
     // start at the entry file
     // parse it and determine what other files are needed
     // repeat until all files have been parsed
-    pub fn compile(&mut self, entry_fn_name: &str, target: &str) -> String {
+    pub fn compile(&mut self, entry_fn_name: &str) -> String {
         let parser = AshParser::parse(&self.parse_fn(entry_fn_name).0, entry_fn_name);
-        self.compile_parser(parser, target)
+        self.compile_parser(parser)
     }
 
-    fn compile_parser(&mut self, parser: AshParser, target: &str) -> String {
+    fn compile_parser(&mut self, parser: AshParser) -> String {
         // tracks total number of includes for a fn in all sources
         let mut included_fn: HashMap<String, u64> = parser.fn_names.clone();
         // step 1: build ast for all functions
@@ -258,7 +260,7 @@ Path 2: {:?}",
                 }
             }
         }
-        match target {
+        match self.target.as_str() {
             "r1cs" => {
                 use crate::r1cs::vm::VM;
                 let mut vm: VM<T> = VM::new(&mut self.state);
@@ -344,7 +346,7 @@ Path 2: {:?}",
                 final_asm.clone().join("\n")
             }
             _ => {
-                log::error!(&format!("unexpected target: {target}"));
+                log::error!(&format!("unexpected target: {}", self.target));
             }
         }
     }
