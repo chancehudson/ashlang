@@ -125,6 +125,5 @@ fn compile_tasm(config: &mut Config) -> String {
     config.extension_priorities.push("tasm".to_string());
 
     let mut compiler: Compiler<FoiFieldElement> = Compiler::new(config);
-    let asm = compiler.compile(&config.entry_fn, &config.target);
-    asm
+    compiler.compile(&config.entry_fn, &config.target)
 }

@@ -193,6 +193,7 @@ Path 2: {:?}",
         }
     }
 
+    #[allow(dead_code)]
     pub fn compile_str(&mut self, entry_src: &str, target: &str) -> String {
         let parser = AshParser::parse(entry_src, "entry");
         self.compile_parser(parser, target)
