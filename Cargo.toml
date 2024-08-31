@@ -5,6 +5,13 @@ edition = "2021"
 
 [lib]
 
+[[bin]]
+name = "ashlang"
+required-features = ["prove"]
+
+[features]
+prove = ["ashlang-spartan", "triton-vm"]
+
 [dependencies]
 
 # misc
@@ -17,9 +24,9 @@ pest = "2.7.11"
 pest_derive = "2.7.11"
 
 # provers
-triton-vm = "=0.41.0"
+triton-vm = { version = "=0.41.0", optional = true }
 #ashlang-spartan = { path = "../ashlang-spartan" }
-ashlang-spartan = { git = "https://github.com/chancehudson/ashlang-spartan.git" }
+ashlang-spartan = { git = "https://github.com/chancehudson/ashlang-spartan.git", optional = true }
 
 # math
 scalarff = "0.1.1"
