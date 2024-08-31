@@ -18,6 +18,7 @@ pest_derive = "2.7.11"
 
 # provers
 triton-vm = "=0.41.0"
+ashlang-spartan = { path = "../ashlang-spartan" }
 
 # math
 scalarff = "0.1.1"
