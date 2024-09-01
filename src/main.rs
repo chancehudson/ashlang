@@ -75,7 +75,7 @@ fn main() -> Result<()> {
             }
             "curve25519" => {
                 let constraints = compile_r1cs::<Curve25519FieldElement>(&mut config)?;
-                let t = ashlang_spartan::transform_r1cs(&constraints);
+                let t = ashlang_spartan::transform_r1cs(&constraints)?;
                 let proof = ashlang_spartan::prove(t);
                 if ashlang_spartan::verify(proof) {
                     println!("✅ spartan proof is valid");

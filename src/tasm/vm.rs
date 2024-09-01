@@ -627,7 +627,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
             if let Some(stack_index) = var.stack_index {
                 Ok(self.stack.len() - stack_index)
             } else {
-                return Err(anyhow::anyhow!("var does not have a stack index"));
+                Err(anyhow::anyhow!("var does not have a stack index"))
             }
         } else {
             log::error!(&format!("unknown variable \"{var_name}\""))
@@ -943,7 +943,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                     value: None,
                                 }))
                             } else {
-                                return Err(anyhow!("no return memory address"));
+                                Err(anyhow!("no return memory address"))
                             }
                         } else {
                             let len = VM::<T>::dimensions_to_len(

@@ -253,7 +253,7 @@ dependencies = [
 [[package]]
 name = "ashlang"
 version = "0.1.0"
-source = "git+https://github.com/chancehudson/ashlang.git#c9fa7d0c7dd36efe28729a4134d2303aa818afe3"
+source = "git+https://github.com/chancehudson/ashlang.git#0226bf0765b01da18644ebe25617a75dcf97989f"
 dependencies = [
  "anyhow",
  "camino",
@@ -263,14 +263,14 @@ dependencies = [
  "pest",
  "pest_derive",
  "scalarff",
- "triton-vm",
 ]
 
 [[package]]
 name = "ashlang-spartan"
 version = "0.1.0"
-source = "git+https://github.com/chancehudson/ashlang-spartan.git#32aa278e178cb1bd9a06ca8547aceee166a5401e"
+source = "git+https://github.com/chancehudson/ashlang-spartan.git#aae1522a670421bcf077c26c5f18fb03cc5bd514"
 dependencies = [
+ "anyhow",
  "ashlang 0.1.0 (git+https://github.com/chancehudson/ashlang.git)",
  "curve25519-dalek 4.1.3",
  "merlin",
