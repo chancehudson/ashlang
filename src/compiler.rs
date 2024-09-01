@@ -266,7 +266,7 @@ Path 2: {:?}",
                 use crate::r1cs::vm::VM;
                 let mut vm: VM<T> = VM::new(&mut self.state);
                 // build constraints from the AST
-                vm.eval_ast(parser.ast);
+                vm.eval_ast(parser.ast)?;
                 let mut final_constraints: Vec<R1csConstraint<T>> = Vec::new();
                 final_constraints.append(
                     &mut vm
@@ -302,7 +302,7 @@ Path 2: {:?}",
                 use crate::tasm::vm::VM;
                 // step 1: compile the entrypoint to assembly
                 let mut vm: VM<T> = VM::new(&mut self.state);
-                vm.eval_ast(parser.ast, vec![], None);
+                vm.eval_ast(parser.ast, vec![], None)?;
                 let mut asm = vm.asm.clone();
                 asm.push("halt".to_string());
 

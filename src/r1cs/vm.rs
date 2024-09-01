@@ -179,16 +179,12 @@ impl<'a, T: FieldElement> VM<'a, T> {
 
     pub fn eval(&mut self, expr: &Expr) -> Result<Var<T>> {
         match &expr {
-            Expr::VecLit(_v) => {
-                Err(anyhow::anyhow!(
-                    "vector literals must be assigned before operation"
-                ))
-            }
-            Expr::VecVec(_v) => {
-                Err(anyhow::anyhow!(
-                    "matrix literals must be assigned before operation"
-                ))
-            }
+            Expr::VecLit(_v) => Err(anyhow::anyhow!(
+                "vector literals must be assigned before operation"
+            )),
+            Expr::VecVec(_v) => Err(anyhow::anyhow!(
+                "matrix literals must be assigned before operation"
+            )),
             Expr::FnCall(name, vars) => {
                 // TODO: break this into separate functions
                 self.compiler_state.messages.insert(0, format!("{name}()"));
@@ -258,7 +254,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
                 let fn_ast = fn_ast.unwrap().clone();
                 let mut vm = VM::from(self, args, name);
-                vm.eval_ast(fn_ast);
+                vm.eval_ast(fn_ast)?;
                 let return_val = vm.return_val;
                 let new_var_index = vm.var_index;
                 let mut out_constraints = vm.constraints;

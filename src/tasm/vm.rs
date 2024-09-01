@@ -791,16 +791,12 @@ impl<'a, T: FieldElement> VM<'a, T> {
     // if the return value is non-null the asm has not been mutated
     pub fn eval(&mut self, expr: Expr, is_returning: bool) -> Result<Option<Var>> {
         match &expr {
-            Expr::VecLit(_v) => {
-                Err(anyhow::anyhow!(
-                    "vector literals must be assigned before operation"
-                ))
-            }
-            Expr::VecVec(_v) => {
-                Err(anyhow::anyhow!(
-                    "matrix literals must be assigned before operation"
-                ))
-            }
+            Expr::VecLit(_v) => Err(anyhow::anyhow!(
+                "vector literals must be assigned before operation"
+            )),
+            Expr::VecVec(_v) => Err(anyhow::anyhow!(
+                "matrix literals must be assigned before operation"
+            )),
             Expr::FnCall(name, vars) => {
                 let mut arg_types: Vec<ArgType> = Vec::new();
                 // we push these but don't pop them here
@@ -860,7 +856,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 } else {
                     let fn_ast = self.compiler_state.fn_to_ast.get(name).unwrap().clone();
                     let mut vm = VM::new(self.compiler_state);
-                    vm.eval_ast(fn_ast.clone(), arg_types.clone(), None);
+                    vm.eval_ast(fn_ast.clone(), arg_types.clone(), None)?;
                     vm.return_if_needed();
                     if let Some(return_type) = vm.return_type {
                         call.return_type = Some(return_type);
@@ -873,7 +869,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     // re-evaluate the function with the return type
                     // set from the beginning
                     let mut vm = VM::new(self.compiler_state);
-                    vm.eval_ast(fn_ast, arg_types.clone(), call.return_type.clone());
+                    vm.eval_ast(fn_ast, arg_types.clone(), call.return_type.clone())?;
                     vm.return_if_needed();
                     let mut asm = vm.asm.clone();
                     asm.push("return".to_string());
@@ -1130,7 +1126,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     let o = self.eval_to_stack(expr, false)?;
                     let v = self.vars.get(&name).unwrap().clone();
                     // offset is pushed onto the stack
-                    self.calc_vec_offset(&v.dimensions, &indices);
+                    self.calc_vec_offset(&v.dimensions, &indices)?;
                     match indices.len().cmp(&v.dimensions.len()) {
                         cmp::Ordering::Less => {
                             return Err(anyhow::anyhow!("cannot assign vec"));
@@ -1209,7 +1205,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         ));
                     }
                     for x in 0..vars.len() {
-                        self.fn_var(vars[x].clone(), arg_types[x].clone());
+                        self.fn_var(vars[x].clone(), arg_types[x].clone())?;
                     }
                     if let Some(t) = return_type.clone() {
                         if t.location == VarLocation::Memory {
@@ -1220,7 +1216,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                     dimensions: vec![],
                                     value: None,
                                 },
-                            );
+                            )?;
                         }
                     } else {
                         self.fn_var(
@@ -1230,23 +1226,23 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                 dimensions: vec![],
                                 value: None,
                             },
-                        );
+                        )?;
                     }
                 }
                 AstNode::Rtrn(expr) => {
-                    self.return_expr(expr);
+                    self.return_expr(expr)?;
                 }
                 AstNode::StaticDef(name, expr) => {
                     // we must be able to fully evaluate
                     // the static at compile time
                     // e.g. the expr must contain only
                     // Expr::Lit and Expr::Val containing other statics
-                    self.static_var(name, expr);
+                    self.static_var(name, expr)?;
                 }
                 AstNode::If(expr, block_ast) => {
                     let v = self.eval_to_stack(expr, false)?;
                     if v.is_some() {
-                        panic!();
+                        return Err(anyhow::anyhow!("if node returned memory value"));
                     }
                     let block_name = format!("block_____{}", self.compiler_state.block_counter);
                     self.compiler_state.block_counter += 1;
@@ -1257,7 +1253,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     let start_asm_len = self.asm.len();
                     self.begin_block();
                     // blocks can't take args
-                    self.eval_ast(block_ast, vec![], None);
+                    self.eval_ast(block_ast, vec![], None)?;
                     self.end_block();
                     // pull the resulting asm as the block asm
                     let mut block_asm = self.asm.drain(start_asm_len..).collect::<Vec<String>>();
@@ -1277,7 +1273,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
 
                     for _ in 0..o.value.clone().unwrap()[0] {
                         self.begin_block();
-                        self.eval_ast(block_ast.clone(), vec![], None);
+                        self.eval_ast(block_ast.clone(), vec![], None)?;
                         self.end_block();
                     }
                 }
@@ -1299,7 +1295,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 if let Some(offset) = offset {
                     self.stack_push(offset.try_into().unwrap());
                 } else {
-                    self.calc_vec_offset(&v.dimensions, &[]);
+                    self.calc_vec_offset(&v.dimensions, &[])?;
                 }
                 // we're accessing a scalar, move it to the stack
                 if let Some(mem_index) = v.memory_index {
@@ -1354,7 +1350,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 // if we're operating on two scalars (length 1 vector)
                 // we should move the value to the stack
                 if indices.len() == v.dimensions.len() {
-                    self.calc_vec_offset(&v.dimensions, indices);
+                    self.calc_vec_offset(&v.dimensions, indices)?;
                     // we're accessing a scalar, move it to the stack
                     if let Some(mem_index) = v.memory_index {
                         self.stack_push(mem_index.try_into().unwrap());
@@ -1474,10 +1470,10 @@ impl<'a, T: FieldElement> VM<'a, T> {
         }
         // TODO: assert equal shape
         for x in 0..total_len {
-            self.load_scalar(v1, Some(x));
+            self.load_scalar(v1, Some(x))?;
             // make sure the RHS is read second so the inv operation
             // is applied to the correct operand
-            self.load_scalar(v2, Some(x));
+            self.load_scalar(v2, Some(x))?;
             // v1 and v2 are operated on and a single output
             // remains
             self.asm
