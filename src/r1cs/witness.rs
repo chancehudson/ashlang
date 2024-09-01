@@ -47,7 +47,7 @@ pub fn build<T: FieldElement>(r1cs: &str) -> Result<Vec<T>> {
         if !c.symbolic {
             continue;
         }
-        vars.insert(c.out_i.unwrap(), c.solve_symbolic(&vars));
+        vars.insert(c.out_i.unwrap(), c.solve_symbolic(&vars)?);
     }
     let mut out = vars.keys().copied().collect::<Vec<usize>>();
     out.sort();

@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
+use anyhow::Result;
 use scalarff::FieldElement;
 
 // a b and c represent values in
@@ -177,9 +178,9 @@ impl<T: FieldElement> R1csConstraint<T> {
         }
     }
 
-    pub fn solve_symbolic(&self, vars: &HashMap<usize, T>) -> T {
+    pub fn solve_symbolic(&self, vars: &HashMap<usize, T>) -> Result<T> {
         if !self.symbolic {
-            panic!("not a symbolic constraint");
+            return Err(anyhow::anyhow!("not a symbolic constraint"));
         }
         let mut a = T::zero();
         for (coef, index) in &self.a {
@@ -190,21 +191,21 @@ impl<T: FieldElement> R1csConstraint<T> {
             b += coef.clone() * vars.get(index).unwrap().clone();
         }
         match self.symbolic_op.as_ref().unwrap() {
-            SymbolicOp::Add => a + b,
-            SymbolicOp::Mul => a * b,
-            SymbolicOp::Inv => T::one() / b,
+            SymbolicOp::Add => Ok(a + b),
+            SymbolicOp::Mul => Ok(a * b),
+            SymbolicOp::Inv => Ok(T::one() / b),
             SymbolicOp::Sqrt => {
                 if a != (T::one() + T::one()) {
-                    panic!("Cannot calculate non-square root");
+                    anyhow::bail!("Cannot calculate non-square root");
                 }
                 let l = b.legendre();
                 if l == 0 {
-                    T::zero()
+                    Ok(T::zero())
                 } else if l == 1 {
                     // always return the positive value
-                    b.sqrt()
+                    Ok(b.sqrt())
                 } else {
-                    crate::log::error!(&format!(
+                    return crate::log::error!(&format!(
                         "cannot take square root of non-residue element: {}",
                         b.serialize()
                     ));

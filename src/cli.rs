@@ -1,3 +1,4 @@
+use anyhow::Result;
 use camino::Utf8PathBuf;
 use clap::arg;
 use clap::Arg;
@@ -17,7 +18,7 @@ pub struct Config {
 }
 
 #[allow(dead_code)]
-pub fn parse() -> Config {
+pub fn parse() -> Result<Config> {
     let matches = cli().get_matches();
     let entry_fn = matches
         .get_one::<String>("ENTRY_FN")
@@ -38,20 +39,20 @@ pub fn parse() -> Config {
         verbosity = 1;
     }
     if target.is_none() {
-        log::error!(
+        return log::error!(
             "No target specified",
             "specify a target using -t [r1cs | tasm]"
         );
     }
     if field.is_none() {
-        log::error!(
+        return log::error!(
             "No field specified",
             "specify a field using -f [foi | alt_bn128 | curve25519]"
         );
     }
     let target = target.unwrap().clone();
     let field = field.unwrap().clone();
-    Config {
+    Ok(Config {
         include_paths,
         target,
         field,
@@ -60,7 +61,7 @@ pub fn parse() -> Config {
         secret_inputs: parse_inputs(secret_inputs),
         extension_priorities: vec!["ash".to_string()],
         entry_fn: entry_fn.to_string(),
-    }
+    })
 }
 
 fn parse_inputs(inputs: Option<&String>) -> Vec<String> {

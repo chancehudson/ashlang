@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use anyhow::Result;
 use cli::Config;
 use compiler::Compiler;
 use r1cs::witness;
@@ -16,23 +17,22 @@ mod parser;
 mod r1cs;
 mod tasm;
 
-fn main() {
-    let mut config = cli::parse();
-    match config.target.as_str() {
+fn main() -> Result<()> {
+    let mut config = cli::parse()?;
+    return match config.target.as_str() {
         "tasm" => {
             if config.field != "foi" && config.field != "goldilocks" {
-                log::error!(
+                return log::error!(
                     &format!("Unsupported field for target tasm: {}", config.field),
                     "tasm only support execution in the foi (goldilocks) field"
                 );
             }
             // first compile the assembly
-            let asm = compile_tasm(&mut config);
+            let asm = compile_tasm(&mut config)?;
             // then attempt to prove the assembly in TritonVM
             let instructions = triton_vm::parser::parse(&asm);
             if let Err(e) = instructions {
-                println!("Failed to parse tasm: {:?}", e);
-                std::process::exit(1);
+                return log::error!(&format!("Failed to parse tasm: {:?}", e));
             }
             let instructions = instructions.unwrap();
             let l_instructions =
@@ -66,13 +66,15 @@ fn main() {
                     std::process::exit(1);
                 }
             }
+            Ok(())
         }
         "r1cs" => match config.field.as_str() {
             "foi" => {
-                compile_r1cs::<FoiFieldElement>(&mut config);
+                compile_r1cs::<FoiFieldElement>(&mut config)?;
+                Ok(())
             }
             "curve25519" => {
-                let constraints = compile_r1cs::<Curve25519FieldElement>(&mut config);
+                let constraints = compile_r1cs::<Curve25519FieldElement>(&mut config)?;
                 let t = ashlang_spartan::transform_r1cs(&constraints);
                 let proof = ashlang_spartan::prove(t);
                 if ashlang_spartan::verify(proof) {
@@ -80,29 +82,30 @@ fn main() {
                 } else {
                     println!("🔴 spartan proof is NOT valid");
                 }
+                Ok(())
             }
             "alt_bn128" => {
-                compile_r1cs::<Bn128FieldElement>(&mut config);
+                compile_r1cs::<Bn128FieldElement>(&mut config)?;
+                Ok(())
             }
             _ => {
-                log::error!(&format!(
+                return log::error!(&format!(
                     "Unsupported field for target r1cs: {}",
                     config.field
                 ));
             }
         },
         _ => {
-            println!("Unsupported target: {}", config.target);
-            std::process::exit(1);
+            return log::error!(&format!("Unsupported target: {}", config.target));
         }
-    }
+    };
 }
 
-fn compile_r1cs<T: FieldElement>(config: &mut Config) -> String {
+fn compile_r1cs<T: FieldElement>(config: &mut Config) -> Result<String> {
     config.extension_priorities.push("ar1cs".to_string());
-    let mut compiler: Compiler<T> = Compiler::new(config);
+    let mut compiler: Compiler<T> = Compiler::new(config)?;
 
-    let constraints = compiler.compile(&config.entry_fn);
+    let constraints = compiler.compile(&config.entry_fn)?;
 
     let witness = witness::build::<T>(&constraints);
     if let Err(e) = witness {
@@ -118,12 +121,12 @@ fn compile_r1cs<T: FieldElement>(config: &mut Config) -> String {
         println!();
         println!("R1CS: built and validated witness ✅");
     }
-    constraints
+    Ok(constraints)
 }
 
-fn compile_tasm(config: &mut Config) -> String {
+fn compile_tasm(config: &mut Config) -> Result<String> {
     config.extension_priorities.push("tasm".to_string());
 
-    let mut compiler: Compiler<FoiFieldElement> = Compiler::new(config);
+    let mut compiler: Compiler<FoiFieldElement> = Compiler::new(config)?;
     compiler.compile(&config.entry_fn)
 }

@@ -74,7 +74,7 @@ pub struct AshParser {
 }
 
 impl AshParser {
-    pub fn parse(source: &str, name: &str) -> Self {
+    pub fn parse(source: &str, name: &str) -> Result<Self> {
         let mut out = Self {
             ast: Vec::new(),
             fn_names: HashMap::new(),
@@ -82,16 +82,16 @@ impl AshParser {
 
         match AshPestParser::parse(Rule::program, source) {
             Ok(pairs) => {
-                out.build_ast_from_lines(pairs).unwrap_or_else(|e| {
-                    error!(&format!("error building program ast: {e}"));
-                });
+                let ast = out.build_ast_from_lines(pairs);
+                if let Err(e) = ast {
+                    return error!(&format!("error building program ast: {e}"));
+                }
             }
             Err(e) => {
-                log::parse_error(e, name);
-                unreachable!();
+                return Err(anyhow::anyhow!(log::parse_error(e, name)));
             }
         }
-        out
+        Ok(out)
     }
 
     fn mark_fn_call(&mut self, name: String) {

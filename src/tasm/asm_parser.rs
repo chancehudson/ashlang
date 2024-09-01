@@ -1,3 +1,4 @@
+use anyhow::Result;
 use pest::Parser;
 use pest_derive::Parser;
 
@@ -17,15 +18,10 @@ pub struct AsmParser {
 }
 
 impl AsmParser {
-    pub fn parse(source: &str, name: &str) -> Self {
+    pub fn parse(source: &str, name: &str) -> Result<Self> {
         let mut call_type = None;
         let mut asm = Vec::new();
-        let parsed = AsmPestParser::parse(Rule::program, source);
-        if let Err(e) = parsed {
-            log::parse_error(e, name);
-            unreachable!();
-        }
-        let parsed = parsed.unwrap();
+        let parsed = AsmPestParser::parse(Rule::program, source)?;
         for pair in parsed {
             match pair.as_rule() {
                 Rule::type_header => {
@@ -76,9 +72,9 @@ impl AsmParser {
             }
         }
         if let Some(call_type) = call_type {
-            Self { call_type, asm }
+            Ok(Self { call_type, asm })
         } else {
-            error!("No type header found in asm file");
+            error!("No type header found in asm file")
         }
     }
 }

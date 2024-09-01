@@ -1,11 +1,14 @@
+use std::collections::HashMap;
+
 use super::constraint::string_to_index;
 use super::constraint::R1csConstraint;
 use super::constraint::SymbolicOp;
 use crate::log;
+use anyhow::anyhow;
+use anyhow::Result;
 use pest::Parser;
 use pest_derive::Parser;
 use scalarff::FieldElement;
-use std::collections::HashMap;
 
 #[derive(Parser)]
 #[grammar = "r1cs/r1cs_grammar.pest"] // relative to project `src`
@@ -171,13 +174,13 @@ impl<T: FieldElement> R1csParser<T> {
         &self,
         index_start: usize,
         mut args: Vec<usize>,
-    ) -> Vec<R1csConstraint<T>> {
+    ) -> Result<Vec<R1csConstraint<T>>> {
         // map local signal indices to caller indices
         let mut signal_map: HashMap<usize, usize> = HashMap::new();
         // push the 1 signal to the front of the arg list
         args.insert(0, 0);
         if args.len() != self.arg_names.len() {
-            log::error!(&format!(
+            return log::error!(&format!(
                 "error calling function, incorrect number of arguments, got {} expected {}",
                 args.len(),
                 self.arg_names.len()
@@ -188,7 +191,7 @@ impl<T: FieldElement> R1csParser<T> {
             if let Some(local_index) = local_index {
                 signal_map.insert(*local_index, *v);
             } else {
-                unreachable!();
+                return Err(anyhow!("error mapping signal as arg"));
             }
         }
         // map return values to calculated offsets
@@ -197,7 +200,7 @@ impl<T: FieldElement> R1csParser<T> {
             if let Some(local_index) = local_index {
                 signal_map.insert(*local_index, index_start + x);
             } else {
-                unreachable!();
+                return Err(anyhow!("error mapping signal as arg"));
             }
         }
         self.constraints
@@ -225,8 +228,8 @@ impl<T: FieldElement> R1csParser<T> {
                     .iter()
                     .map(|v| (v.0.clone(), *signal_map.get(&v.1).unwrap()))
                     .collect::<Vec<_>>();
-                new_constraint
+                Ok(new_constraint)
             })
-            .collect::<Vec<_>>()
+            .collect::<Result<Vec<_>>>()
     }
 }
