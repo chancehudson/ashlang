@@ -1,117 +1,116 @@
 # ashlang [![CircleCI](https://dl.circleci.com/status-badge/img/gh/chancehudson/ashlang/tree/main.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/gh/chancehudson/ashlang/tree/main)
 
-A language designed to run on any computer that can exist.
+A language designed to compile and execute on mathematical virtual machines.
 
-## What is the name?
+Simplicity is the philosophy of ashlang. The language is simple to learn and expresses relationships very close to the arithmetization. Functions are globally available to encourage the development of a single, well audited, well maintained standard library of logic that can be re-used in many proving systems.
 
-I didn't choose the name ashlang completely randomly.
+## Targets
 
-If I did would the file extension stand for "arithmetic symbol hierarchy"?
+ashlang currently supports two targets:
 
-## Approach
+- [`ar1cs`](./src/r1cs/README.md) - an extended rank 1 constraint system that includes witness calculation instructions
+- [`tasm`](https://triton-vm.org/spec/instructions.html) - a novel assembly language used to express instructions for the [Triton VM](https://github.com/tritonvm/triton-vm)
 
-ashlang is a scripting language for expressing mathematical relations between scalars and vectors.
+## Provers
+
+ashlang supprts proving on the following systems:
+
+- [`TritonVM/triton-vm`](https://github.com/tritonvm/triton-vm) - using `tasm` target in this crate
+- [`microsoft/spartan`](https://github.com/microsoft/spartan) - using `ar1cs` target in [chancehudson/ashlang-spartan](https://github.com/chancehudson/ashlang-spartan)
+
+## Language
+
+ashlang is a scripting language for expressing mathematical relations between scalars and vectors in a finite field.
 
 The language is untyped, with each variable being one of the following:
 
 - scalar
 - vector
 - matrix (of any dimension)
-- function
 
-ashlang is designed to be written in conjunction with a lower level language, such as assembly or r1cs.
+ashlang is designed to be written in conjunction with a lower level language. Each file is a single function, it may be invoked using its filename. Directories are recursively imported and functions become globally available.
 
-- each file is a function
-  - files may be written in any language
-- functions can only be called from `.ash` files
-
-For example, when targetting the triton vm `.tasm` files will be loaded from the include paths as functions. Each of these can be called from `.ash` files, but not from `.tasm` files.
-
-## Targets
-
-The included assembler targets [`tasm`](https://triton-vm.org/spec/instructions.html) assembly and executes on the [Triton VM](https://github.com/TritonVM/triton-vm?tab=readme-ov-file#triton-vm).
-
-The assembler is designed to be multi-stage/partially re-usable.
-
-## Language
-
-The language is designed to efficiently express mathematical relationships between scalars and vectors in a finite field. Main features:
+### Features
 
 - element-wise vector operations
 - throws if vectors of mismatched size are used in an operation e.g. `val[0..10] * lav[0..5]`
 - functions cannot be declared, each file is a single function
 - files are not imported, function calls match the filename and tell the compiler what files are needed
 
-Below is the [poseidon](https://eprint.iacr.org/2019/458.pdf) hash function implemented in a few different languages:
+## Language support tracking
 
-- [circom](https://github.com/vimwitch/poseidon-hash/blob/main/circom/poseidon.circom)
-- [solidity (naive)](https://github.com/vimwitch/poseidon-solidity/blob/db5b345bc2ab542537f02ef0c07137d62e46b3cf/contracts/Poseidon.sol)
-- [solidity (optimized)](https://github.com/vimwitch/poseidon-solidity/blob/main/contracts/PoseidonT3.sol)
-- [javascript](https://github.com/vimwitch/poseidon-hash/blob/main/src/index.mjs)
+### Target `tasm`
 
-Below is the ashlang implementation `poseidon`. Note that vectors can be manipulated using the `*+-/` operators directly.
+- [x] scalar math operations
+- [x] tuple inputs
+- [x] let variables
+- [x] re-assigned variables
+- [x] static variables
+  - [x] define static variables
+  - [x] static variables as function arguments
+  - [x] static variables as loop condition
+  - [x] static variables as function return values
+- [x] function support
+  - [x] `let` assignment
+  - [x] `const` assignment (static evaluation)
+  - [x] return function content directly
+  - [x] arguments
+- [x] function auto-import
+- [x] if statement
+  - [x] equality
+  - [x] block support
+- [ ] general block support
+- [x] builtin functions
+  - [x] `assert_eq`
+  - [x] `crash`
+- [x] vector support
+  - [x] vectors of any dimension e.g. `v[2][3][4][1]`
+  - [x] vector variable support
+  - [x] vector constants support
+  - [x] vector math support
+  - [x] vector index access by variable
+  - [ ] vector index ranges e.g. `[0..5]`
+  - [ ] vector binary operation support
+  - [x] vector support in functions
+  - [x] vector support as function argument
+  - [x] vector support as function return
+  - [x] vector index access by variable e.g. `v[i]`
+- [x] loops
 
-```sh
-########################
-# poseidon
-# -
-# Grassi, Khovratovich,
-# Rechberger, Roy, Schofnegger
+### Target `r1cs`
 
-(T, inputs)
-
-let state[T]
-state[0] = 0 # vectors are not zeroed by default
-let i = 1
-loop T {
-  state[i] = inputs[i]
-  i = i + 1
-}
-
-let C = poseidon_C(T)
-let M = poseidon_M(T)
-let N_F = poseidon_N_F(T)
-let N_P = poseidon_N_P(T)
-
-let c_i = 0
-
-loop N_F / 2 {
-  state = state * C[c_i]
-  c_i = c_i + T
-
-  state = pow5(state)
-
-  let mix_i = 0
-  loop T {
-    state[mix_i] = sum(T, M[mix_i] * state)
-    mix_i = mix_i + 1
-  }
-}
-
-loop N_P {
-  state = state * C[c_i]
-  c_i = c_i + T
-  state[0] = pow5(state[0])
-
-  let mix_i = 0
-  loop T {
-    state[mix_i] = sum(T, M[mix_i] * state)
-    mix_i = mix_i + 1
-  }
-}
-
-loop N_F / 2 {
-  state = state * C[c_i]
-  c_i = c_i + T
-
-  state = pow5(state)
-
-  let mix_i = 0
-  loop T {
-    state[mix_i] = sum(T, M[mix_i] * state)
-    mix_i = mix_i + 1
-  }
-}
-
-return state
-```
+- [x] scalar math operations
+- [ ] tuple inputs
+- [x] let variables
+- [x] re-assigned variables
+- [x] static variables
+  - [x] define static variables
+  - [x] static variables as function arguments
+  - [ ] static variables as loop condition
+  - [x] static variables as function return values
+- [x] function support
+  - [x] `let` assignment
+  - [x] `const` assignment (static evaluation)
+  - [x] return function content directly
+  - [x] arguments
+- [x] function auto-import
+- [ ] if statement
+  - [ ] equality
+  - [ ] block support
+- [ ] general block support
+- [x] builtin functions
+  - [x] `assert_eq`
+  - [x] `crash`
+- [ ] vector support
+  - [ ] vectors of any dimension e.g. `v[2][3][4][1]`
+  - [ ] vector variable support
+  - [ ] vector constants support
+  - [x] vector math support
+  - [ ] vector index access by variable
+  - [ ] vector index ranges e.g. `[0..5]`
+  - [ ] vector binary operation support
+  - [ ] vector support in functions
+  - [ ] vector support as function argument
+  - [ ] vector support as function return
+  - [ ] vector index access by variable e.g. `v[i]`
+- [ ] loops
