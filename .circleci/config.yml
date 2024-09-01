@@ -74,7 +74,7 @@ jobs:
       - run: *rust_version
       - run:
           name: Build
-          command: cargo build
+          command: cargo build --features=prove
       - run:
           name: Test
           command: cargo test
@@ -87,10 +87,10 @@ jobs:
       - run: *build_version_stable
       - run:
           name: Build
-          command: cargo build --release
+          command: cargo build --features=prove --release
       - run:
           name: Run r1cs readme test
-          command: cargo run --release -- r1cs_readme -t r1cs -i ./test-vectors -i stdlib -v -f foi
+          command: cargo run --features=prove --release -- r1cs_readme -t r1cs -i ./test-vectors -i stdlib -v -f foi
   compile-r1cs:
     machine:
       image: ubuntu-2204:current
@@ -103,10 +103,10 @@ jobs:
       - run: *build_version_stable
       - run:
           name: Build
-          command: cargo build --release
+          command: cargo build --features=prove --release
       - run:
           name: Run r1cs test
-          command: cargo run --release -- r1cs_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
+          command: cargo run --features=prove --release -- r1cs_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
   compile-tasm:
     machine:
       image: ubuntu-2204:current
@@ -116,7 +116,7 @@ jobs:
       - run: *build_version_stable
       - run:
           name: Build
-          command: cargo build --release
+          command: cargo build --features=prove --release
       - run:
           name: Run TritonVM tests
           command: sh ./test.sh
