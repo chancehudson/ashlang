@@ -1,11 +1,14 @@
+use std::collections::HashMap;
+
 use super::constraint::string_to_index;
 use super::constraint::R1csConstraint;
 use super::constraint::SymbolicOp;
 use crate::log;
+use anyhow::anyhow;
+use anyhow::Result;
 use pest::Parser;
 use pest_derive::Parser;
 use scalarff::FieldElement;
-use std::collections::HashMap;
 
 #[derive(Parser)]
 #[grammar = "r1cs/r1cs_grammar.pest"] // relative to project `src`
@@ -21,7 +24,7 @@ pub struct R1csParser<T: FieldElement> {
 }
 
 impl<T: FieldElement> R1csParser<T> {
-    pub fn new(source: &str) -> Self {
+    pub fn new(source: &str) -> Result<Self> {
         let mut out = R1csParser {
             constraints: Vec::new(),
             arg_name_index: HashMap::new(),
@@ -32,11 +35,7 @@ impl<T: FieldElement> R1csParser<T> {
         };
         out.arg_name_index.insert("one".to_string(), 0);
         out.arg_names.push("one".to_string());
-        let parsed = R1csPestParser::parse(Rule::program, source);
-        if let Err(e) = parsed {
-            panic!("Failed to parse r1cs: {}", e);
-        }
-        let parsed = parsed.unwrap();
+        let parsed = R1csPestParser::parse(Rule::program, source)?;
         for pair in parsed {
             match pair.as_rule() {
                 Rule::type_header => {
@@ -47,8 +46,10 @@ impl<T: FieldElement> R1csParser<T> {
                     for v in args_tuple {
                         let varname = v.as_str().to_string();
                         if out.arg_name_index.contains_key(&varname) {
-                            println!("ar1cs parse error: duplicate arg name: {}", varname);
-                            panic!();
+                            return Err(anyhow::anyhow!(
+                                "ar1cs parse error: duplicate arg name: {}",
+                                varname
+                            ));
                         }
                         out.arg_name_index
                             .insert(varname.clone(), out.arg_name_index.len());
@@ -60,18 +61,16 @@ impl<T: FieldElement> R1csParser<T> {
                         // varname
                         let varname = v.as_str();
                         if out.arg_name_index.contains_key(varname) {
-                            println!(
+                            return Err(anyhow::anyhow!(
                                 "ar1cs parse error: return arg name is not unique: {}",
                                 varname
-                            );
-                            panic!();
+                            ));
                         }
                         if out.return_name_index.contains_key(varname) {
-                            println!(
+                            return Err(anyhow::anyhow!(
                                 "ar1cs parse error: return arg name is not unique: {}",
                                 varname
-                            );
-                            panic!();
+                            ));
                         }
                         out.return_names.push(varname.to_string());
                         out.return_name_index.insert(
@@ -83,11 +82,11 @@ impl<T: FieldElement> R1csParser<T> {
                 Rule::constraint_line => {
                     let mut pair = pair.into_inner();
                     let a = pair.next().unwrap();
-                    let a = out.parse_inner(a);
+                    let a = out.parse_inner(a)?;
                     let b = pair.next().unwrap();
-                    let b = out.parse_inner(b);
+                    let b = out.parse_inner(b)?;
                     let c = pair.next().unwrap();
-                    let c = out.parse_inner(c);
+                    let c = out.parse_inner(c)?;
                     out.constraints.push(R1csConstraint::new(a, b, c, ""));
                 }
                 Rule::symbolic_line => {
@@ -95,17 +94,19 @@ impl<T: FieldElement> R1csParser<T> {
                     // println!("{:?}", pair);
                     let o = pair.next().unwrap();
                     let a = pair.next().unwrap();
-                    let a = out.parse_inner(a);
+                    let a = out.parse_inner(a)?;
                     let op = pair.next().unwrap();
                     let op = SymbolicOp::from(op.as_str());
                     let b = pair.next().unwrap();
-                    let b = out.parse_inner(b);
+                    let b = out.parse_inner(b)?;
                     let out_index;
                     if out.is_function {
                         if let Some(i) = out.return_name_index.get(o.as_str()) {
                             out_index = *i;
                         } else {
-                            panic!("constraints can only be assigned to return values");
+                            return Err(anyhow!(
+                                "constraints can only be assigned to return values"
+                            ));
                         }
                     } else {
                         out_index = string_to_index(o.as_str());
@@ -131,13 +132,15 @@ impl<T: FieldElement> R1csParser<T> {
                 }
                 Rule::comment_line => {}
                 Rule::EOI => {}
-                _ => panic!("{:?}", pair.as_rule()),
+                _ => {
+                    return Err(anyhow::anyhow!("{:?}", pair.as_rule()));
+                }
             }
         }
-        out
+        Ok(out)
     }
 
-    pub fn parse_inner(&mut self, p: pest::iterators::Pair<Rule>) -> Vec<(T, usize)> {
+    pub fn parse_inner(&mut self, p: pest::iterators::Pair<Rule>) -> Result<Vec<(T, usize)>> {
         let mut pair = p.into_inner();
         let mut out_terms = Vec::new();
         while let Some(v) = pair.next() {
@@ -149,7 +152,7 @@ impl<T: FieldElement> R1csParser<T> {
                     && !self.return_name_index.contains_key(var_index)
                     && var_index != "0"
                 {
-                    panic!("cannot access signals by literal in ar1cs source");
+                    return Err(anyhow!("cannot access signals by literal in ar1cs source"));
                 }
                 if let Some(v) = self.arg_name_index.get(var_index) {
                     // if signal is a variable
@@ -164,20 +167,20 @@ impl<T: FieldElement> R1csParser<T> {
                 out_terms.push((T::deserialize(coef), string_to_index(var_index)));
             }
         }
-        out_terms
+        Ok(out_terms)
     }
 
     pub fn signals_as_args(
         &self,
         index_start: usize,
         mut args: Vec<usize>,
-    ) -> Vec<R1csConstraint<T>> {
+    ) -> Result<Vec<R1csConstraint<T>>> {
         // map local signal indices to caller indices
         let mut signal_map: HashMap<usize, usize> = HashMap::new();
         // push the 1 signal to the front of the arg list
         args.insert(0, 0);
         if args.len() != self.arg_names.len() {
-            log::error!(&format!(
+            return log::error!(&format!(
                 "error calling function, incorrect number of arguments, got {} expected {}",
                 args.len(),
                 self.arg_names.len()
@@ -188,7 +191,7 @@ impl<T: FieldElement> R1csParser<T> {
             if let Some(local_index) = local_index {
                 signal_map.insert(*local_index, *v);
             } else {
-                unreachable!();
+                return Err(anyhow!("error mapping signal as arg"));
             }
         }
         // map return values to calculated offsets
@@ -197,7 +200,7 @@ impl<T: FieldElement> R1csParser<T> {
             if let Some(local_index) = local_index {
                 signal_map.insert(*local_index, index_start + x);
             } else {
-                unreachable!();
+                return Err(anyhow!("error mapping signal as arg"));
             }
         }
         self.constraints
@@ -225,8 +228,8 @@ impl<T: FieldElement> R1csParser<T> {
                     .iter()
                     .map(|v| (v.0.clone(), *signal_map.get(&v.1).unwrap()))
                     .collect::<Vec<_>>();
-                new_constraint
+                Ok(new_constraint)
             })
-            .collect::<Vec<_>>()
+            .collect::<Result<Vec<_>>>()
     }
 }

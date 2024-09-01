@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use anyhow::Result;
 use scalarff::matrix::Matrix;
 use scalarff::FieldElement;
 
@@ -74,14 +75,14 @@ impl<'a, T: FieldElement> VM<'a, T> {
         }
     }
 
-    pub fn eval_ast(&mut self, ast: Vec<AstNode>) {
+    pub fn eval_ast(&mut self, ast: Vec<AstNode>) -> Result<()> {
         for v in ast {
             match v {
                 AstNode::Stmt(name, is_let, expr) => {
                     if is_let && self.vars.contains_key(&name) {
-                        log::error!(&format!("variable already defined: {name}"));
+                        return log::error!(&format!("variable already defined: {name}"));
                     } else if !is_let && !self.vars.contains_key(&name) {
-                        log::error!(&format!("variable does not exist in scope: {name}"));
+                        return log::error!(&format!("variable does not exist in scope: {name}"));
                     }
                     if is_let {
                         self.compiler_state
@@ -92,7 +93,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                             .messages
                             .insert(0, format!("re-assign {name}"));
                     }
-                    let v = self.eval(&expr);
+                    let v = self.eval(&expr)?;
                     if v.location == VarLocation::Constraint {
                         // if we get a constrained variable from the
                         // evaluation we simply store that as a named variable
@@ -132,7 +133,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     for (i, v) in names[0..names.len()].iter().enumerate() {
                         let name = v;
                         if self.vars.contains_key(name) {
-                            log::error!(
+                            return log::error!(
                                 &format!("variable already defined: {name}"),
                                 "attempting to define variable in function header"
                             );
@@ -145,20 +146,20 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         .messages
                         .insert(0, format!("return call in {}", self.name));
                     if self.return_val.is_some() {
-                        log::error!(
+                        return log::error!(
                             "return value already set",
                             "you likely have called return more than once"
                         );
                     }
-                    self.return_val = Some(self.eval(&expr));
+                    self.return_val = Some(self.eval(&expr)?);
                 }
                 AstNode::StaticDef(name, expr) => {
                     if self.vars.contains_key(&name) {
-                        log::error!("variable already defined: {name}");
+                        return log::error!("variable already defined: {name}");
                     }
-                    let v = self.eval(&expr);
+                    let v = self.eval(&expr)?;
                     if v.location != VarLocation::Static {
-                        log::error!("static variable cannot be assigned from signal");
+                        return log::error!("static variable cannot be assigned from signal");
                     }
                     self.vars.insert(name, v);
                 }
@@ -166,37 +167,40 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     self.compiler_state
                         .messages
                         .insert(0, "unassigned expression".to_string());
-                    self.eval(&expr);
+                    self.eval(&expr)?;
                 }
                 _ => {
-                    log::error!(&format!("ast node not supported for r1cs: {:?}", v));
+                    return log::error!(&format!("ast node not supported for r1cs: {:?}", v));
                 }
             }
         }
+        Ok(())
     }
 
-    pub fn eval(&mut self, expr: &Expr) -> Var<T> {
+    pub fn eval(&mut self, expr: &Expr) -> Result<Var<T>> {
         match &expr {
-            Expr::VecLit(_v) => {
-                panic!("vector literals must be assigned before operation");
-            }
-            Expr::VecVec(_v) => {
-                panic!("matrix literals must be assigned before operation");
-            }
+            Expr::VecLit(_v) => Err(anyhow::anyhow!(
+                "vector literals must be assigned before operation"
+            )),
+            Expr::VecVec(_v) => Err(anyhow::anyhow!(
+                "matrix literals must be assigned before operation"
+            )),
             Expr::FnCall(name, vars) => {
                 // TODO: break this into separate functions
                 self.compiler_state.messages.insert(0, format!("{name}()"));
-                let args: Vec<Var<T>> = vars.iter().map(|v| self.eval(v)).collect::<_>();
+                let args: Vec<Var<T>> = vars.iter().map(|v| self.eval(v)).collect::<Result<_>>()?;
                 // look for an ar1cs implementation first
                 if let Some(v) = self.compiler_state.fn_to_r1cs_parser.get(name) {
                     let constrain_args_if_needed = args
                         .iter()
                         .map(|v| {
                             if let Some(i) = v.index {
-                                return i;
+                                return Ok(i);
                             }
                             if v.value.len() != 1 {
-                                log::error!("cannot pass a vector static to an r1cs function");
+                                return log::error!(
+                                    "cannot pass a vector static to an r1cs function"
+                                );
                             }
                             // if we get a static variable we need to
                             // assert equality of it's current value
@@ -220,72 +224,72 @@ impl<'a, T: FieldElement> VM<'a, T> {
                                 SymbolicOp::Add,
                                 self.compiler_state.messages[0].clone(),
                             ));
-                            index
+                            Ok(index)
                         })
-                        .collect::<Vec<_>>();
+                        .collect::<Result<_>>()?;
                     let out_constraints =
-                        v.signals_as_args(self.var_index, constrain_args_if_needed);
+                        v.signals_as_args(self.var_index, constrain_args_if_needed)?;
                     self.constraints.append(&mut out_constraints.clone());
                     let return_index = self.var_index;
                     self.var_index += v.return_names.len();
-                    if !v.return_names.is_empty() {
-                        return Var {
+                    return if !v.return_names.is_empty() {
+                        Ok(Var {
                             index: Some(return_index),
                             location: VarLocation::Constraint,
                             // TODO: determine a value here
                             // use the symbolic constraint to determine the value
                             value: Matrix::from(T::zero()),
-                        };
+                        })
                     } else {
-                        return Var {
+                        Ok(Var {
                             index: None,
                             location: VarLocation::Static,
                             value: Matrix::from(T::one()),
-                        };
-                    }
+                        })
+                    };
                 }
                 let fn_ast = self.compiler_state.fn_to_ast.get(name);
                 if fn_ast.is_none() {
-                    log::error!("function not found: {name}");
+                    return log::error!("function not found: {name}");
                 }
                 let fn_ast = fn_ast.unwrap().clone();
                 let mut vm = VM::from(self, args, name);
-                vm.eval_ast(fn_ast);
+                vm.eval_ast(fn_ast)?;
                 let return_val = vm.return_val;
                 let new_var_index = vm.var_index;
                 let mut out_constraints = vm.constraints;
                 self.constraints.append(&mut out_constraints);
                 self.var_index = new_var_index;
                 if let Some(v) = return_val {
-                    v
+                    Ok(v)
                 } else {
-                    Var {
+                    Ok(Var {
                         index: None,
                         location: VarLocation::Static,
                         value: Matrix::from(T::one()),
-                    }
+                    })
                 }
             }
             Expr::Val(name, indices) => {
                 if !indices.is_empty() {
-                    log::error!(
+                    return log::error!(
                         "indices not supported in r1cs, accessing indices on variable: {name}"
                     );
                 }
-                if let Some(v) = self.vars.get(name) {
-                    v.clone()
+                return if let Some(v) = self.vars.get(name) {
+                    Ok(v.clone())
                 } else {
-                    log::error!(&format!("variable not found: {name}"));
-                }
+                    return log::error!(&format!("variable not found: {name}"));
+                };
             }
             Expr::NumOp { lhs, op, rhs } => self.eval_numop(lhs, op, rhs),
-            Expr::Lit(val) => Var {
+            Expr::Lit(val) => Ok(Var {
                 index: None,
                 location: VarLocation::Static,
                 value: Matrix::from(T::deserialize(val)),
-            },
+            }),
             _ => {
-                log::error!("unimplemented expression case");
+                log::error!("unimplemented expression case")
             }
         }
     }
@@ -294,9 +298,9 @@ impl<'a, T: FieldElement> VM<'a, T> {
     // 1. lhs and rhs are both constraint variables
     // 2. lhs is a constraint variable and rhs is a static (and vis-versa)
     // 3. lhs and rhs are both static variables
-    fn eval_numop(&mut self, lhs: &Expr, op: &NumOp, rhs: &Expr) -> Var<T> {
-        let lv = self.eval(lhs);
-        let rv = self.eval(rhs);
+    fn eval_numop(&mut self, lhs: &Expr, op: &NumOp, rhs: &Expr) -> Result<Var<T>> {
+        let lv = self.eval(lhs)?;
+        let rv = self.eval(rhs)?;
         // check that the variables are the same type
         lv.value.assert_eq_shape(&rv.value);
 
@@ -312,8 +316,8 @@ impl<'a, T: FieldElement> VM<'a, T> {
         }
     }
 
-    fn eval_numop_static(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Var<T> {
-        match op {
+    fn eval_numop_static(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Result<Var<T>> {
+        Ok(match op {
             NumOp::Add => Var {
                 index: None,
                 location: VarLocation::Static,
@@ -334,10 +338,10 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 location: VarLocation::Static,
                 value: lv.value.clone() / rv.value.clone(),
             },
-        }
+        })
     }
 
-    fn eval_numop_signal_static(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Var<T> {
+    fn eval_numop_signal_static(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Result<Var<T>> {
         let static_v;
         let signal_v;
         if lv.location == VarLocation::Static {
@@ -347,7 +351,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
             static_v = rv;
             signal_v = lv;
         }
-        match op {
+        Ok(match op {
             NumOp::Add => {
                 let new_var = Var {
                     index: Some(self.var_index),
@@ -561,13 +565,13 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
                 new_var
             }
-        }
+        })
     }
 
-    fn eval_numop_signals(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Var<T> {
+    fn eval_numop_signals(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Result<Var<T>> {
         // take a lhs and rhs of variable size and apply
         // an operation to each element
-        match op {
+        Ok(match op {
             NumOp::Add => {
                 let new_var = Var {
                     index: Some(self.var_index),
@@ -721,6 +725,6 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
                 new_var
             }
-        }
+        })
     }
 }

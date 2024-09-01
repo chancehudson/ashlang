@@ -73,7 +73,7 @@ pub struct Compiler<T: FieldElement> {
  * a full output file.
  */
 impl<T: FieldElement> Compiler<T> {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config) -> Result<Self> {
         let mut compiler = Compiler {
             path_to_fn: HashMap::new(),
             fn_to_path: HashMap::new(),
@@ -83,10 +83,10 @@ impl<T: FieldElement> Compiler<T> {
             target: config.target.clone(),
         };
         if let Err(e) = compiler.include_many(&config.include_paths) {
-            log::error!(&format!("Failed to include path: {:?}", e));
+            return log::error!(&format!("Failed to include path: {:?}", e));
         }
         compiler.print_asm = config.verbosity > 0;
-        compiler
+        Ok(compiler)
     }
 
     pub fn include_many(&mut self, paths: &Vec<Utf8PathBuf>) -> Result<()> {
@@ -139,7 +139,7 @@ impl<T: FieldElement> Compiler<T> {
                     )
                 }
                 if existing_path.parent() != path.canonicalize_utf8()?.parent() {
-                    log::error!(&format!(
+                    return log::error!(&format!(
                         "Duplicate file/function names detected: {name_str}
 Path 1: {:?}
 Path 2: {:?}",
@@ -178,12 +178,12 @@ Path 2: {:?}",
 
     // loads, parses, and returns an ashlang function by name
     // returns the function as an ast
-    pub fn parse_fn(&self, fn_name: &str) -> (String, String) {
+    pub fn parse_fn(&self, fn_name: &str) -> Result<(String, String)> {
         if let Some(file_path) = self.fn_to_path.get(fn_name) {
             if let Some(ext) = file_path.extension() {
                 let unparsed_file = std::fs::read_to_string(file_path)
                     .unwrap_or_else(|_| panic!("Failed to read source file: {:?}", file_path));
-                (unparsed_file, ext.to_string())
+                Ok((unparsed_file, ext.to_string()))
             } else {
                 panic!("unexpected: cannot get file extension");
             }
@@ -191,25 +191,26 @@ Path 2: {:?}",
             log::error!(
                 &format!("function is not present in sources: {fn_name}"),
                 &format!("unable to find a file {fn_name}.ash in your include paths after searching recursively\n\nmake sure you have specified an include path containing this file")
-            );
+            )
         }
     }
 
     #[allow(dead_code)]
-    pub fn compile_str(&mut self, entry_src: &str) -> String {
-        let parser = AshParser::parse(entry_src, "entry");
+    pub fn compile_str(&mut self, entry_src: &str) -> Result<String> {
+        let parser = AshParser::parse(entry_src, "entry")?;
         self.compile_parser(parser)
     }
 
     // start at the entry file
     // parse it and determine what other files are needed
     // repeat until all files have been parsed
-    pub fn compile(&mut self, entry_fn_name: &str) -> String {
-        let parser = AshParser::parse(&self.parse_fn(entry_fn_name).0, entry_fn_name);
+    pub fn compile(&mut self, entry_fn_name: &str) -> Result<String> {
+        let parsed = self.parse_fn(entry_fn_name)?;
+        let parser = AshParser::parse(&parsed.0, entry_fn_name)?;
         self.compile_parser(parser)
     }
 
-    fn compile_parser(&mut self, parser: AshParser) -> String {
+    fn compile_parser(&mut self, parser: AshParser) -> Result<String> {
         // tracks total number of includes for a fn in all sources
         let mut included_fn: HashMap<String, u64> = parser.fn_names.clone();
         // step 1: build ast for all functions
@@ -223,10 +224,10 @@ Path 2: {:?}",
                 if self.state.fn_to_ast.contains_key(&fn_name) {
                     continue;
                 }
-                let (text, ext) = self.parse_fn(&fn_name);
+                let (text, ext) = self.parse_fn(&fn_name)?;
                 match ext.as_str() {
                     "ash" => {
-                        let parser = AshParser::parse(&text, &fn_name);
+                        let parser = AshParser::parse(&text, &fn_name)?;
                         for (fn_name, count) in parser.fn_names {
                             if let Some(x) = included_fn.get_mut(&fn_name) {
                                 *x += count;
@@ -238,7 +239,7 @@ Path 2: {:?}",
                         self.state.fn_to_ast.insert(fn_name, parser.ast);
                     }
                     "tasm" => {
-                        let parser = AsmParser::parse(&text, &fn_name);
+                        let parser = AsmParser::parse(&text, &fn_name)?;
                         self.state.fn_to_ast.insert(fn_name.clone(), vec![]);
                         let mut call_no_return = parser.call_type.clone();
                         call_no_return.return_type = None;
@@ -250,12 +251,12 @@ Path 2: {:?}",
                             .insert(call_no_return, parser.asm.clone());
                     }
                     "ar1cs" => {
-                        let parser: R1csParser<T> = R1csParser::new(&text);
+                        let parser: R1csParser<T> = R1csParser::new(&text)?;
                         self.state.fn_to_ast.insert(fn_name.clone(), vec![]);
                         self.state.fn_to_r1cs_parser.insert(fn_name.clone(), parser);
                     }
                     _ => {
-                        log::error!(&format!("unexpected file extension: {ext}"));
+                        return log::error!(&format!("unexpected file extension: {ext}"));
                     }
                 }
             }
@@ -265,7 +266,7 @@ Path 2: {:?}",
                 use crate::r1cs::vm::VM;
                 let mut vm: VM<T> = VM::new(&mut self.state);
                 // build constraints from the AST
-                vm.eval_ast(parser.ast);
+                vm.eval_ast(parser.ast)?;
                 let mut final_constraints: Vec<R1csConstraint<T>> = Vec::new();
                 final_constraints.append(
                     &mut vm
@@ -291,17 +292,17 @@ Path 2: {:?}",
                         println!("{}", c);
                     }
                 }
-                final_constraints
+                Ok(final_constraints
                     .iter()
                     .map(|v| v.to_string())
                     .collect::<Vec<String>>()
-                    .join("\n")
+                    .join("\n"))
             }
             "tasm" => {
                 use crate::tasm::vm::VM;
                 // step 1: compile the entrypoint to assembly
                 let mut vm: VM<T> = VM::new(&mut self.state);
-                vm.eval_ast(parser.ast, vec![], None);
+                vm.eval_ast(parser.ast, vec![], None)?;
                 let mut asm = vm.asm.clone();
                 asm.push("halt".to_string());
 
@@ -343,10 +344,10 @@ Path 2: {:?}",
                         println!("{}", l);
                     }
                 }
-                final_asm.clone().join("\n")
+                Ok(final_asm.clone().join("\n"))
             }
             _ => {
-                log::error!(&format!("unexpected target: {}", self.target));
+                log::error!(&format!("unexpected target: {}", self.target))
             }
         }
     }
