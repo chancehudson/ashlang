@@ -487,7 +487,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                             offset += 1;
                         }
                         self.vars.insert(name, v);
-                        return Ok(());
+                        Ok(())
                     }
                     _ => unreachable!(),
                 }
@@ -626,7 +626,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 panic!("var does not have a stack index");
             }
         } else {
-            return log::error!(&format!("unknown variable \"{var_name}\""));
+            log::error!(&format!("unknown variable \"{var_name}\""))
         }
     }
 
@@ -792,14 +792,14 @@ impl<'a, T: FieldElement> VM<'a, T> {
     pub fn eval(&mut self, expr: Expr, is_returning: bool) -> Result<Option<Var>> {
         match &expr {
             Expr::VecLit(_v) => {
-                return Err(anyhow::anyhow!(
+                Err(anyhow::anyhow!(
                     "vector literals must be assigned before operation"
-                ));
+                ))
             }
             Expr::VecVec(_v) => {
-                return Err(anyhow::anyhow!(
+                Err(anyhow::anyhow!(
                     "matrix literals must be assigned before operation"
-                ));
+                ))
             }
             Expr::FnCall(name, vars) => {
                 let mut arg_types: Vec<ArgType> = Vec::new();

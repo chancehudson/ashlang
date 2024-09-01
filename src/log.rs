@@ -1,5 +1,3 @@
-use anyhow::anyhow;
-use anyhow::Error;
 use colored::Colorize;
 
 macro_rules! error {
@@ -19,10 +17,10 @@ pub(crate) use error;
 pub fn compile_error(msg: &str, details: Option<&str>) -> String {
     let mut out_strs = vec![];
     out_strs.push(format!("{}", "Compile error".red().bold()));
-    out_strs.push(format!("{msg}"));
+    out_strs.push(msg.to_string());
     if let Some(details) = details {
         out_strs.push(format!("{}", "Explanation".green().bold()));
-        out_strs.push(format!("{details}"));
+        out_strs.push(details.to_string());
     }
     out_strs.join("\n")
 }

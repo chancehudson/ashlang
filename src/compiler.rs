@@ -188,10 +188,10 @@ Path 2: {:?}",
                 panic!("unexpected: cannot get file extension");
             }
         } else {
-            return log::error!(
+            log::error!(
                 &format!("function is not present in sources: {fn_name}"),
                 &format!("unable to find a file {fn_name}.ash in your include paths after searching recursively\n\nmake sure you have specified an include path containing this file")
-            );
+            )
         }
     }
 
@@ -347,7 +347,7 @@ Path 2: {:?}",
                 Ok(final_asm.clone().join("\n"))
             }
             _ => {
-                return log::error!(&format!("unexpected target: {}", self.target));
+                log::error!(&format!("unexpected target: {}", self.target))
             }
         }
     }

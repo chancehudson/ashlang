@@ -180,14 +180,14 @@ impl<'a, T: FieldElement> VM<'a, T> {
     pub fn eval(&mut self, expr: &Expr) -> Result<Var<T>> {
         match &expr {
             Expr::VecLit(_v) => {
-                return Err(anyhow::anyhow!(
+                Err(anyhow::anyhow!(
                     "vector literals must be assigned before operation"
-                ));
+                ))
             }
             Expr::VecVec(_v) => {
-                return Err(anyhow::anyhow!(
+                Err(anyhow::anyhow!(
                     "matrix literals must be assigned before operation"
-                ));
+                ))
             }
             Expr::FnCall(name, vars) => {
                 // TODO: break this into separate functions
@@ -264,7 +264,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 let mut out_constraints = vm.constraints;
                 self.constraints.append(&mut out_constraints);
                 self.var_index = new_var_index;
-                return if let Some(v) = return_val {
+                if let Some(v) = return_val {
                     Ok(v)
                 } else {
                     Ok(Var {
@@ -272,7 +272,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         location: VarLocation::Static,
                         value: Matrix::from(T::one()),
                     })
-                };
+                }
             }
             Expr::Val(name, indices) => {
                 if !indices.is_empty() {
@@ -293,7 +293,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 value: Matrix::from(T::deserialize(val)),
             }),
             _ => {
-                return log::error!("unimplemented expression case");
+                log::error!("unimplemented expression case")
             }
         }
     }
