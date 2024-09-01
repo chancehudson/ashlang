@@ -51,7 +51,7 @@ jobs:
       - run: *build_version_stable
       - run:
           name: Clippy
-          command: cargo clippy
+          command: cargo clippy --features=prove
   lint:
     machine:
       image: ubuntu-2204:current
