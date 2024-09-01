@@ -75,17 +75,15 @@ pub struct AshParser {
 
 impl AshParser {
     pub fn parse(source: &str, name: &str) -> Result<Self> {
-        let mut source = source.to_owned();
         // append a new line to all source strings because
         // they aren't necessarily unix compatible files
-        source.push('\n');
-        let source = &source;
+        let source = format!("{source}\n");
         let mut out = Self {
             ast: Vec::new(),
             fn_names: HashMap::new(),
         };
 
-        match AshPestParser::parse(Rule::program, source) {
+        match AshPestParser::parse(Rule::program, &source) {
             Ok(pairs) => {
                 let ast = out.build_ast_from_lines(pairs);
                 if let Err(e) = ast {

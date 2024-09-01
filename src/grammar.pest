@@ -1,50 +1,51 @@
-/**
- * This file is organized top to bottom in order
- * of decreasing specificity. Similar types are
- * grouped near each other when possible.
+/*
+    *
+    * This file is organized top to bottom in order
+    * of decreasing specificity. Similar types are
+    * grouped near each other when possible.
 */
 
-program = _{ SOI ~ "\n"* ~ (fn_header ~ "\n")? ~ "\n"* ~ (stmt ~ "\n"+) * ~ (return_stmt ~ "\n"?)? ~ EOI }
+program = _{ SOI ~ "\n"* ~ (fn_header ~ "\n")? ~ "\n"* ~ (stmt ~ "\n"+)* ~ (return_stmt ~ "\n"?)? ~ "\n"* ~ EOI }
 
 fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
-stmt = { var_def | static_def | if_stmt | function_call | loop_stmt | var_index_assign | var_vec_def }
+stmt      = { var_def | static_def | if_stmt | function_call | loop_stmt | var_index_assign | var_vec_def }
 
-expr = { atom ~ (op ~ atom)* }
+expr        = { atom ~ (op ~ atom)* }
 return_stmt = { "return " ~ expr }
 
 // this is distinct from fn_header because it accepts an expr or a var
-fn_args = { "(" ~ ((expr ~ ("," | ")"))+ | ")") }
+fn_args       = { "(" ~ ((expr ~ ("," | ")"))+ | ")") }
 function_call = { varname ~ fn_args }
 
 loop_stmt = { "loop" ~ expr ~ block }
 
-op = _{ add | sub | mul | inv }
-    add = { "+" }
-    sub = { "-" }
-    mul = { "*" }
-    inv = { "/" }
-bool_op = _{ equal | not_equal | gt | lt }
-    equal = { "==" }
-    not_equal = { "!=" }
-    gt = { ">" }
-    lt = { "<" }
+op        = _{ add | sub | mul | inv }
+add       =  { "+" }
+sub       =  { "-" }
+mul       =  { "*" }
+inv       =  { "/" }
+bool_op   = _{ equal | not_equal | gt | lt }
+equal     =  { "==" }
+not_equal =  { "!=" }
+gt        =  { ">" }
+lt        =  { "<" }
 
 bool_expr = { expr ~ bool_op ~ expr }
-if_stmt = { "if " ~ bool_expr ~ block }
-block = { "{" ~ "\n"* ~ ((stmt ~ "\n") | "\n")* ~ "\n"* ~ "}" }
+if_stmt   = { "if " ~ bool_expr ~ block }
+block     = { "{" ~ "\n"* ~ ((stmt ~ "\n") | "\n")* ~ "\n"* ~ "}" }
 
-vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec | literal_dec))* ~ "\n"* ~ "]"}
+vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec | literal_dec))* ~ "\n"* ~ "]" }
 
 // this let_r match is needed to
 // determine if a variable is being
 // declared for the first time
-var_def = { var ~ "=" ~ (expr | vec) }
-let_r = { "let " }
-static_def = { "static" ~ varname ~ "=" ~ (expr | vec) }
-var_vec_def = { let_r ~ var_indexed }
+var_def          = { var ~ "=" ~ (expr | vec) }
+let_r            = { "let " }
+static_def       = { "static" ~ varname ~ "=" ~ (expr | vec) }
+var_vec_def      = { let_r ~ var_indexed }
 var_index_assign = { var_indexed ~ "=" ~ expr }
 
-var = { let_r? ~ varname }
+var         = { let_r? ~ varname }
 var_indexed = { varname ~ ("[" ~ expr ~ "]")+ }
 
 atom = { literal_dec | var_indexed | function_call | varname }
@@ -56,4 +57,4 @@ varname = @{ char+ }
 char = _{ ASCII_ALPHANUMERIC | "_" }
 
 WHITESPACE = _{ " " }
-COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
+COMMENT    = _{ "#" ~ (!"\n" ~ ANY)* }
