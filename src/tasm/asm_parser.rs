@@ -48,11 +48,16 @@ impl AsmParser {
                                     value: None,
                                 });
                             }
-                            _ => panic!("unexpected type_header rule: {:?}", v.as_rule()),
+                            _ => {
+                                return Err(anyhow::anyhow!(
+                                    "unexpected type_header rule: {:?}",
+                                    v.as_rule()
+                                ));
+                            }
                         }
                     }
                     if arg_types.is_empty() {
-                        panic!("unexpected: bad arg types")
+                        return Err(anyhow::anyhow!("unexpected: bad arg types"));
                     }
                     let return_type = arg_types.pop().unwrap();
                     call_type = Some(FnCall {
@@ -68,7 +73,12 @@ impl AsmParser {
                     }
                 }
                 Rule::EOI => {}
-                _ => panic!("unexpected line pair rule: {:?}", pair.as_rule()),
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "unexpected line pair rule: {:?}",
+                        pair.as_rule()
+                    ));
+                }
             }
         }
         if let Some(call_type) = call_type {

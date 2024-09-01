@@ -251,7 +251,7 @@ Path 2: {:?}",
                             .insert(call_no_return, parser.asm.clone());
                     }
                     "ar1cs" => {
-                        let parser: R1csParser<T> = R1csParser::new(&text);
+                        let parser: R1csParser<T> = R1csParser::new(&text)?;
                         self.state.fn_to_ast.insert(fn_name.clone(), vec![]);
                         self.state.fn_to_r1cs_parser.insert(fn_name.clone(), parser);
                     }

@@ -7,7 +7,7 @@ use crate::r1cs::parser::R1csParser;
 
 pub fn verify<T: FieldElement>(r1cs: &str, witness: Vec<T>) -> Result<()> {
     // confirm that the witness is correct
-    let r1cs: R1csParser<T> = R1csParser::new(r1cs);
+    let r1cs: R1csParser<T> = R1csParser::new(r1cs)?;
     let mut vars: HashMap<usize, T> = HashMap::new();
     for (i, v) in witness.iter().enumerate() {
         vars.insert(i, v.clone());
@@ -39,7 +39,7 @@ pub fn verify<T: FieldElement>(r1cs: &str, witness: Vec<T>) -> Result<()> {
 // Attempt to validate the constraints
 // in an r1cs
 pub fn build<T: FieldElement>(r1cs: &str) -> Result<Vec<T>> {
-    let r1cs: R1csParser<T> = R1csParser::new(r1cs);
+    let r1cs: R1csParser<T> = R1csParser::new(r1cs)?;
     let mut vars: HashMap<usize, T> = HashMap::new();
     vars.insert(0, T::one());
     // build the witness

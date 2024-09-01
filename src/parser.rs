@@ -204,7 +204,9 @@ impl AshParser {
                             let next = AshParser::next_or_error(&mut pair)?;
                             self.build_ast_from_pair(next)
                         }
-                        _ => panic!("invalid expression in block"),
+                        _ => {
+                            return Err(anyhow::anyhow!("invalid expression in block"));
+                        }
                     })
                     .collect::<Result<Vec<AstNode>>>()?;
                 Ok(Loop(iter_count_expr, block_ast))
@@ -227,7 +229,7 @@ impl AshParser {
                     name = AshParser::next_or_error(&mut varpair)?.as_str().to_string();
                     is_let = false;
                 } else {
-                    panic!("invalid varpait");
+                    return Err(anyhow::anyhow!("invalid varpait"));
                 }
 
                 let n = AshParser::next_or_error(&mut pair)?;
@@ -360,7 +362,7 @@ impl AshParser {
                     .map_primary(|primary| match primary.as_rule() {
                         Rule::atom => self.build_expr_from_pair(primary),
                         Rule::expr => self.build_expr_from_pair(primary),
-                        _ => panic!("unexpected rule in pratt parser"),
+                        _ => return Err(anyhow::anyhow!("unexpected rule in pratt parser")),
                     })
                     .map_infix(|lhs, op, rhs| match op.as_rule() {
                         Rule::add => Ok(Expr::NumOp {
