@@ -82,3 +82,13 @@ a = b
 
 let out = sqrt(9)
 assert_eq(out, 3)
+
+let lll = 0
+let aaa = 2
+loop 10 {
+  lll = lll + 1
+  let old_aaa = aaa
+  aaa = pow5(aaa)
+  assert_eq(aaa, old_aaa * old_aaa * old_aaa * old_aaa * old_aaa)
+}
+assert_eq(lll, 10)
