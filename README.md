@@ -113,4 +113,4 @@ ashlang is designed to be written in conjunction with a lower level language. Ea
   - [ ] vector support as function argument
   - [ ] vector support as function return
   - [ ] vector index access by variable e.g. `v[i]`
-- [ ] loops
+- [x] loops
