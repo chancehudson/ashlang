@@ -169,6 +169,41 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         .insert(0, "unassigned expression".to_string());
                     self.eval(&expr)?;
                 }
+                AstNode::Loop(expr, body) => {
+                    self.compiler_state
+                        .messages
+                        .insert(0, "loop condition".to_string());
+                    let v = self.eval(&expr)?;
+                    if v.location != VarLocation::Static {
+                        return log::error!("loop condition must be static variable");
+                    }
+                    if v.value.len() == 0 {
+                        return log::error!("loop condition is an empty matrix");
+                    }
+                    if v.value.len() > 1 {
+                        return log::error!(
+                            "loop condition must be a scalar, received a vector/matrix"
+                        );
+                    }
+                    // track the old variables, delete any variables
+                    // created inside the loop body
+                    let old_vars = self.vars.clone();
+                    let loop_count = v.value.values[0].to_biguint();
+                    let mut i = T::from(0).to_biguint();
+                    while i < loop_count {
+                        self.compiler_state
+                            .messages
+                            .insert(0, format!("loop iteration {i}"));
+                        self.eval_ast(body.clone())?;
+                        i += 1_u32;
+                        let current_vars = self.vars.clone();
+                        for k in current_vars.keys() {
+                            if !old_vars.contains_key(k) {
+                                self.vars.remove(k);
+                            }
+                        }
+                    }
+                }
                 _ => {
                     return log::error!(&format!("ast node not supported for r1cs: {:?}", v));
                 }
