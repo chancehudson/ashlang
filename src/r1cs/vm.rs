@@ -204,9 +204,6 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         }
                     }
                 }
-                AstNode::AssignVec(name, indices, expr) => {
-                    let v = self.eval(&expr)?;
-                }
                 _ => {
                     return log::error!(&format!("ast node not supported for r1cs: {:?}", v));
                 }
@@ -377,16 +374,34 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
             }
             Expr::Val(name, indices) => {
-                if !indices.is_empty() {
-                    return log::error!(
-                        "indices not supported in r1cs, accessing indices on variable: {name}"
-                    );
+                let mut new_indices = vec![];
+                for index_expr in indices {
+                    let v = self.eval(index_expr)?;
+                    if v.value.len() != 1 || v.location != VarLocation::Static {
+                        return log::error!(
+                            "index notation must contain a scalar static expression in: {name}"
+                        );
+                    }
+                    if v.value.len() != 1 {
+                        return log::error!(
+                            "index notation must contain a scalar static expression in: {name}"
+                        );
+                    }
+                    if let Ok(index) = v.value.values[0].to_biguint().to_string().parse::<usize>() {
+                        new_indices.push(index);
+                    }
                 }
-                return if let Some(v) = self.vars.get(name) {
-                    Ok(v.clone())
-                } else {
+                let v = self.vars.get(name);
+                if v.is_none() {
                     return log::error!(&format!("variable not found: {name}"));
-                };
+                }
+                let v = v.unwrap();
+                let (matrix, offset) = v.value.retrieve_indices(&new_indices);
+                Ok(Var {
+                    index: Some(v.index.unwrap() + offset),
+                    location: VarLocation::Constraint,
+                    value: matrix,
+                })
             }
             Expr::NumOp { lhs, op, rhs } => self.eval_numop(lhs, op, rhs),
             Expr::Lit(val) => Ok(Var {
