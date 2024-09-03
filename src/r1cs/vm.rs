@@ -204,6 +204,9 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         }
                     }
                 }
+                AstNode::AssignVec(name, indices, expr) => {
+                    let v = self.eval(&expr)?;
+                }
                 _ => {
                     return log::error!(&format!("ast node not supported for r1cs: {:?}", v));
                 }
@@ -212,14 +215,82 @@ impl<'a, T: FieldElement> VM<'a, T> {
         Ok(())
     }
 
+    /// Serialization to/from AST representation
+    pub fn build_var_from_ast_vec(&mut self, expr: &Expr) -> (Vec<usize>, Vec<T>) {
+        // first iterate all the way through to the first literal
+        let mut dimensions: Vec<usize> = Vec::new();
+        let mut root_expr = expr.clone();
+        // first calculate the dimensions of the matrix
+        loop {
+            match root_expr {
+                Expr::VecVec(v) => {
+                    dimensions.push(v.len());
+                    root_expr = v[0].clone();
+                }
+                Expr::VecLit(v) => {
+                    dimensions.push(v.len());
+                    break;
+                }
+                _ => {}
+            }
+        }
+        // then pull all the literals into a 1 dimensional vec
+        let mut vec_rep: Vec<T> = Vec::new();
+        Self::extract_literals(expr, &mut vec_rep);
+        (dimensions, vec_rep)
+    }
+
+    fn extract_literals(expr: &Expr, out: &mut Vec<T>) {
+        match expr {
+            Expr::VecVec(v) => {
+                for a in v {
+                    Self::extract_literals(a, out);
+                }
+            }
+            Expr::VecLit(v) => {
+                let mut vv = v.clone().iter().map(|v| T::deserialize(v)).collect();
+                out.append(&mut vv);
+            }
+            _ => unreachable!(),
+        }
+    }
+
     pub fn eval(&mut self, expr: &Expr) -> Result<Var<T>> {
         match &expr {
-            Expr::VecLit(_v) => Err(anyhow::anyhow!(
-                "vector literals must be assigned before operation"
-            )),
-            Expr::VecVec(_v) => Err(anyhow::anyhow!(
-                "matrix literals must be assigned before operation"
-            )),
+            Expr::VecVec(_) | Expr::VecLit(_) => {
+                let (dimensions, values) = self.build_var_from_ast_vec(&expr);
+                let matrix = Matrix { dimensions, values };
+                let index = self.var_index;
+                for i in 0..matrix.len() {
+                    // constrain each entry in the vector literal?
+                    // (v_i*one * 1*one) - v*one = 0
+                    self.constraints.push(R1csConstraint::new(
+                        vec![(T::one(), self.var_index + i)],
+                        vec![(T::one(), 0)],
+                        vec![(matrix.values[i].clone(), 0)],
+                        &format!(
+                            "scalar literal ({}) to signal index ({}) (member of vector)",
+                            matrix.values[i], i,
+                        ),
+                    ));
+                    self.constraints.push(R1csConstraint::symbolic(
+                        self.var_index + i,
+                        vec![(T::one(), 0)],
+                        vec![(matrix.values[i].clone(), 0)],
+                        SymbolicOp::Mul,
+                        format!(
+                            "scalar literal ({}) to signal index {} (member of vector)",
+                            matrix.values[i], i,
+                        ),
+                    ));
+                }
+                self.var_index += matrix.len();
+                return Ok(Var {
+                    index: Some(index),
+                    location: VarLocation::Constraint,
+                    value: matrix,
+                });
+            }
             Expr::FnCall(name, vars) => {
                 // TODO: break this into separate functions
                 self.compiler_state.messages.insert(0, format!("{name}()"));
