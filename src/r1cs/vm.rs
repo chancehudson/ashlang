@@ -397,11 +397,19 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
                 let v = v.unwrap();
                 let (matrix, offset) = v.value.retrieve_indices(&new_indices);
-                Ok(Var {
-                    index: Some(v.index.unwrap() + offset),
-                    location: VarLocation::Constraint,
-                    value: matrix,
-                })
+                if let Some(index) = v.index {
+                    Ok(Var {
+                        index: Some(index + offset),
+                        location: VarLocation::Constraint,
+                        value: matrix,
+                    })
+                } else {
+                    Ok(Var {
+                        index: None,
+                        location: VarLocation::Static,
+                        value: matrix,
+                    })
+                }
             }
             Expr::NumOp { lhs, op, rhs } => self.eval_numop(lhs, op, rhs),
             Expr::Lit(val) => Ok(Var {
