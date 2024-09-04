@@ -101,31 +101,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     } else {
                         // if we get a static variable from the evaluation
                         // we constraint the assigment into a new signal
-                        let new_var = Var {
-                            index: Some(self.var_index),
-                            location: VarLocation::Constraint,
-                            value: v.value,
-                        };
-                        self.var_index += new_var.value.len();
-                        for v in &new_var.value.values {
-                            // assigning a constant
-                            self.constraints.push(R1csConstraint::new(
-                                vec![(T::one(), new_var.index.unwrap())],
-                                vec![(T::one(), 0)],
-                                vec![(v.clone(), 0)],
-                                &format!(
-                                    "assigning literal ({v}) to signal {}",
-                                    new_var.index.unwrap()
-                                ),
-                            ));
-                            self.constraints.push(R1csConstraint::symbolic(
-                                new_var.index.unwrap(),
-                                vec![(v.clone(), 0)],
-                                vec![(T::zero(), 0)],
-                                SymbolicOp::Add,
-                                self.compiler_state.messages[0].clone(),
-                            ));
-                        }
+                        let new_var = self.static_to_constraint(&v.value)?;
                         self.vars.insert(name, new_var);
                     }
                 }
@@ -177,7 +153,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     if v.location != VarLocation::Static {
                         return log::error!("loop condition must be static variable");
                     }
-                    if v.value.len() == 0 {
+                    if v.value.is_empty() {
                         return log::error!("loop condition is an empty matrix");
                     }
                     if v.value.len() > 1 {
@@ -252,41 +228,50 @@ impl<'a, T: FieldElement> VM<'a, T> {
         }
     }
 
+    /// Take a static variable and constrain it's current value
+    /// into a signal or set of signals
+    fn static_to_constraint(&mut self, matrix: &Matrix<T>) -> Result<Var<T>> {
+        let index = self.var_index;
+        for i in 0..matrix.len() {
+            // constrain each entry in the vector literal
+            // (v_i*one * 1*one) - v*one = 0
+            self.constraints.push(R1csConstraint::new(
+                vec![(T::one(), self.var_index + i)],
+                vec![(T::one(), 0)],
+                vec![(matrix.values[i].clone(), 0)],
+                &format!(
+                    "scalar literal ({}) to signal index ({}) (member of vector)",
+                    matrix.values[i], i,
+                ),
+            ));
+            self.constraints.push(R1csConstraint::symbolic(
+                self.var_index + i,
+                vec![(T::one(), 0)],
+                vec![(matrix.values[i].clone(), 0)],
+                SymbolicOp::Mul,
+                format!(
+                    "scalar literal ({}) to signal index {} (member of vector)",
+                    matrix.values[i], i,
+                ),
+            ));
+        }
+        self.var_index += matrix.len();
+        Ok(Var {
+            index: Some(index),
+            location: VarLocation::Constraint,
+            value: matrix.clone(),
+        })
+    }
+
     pub fn eval(&mut self, expr: &Expr) -> Result<Var<T>> {
         match &expr {
             Expr::VecVec(_) | Expr::VecLit(_) => {
-                let (dimensions, values) = self.build_var_from_ast_vec(&expr);
-                let matrix = Matrix { dimensions, values };
-                let index = self.var_index;
-                for i in 0..matrix.len() {
-                    // constrain each entry in the vector literal?
-                    // (v_i*one * 1*one) - v*one = 0
-                    self.constraints.push(R1csConstraint::new(
-                        vec![(T::one(), self.var_index + i)],
-                        vec![(T::one(), 0)],
-                        vec![(matrix.values[i].clone(), 0)],
-                        &format!(
-                            "scalar literal ({}) to signal index ({}) (member of vector)",
-                            matrix.values[i], i,
-                        ),
-                    ));
-                    self.constraints.push(R1csConstraint::symbolic(
-                        self.var_index + i,
-                        vec![(T::one(), 0)],
-                        vec![(matrix.values[i].clone(), 0)],
-                        SymbolicOp::Mul,
-                        format!(
-                            "scalar literal ({}) to signal index {} (member of vector)",
-                            matrix.values[i], i,
-                        ),
-                    ));
-                }
-                self.var_index += matrix.len();
-                return Ok(Var {
-                    index: Some(index),
-                    location: VarLocation::Constraint,
-                    value: matrix,
-                });
+                let (dimensions, values) = self.build_var_from_ast_vec(expr);
+                Ok(Var {
+                    index: None,
+                    location: VarLocation::Static,
+                    value: Matrix { dimensions, values },
+                })
             }
             Expr::FnCall(name, vars) => {
                 // TODO: break this into separate functions
