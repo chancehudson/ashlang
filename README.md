@@ -100,15 +100,15 @@ ashlang is designed to be written in conjunction with a lower level language. Ea
 - [x] builtin functions
   - [x] `assert_eq`
   - [x] `crash`
-- [ ] vector support
+- [x] vector support
   - [x] vectors of any dimension e.g. `v[2][3][4][1]`
   - [x] vector variable support
   - [x] vector static support
   - [x] vector math support
   - [ ] vector index ranges e.g. `[0..5]`
   - [ ] vector binary operation support
-  - [ ] vector support in functions
-  - [ ] vector support as function argument
-  - [ ] vector support as function return
+  - [x] vector support in functions
+  - [x] vector support as function argument
+  - [x] vector support as function return
   - [x] vector index access by static e.g. `v[i]`
 - [x] loops
