@@ -7,3 +7,4 @@
 # this extra variable should be optimized out at some point
 _ = (1*one) * (1*v)
 _ = (1*one) output (1*one)
+0 = (1*one) * (1*_) - (1*v) # constrain intermediate output assignment
