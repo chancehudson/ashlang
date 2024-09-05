@@ -5,6 +5,8 @@ use scalarff::FieldElement;
 
 use crate::r1cs::parser::R1csParser;
 
+use super::constraint::SymbolicOp;
+
 pub fn verify<T: FieldElement>(r1cs: &str, witness: Vec<T>) -> Result<()> {
     // confirm that the witness is correct
     let r1cs: R1csParser<T> = R1csParser::new(r1cs)?;
@@ -38,16 +40,30 @@ pub fn verify<T: FieldElement>(r1cs: &str, witness: Vec<T>) -> Result<()> {
 
 // Attempt to validate the constraints
 // in an r1cs
-pub fn build<T: FieldElement>(r1cs: &str) -> Result<Vec<T>> {
+pub fn build<T: FieldElement>(r1cs: &str, inputs: Vec<T>) -> Result<Vec<T>> {
     let r1cs: R1csParser<T> = R1csParser::new(r1cs)?;
     let mut vars: HashMap<usize, T> = HashMap::new();
+    let mut input_counter = 0_usize;
     vars.insert(0, T::one());
     // build the witness
     for c in &r1cs.constraints {
         if !c.symbolic {
             continue;
         }
-        vars.insert(c.out_i.unwrap(), c.solve_symbolic(&vars)?);
+        if c.symbolic_op.as_ref().unwrap() == &SymbolicOp::Input {
+            // we'll take the next input value and set it
+            // vars.insert(inputs., v)
+            vars.insert(c.out_i.unwrap(), inputs[input_counter].clone());
+            input_counter += 1;
+        } else {
+            vars.insert(c.out_i.unwrap(), c.solve_symbolic(&vars)?);
+        }
+    }
+    if input_counter != inputs.len() {
+        return crate::log::error!(&format!(
+            "not all inputs were used in witness calculation, {} inputs unused",
+            inputs.len() - input_counter
+        ));
     }
     let mut out = vars.keys().copied().collect::<Vec<usize>>();
     out.sort();
