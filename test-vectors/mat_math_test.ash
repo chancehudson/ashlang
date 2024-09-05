@@ -5,8 +5,20 @@ static ca = [[214124, 2414],[241948, 1241],[49499, 41942814]]
 let a = [[214124, 2414],[241948, 1241],[49499, 41942814]]
 let b = [[2, 24],[2, 1],[4, 41]]
 
+# pass a matrix to a function
+
+let z = pow5(a)
+assert_eq(z[0][0], a[0][0] * a[0][0] * a[0][0] * a[0][0] * a[0][0])
+assert_eq(z[0][1], a[0][1] * a[0][1] * a[0][1] * a[0][1] * a[0][1])
+assert_eq(z[1][0], a[1][0] * a[1][0] * a[1][0] * a[1][0] * a[1][0])
+assert_eq(z[1][1], a[1][1] * a[1][1] * a[1][1] * a[1][1] * a[1][1])
+assert_eq(z[2][0], a[2][0] * a[2][0] * a[2][0] * a[2][0] * a[2][0])
+assert_eq(z[2][1], a[2][1] * a[2][1] * a[2][1] * a[2][1] * a[2][1])
+
+# used for index access by a static variable
 static one = 1
 
+# matrix math
 let cmul = a[one] * b[0]
 let cadd = a[one] + b[0]
 let csub = a[one] - b[0]
