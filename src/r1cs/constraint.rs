@@ -1,4 +1,5 @@
-use std::{collections::HashMap, fmt::Display};
+use std::collections::HashMap;
+use std::fmt::Display;
 
 use anyhow::Result;
 use scalarff::FieldElement;
@@ -160,6 +161,16 @@ impl<T: FieldElement> R1csConstraint<T> {
         }
     }
 
+    /// build a symbolic constraint used to solve the witness
+    /// symbolic constraints are of the form `out_i = a (op) b`
+    /// where operation may be any possible operation
+    /// e.g. not limited by the nature of the proving system
+    ///
+    /// out_i: index of the signal to constrain (assign)
+    /// a: left side operand
+    /// b: right side operand
+    /// op: a function to apply to the operands
+    /// comment: a comment to include in the r1cs for debugging
     pub fn symbolic(
         out_i: usize,
         a: Vec<(T, usize)>,

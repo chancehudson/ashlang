@@ -26,6 +26,10 @@ pub enum AstNode {
     If(Expr, Vec<AstNode>),
     Loop(Expr, Vec<AstNode>),
     EmptyVecDef(String, Vec<usize>),
+
+    // name, indices being assigned
+    // and an expression representing the value
+    // being assigned
     AssignVec(String, Vec<Expr>, Expr),
 }
 

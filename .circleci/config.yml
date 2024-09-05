@@ -110,6 +110,9 @@ jobs:
       - run:
           name: Run r1cs loop test
           command: cargo run --features=prove --release -- loop_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
+      - run:
+          name: Run r1cs matrix math test
+          command: cargo run --features=prove --release -- mat_math_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
   compile-tasm:
     machine:
       image: ubuntu-2204:current

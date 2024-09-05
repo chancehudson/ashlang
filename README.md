@@ -52,7 +52,7 @@ ashlang is designed to be written in conjunction with a lower level language. Ea
   - [x] static variables as function return values
 - [x] function support
   - [x] `let` assignment
-  - [x] `const` assignment (static evaluation)
+  - [x] `static` assignment (static evaluation)
   - [x] return function content directly
   - [x] arguments
 - [x] function auto-import
@@ -68,13 +68,12 @@ ashlang is designed to be written in conjunction with a lower level language. Ea
   - [x] vector variable support
   - [x] vector constants support
   - [x] vector math support
-  - [x] vector index access by variable
   - [ ] vector index ranges e.g. `[0..5]`
   - [ ] vector binary operation support
   - [x] vector support in functions
   - [x] vector support as function argument
   - [x] vector support as function return
-  - [x] vector index access by variable e.g. `v[i]`
+  - [x] vector index access by static e.g. `v[i]`
 - [x] loops
 
 ### Target `r1cs`
@@ -90,7 +89,7 @@ ashlang is designed to be written in conjunction with a lower level language. Ea
   - [x] static variables as function return values
 - [x] function support
   - [x] `let` assignment
-  - [x] `const` assignment (static evaluation)
+  - [x] `static` assignment (static evaluation)
   - [x] return function content directly
   - [x] arguments
 - [x] function auto-import
@@ -101,16 +100,15 @@ ashlang is designed to be written in conjunction with a lower level language. Ea
 - [x] builtin functions
   - [x] `assert_eq`
   - [x] `crash`
-- [ ] vector support
-  - [ ] vectors of any dimension e.g. `v[2][3][4][1]`
-  - [ ] vector variable support
-  - [ ] vector constants support
+- [x] vector support
+  - [x] vectors of any dimension e.g. `v[2][3][4][1]`
+  - [x] vector variable support
+  - [x] vector static support
   - [x] vector math support
-  - [ ] vector index access by variable
   - [ ] vector index ranges e.g. `[0..5]`
   - [ ] vector binary operation support
-  - [ ] vector support in functions
-  - [ ] vector support as function argument
-  - [ ] vector support as function return
-  - [ ] vector index access by variable e.g. `v[i]`
+  - [x] vector support in functions
+  - [x] vector support as function argument
+  - [x] vector support as function return
+  - [x] vector index access by static e.g. `v[i]`
 - [x] loops

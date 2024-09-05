@@ -246,7 +246,7 @@ dependencies = [
  "lazy_static",
  "pest",
  "pest_derive",
- "scalarff",
+ "scalarff 0.2.1",
  "triton-vm",
 ]
 
@@ -262,7 +262,7 @@ dependencies = [
  "lazy_static",
  "pest",
  "pest_derive",
- "scalarff",
+ "scalarff 0.1.1",
 ]
 
 [[package]]
@@ -274,7 +274,7 @@ dependencies = [
  "ashlang 0.1.0 (git+https://github.com/chancehudson/ashlang.git)",
  "curve25519-dalek 4.1.3",
  "merlin",
- "scalarff",
+ "scalarff 0.1.1",
  "spartan",
 ]
 
@@ -1478,6 +1478,24 @@ name = "scalarff"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c535e59693a8ee592a4f0359de8bd6918c82e40a715b58ad73fcdac3a18d4a7d"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-ff",
+ "ark-std",
+ "colored",
+ "curve25519-dalek 4.1.3",
+ "ff",
+ "num-bigint",
+ "num-integer",
+ "twenty-first 0.41.0",
+]
+
+[[package]]
+name = "scalarff"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ab8cdbe7d268117e0b5b86ab81030eb0a1692ce471d9ee5ca5a2561f9775a35"
 dependencies = [
  "anyhow",
  "ark-bn254",

@@ -101,31 +101,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     } else {
                         // if we get a static variable from the evaluation
                         // we constraint the assigment into a new signal
-                        let new_var = Var {
-                            index: Some(self.var_index),
-                            location: VarLocation::Constraint,
-                            value: v.value,
-                        };
-                        self.var_index += new_var.value.len();
-                        for v in &new_var.value.values {
-                            // assigning a constant
-                            self.constraints.push(R1csConstraint::new(
-                                vec![(T::one(), new_var.index.unwrap())],
-                                vec![(T::one(), 0)],
-                                vec![(v.clone(), 0)],
-                                &format!(
-                                    "assigning literal ({v}) to signal {}",
-                                    new_var.index.unwrap()
-                                ),
-                            ));
-                            self.constraints.push(R1csConstraint::symbolic(
-                                new_var.index.unwrap(),
-                                vec![(v.clone(), 0)],
-                                vec![(T::zero(), 0)],
-                                SymbolicOp::Add,
-                                self.compiler_state.messages[0].clone(),
-                            ));
-                        }
+                        let new_var = self.static_to_constraint(&v.value)?;
                         self.vars.insert(name, new_var);
                     }
                 }
@@ -177,7 +153,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     if v.location != VarLocation::Static {
                         return log::error!("loop condition must be static variable");
                     }
-                    if v.value.len() == 0 {
+                    if v.value.is_empty() {
                         return log::error!("loop condition is an empty matrix");
                     }
                     if v.value.len() > 1 {
@@ -212,14 +188,91 @@ impl<'a, T: FieldElement> VM<'a, T> {
         Ok(())
     }
 
+    /// Serialization to/from AST representation
+    pub fn build_var_from_ast_vec(&mut self, expr: &Expr) -> (Vec<usize>, Vec<T>) {
+        // first iterate all the way through to the first literal
+        let mut dimensions: Vec<usize> = Vec::new();
+        let mut root_expr = expr.clone();
+        // first calculate the dimensions of the matrix
+        loop {
+            match root_expr {
+                Expr::VecVec(v) => {
+                    dimensions.push(v.len());
+                    root_expr = v[0].clone();
+                }
+                Expr::VecLit(v) => {
+                    dimensions.push(v.len());
+                    break;
+                }
+                _ => {}
+            }
+        }
+        // then pull all the literals into a 1 dimensional vec
+        let mut vec_rep: Vec<T> = Vec::new();
+        Self::extract_literals(expr, &mut vec_rep);
+        (dimensions, vec_rep)
+    }
+
+    fn extract_literals(expr: &Expr, out: &mut Vec<T>) {
+        match expr {
+            Expr::VecVec(v) => {
+                for a in v {
+                    Self::extract_literals(a, out);
+                }
+            }
+            Expr::VecLit(v) => {
+                let mut vv = v.clone().iter().map(|v| T::deserialize(v)).collect();
+                out.append(&mut vv);
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    /// Take a static variable and constrain it's current value
+    /// into a signal or set of signals
+    fn static_to_constraint(&mut self, matrix: &Matrix<T>) -> Result<Var<T>> {
+        let index = self.var_index;
+        for i in 0..matrix.len() {
+            // constrain each entry in the vector literal
+            // (v_i*one * 1*one) - v*one = 0
+            self.constraints.push(R1csConstraint::new(
+                vec![(T::one(), self.var_index + i)],
+                vec![(T::one(), 0)],
+                vec![(matrix.values[i].clone(), 0)],
+                &format!(
+                    "scalar literal ({}) to signal index ({}) (member of vector)",
+                    matrix.values[i], i,
+                ),
+            ));
+            self.constraints.push(R1csConstraint::symbolic(
+                self.var_index + i,
+                vec![(T::one(), 0)],
+                vec![(matrix.values[i].clone(), 0)],
+                SymbolicOp::Mul,
+                format!(
+                    "scalar literal ({}) to signal index {} (member of vector)",
+                    matrix.values[i], i,
+                ),
+            ));
+        }
+        self.var_index += matrix.len();
+        Ok(Var {
+            index: Some(index),
+            location: VarLocation::Constraint,
+            value: matrix.clone(),
+        })
+    }
+
     pub fn eval(&mut self, expr: &Expr) -> Result<Var<T>> {
         match &expr {
-            Expr::VecLit(_v) => Err(anyhow::anyhow!(
-                "vector literals must be assigned before operation"
-            )),
-            Expr::VecVec(_v) => Err(anyhow::anyhow!(
-                "matrix literals must be assigned before operation"
-            )),
+            Expr::VecVec(_) | Expr::VecLit(_) => {
+                let (dimensions, values) = self.build_var_from_ast_vec(expr);
+                Ok(Var {
+                    index: None,
+                    location: VarLocation::Static,
+                    value: Matrix { dimensions, values },
+                })
+            }
             Expr::FnCall(name, vars) => {
                 // TODO: break this into separate functions
                 self.compiler_state.messages.insert(0, format!("{name}()"));
@@ -306,16 +359,42 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
             }
             Expr::Val(name, indices) => {
-                if !indices.is_empty() {
-                    return log::error!(
-                        "indices not supported in r1cs, accessing indices on variable: {name}"
-                    );
+                let mut new_indices = vec![];
+                for index_expr in indices {
+                    let v = self.eval(index_expr)?;
+                    if v.value.len() != 1 || v.location != VarLocation::Static {
+                        return log::error!(
+                            "index notation must contain a scalar static expression in: {name}"
+                        );
+                    }
+                    if v.value.len() != 1 {
+                        return log::error!(
+                            "index notation must contain a scalar static expression in: {name}"
+                        );
+                    }
+                    if let Ok(index) = v.value.values[0].to_biguint().to_string().parse::<usize>() {
+                        new_indices.push(index);
+                    }
                 }
-                return if let Some(v) = self.vars.get(name) {
-                    Ok(v.clone())
-                } else {
+                let v = self.vars.get(name);
+                if v.is_none() {
                     return log::error!(&format!("variable not found: {name}"));
-                };
+                }
+                let v = v.unwrap();
+                let (matrix, offset) = v.value.retrieve_indices(&new_indices);
+                if let Some(index) = v.index {
+                    Ok(Var {
+                        index: Some(index + offset),
+                        location: VarLocation::Constraint,
+                        value: matrix,
+                    })
+                } else {
+                    Ok(Var {
+                        index: None,
+                        location: VarLocation::Static,
+                        value: matrix,
+                    })
+                }
             }
             Expr::NumOp { lhs, op, rhs } => self.eval_numop(lhs, op, rhs),
             Expr::Lit(val) => Ok(Var {

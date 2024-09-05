@@ -29,4 +29,5 @@ triton-vm = { version = "=0.41.0", optional = true }
 ashlang-spartan = { git = "https://github.com/chancehudson/ashlang-spartan.git", optional = true }
 
 # math
-scalarff = "0.1.1"
+#scalarff = { path = "../scalarff" }
+scalarff = "0.2.1"
