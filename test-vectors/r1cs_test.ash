@@ -92,3 +92,9 @@ loop 10 {
   assert_eq(aaa, old_aaa * old_aaa * old_aaa * old_aaa * old_aaa)
 }
 assert_eq(lll, 10)
+
+# input tests
+
+let i = read_secret_input()
+
+assert_eq(i, 55)
