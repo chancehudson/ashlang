@@ -83,12 +83,21 @@ fn compile_r1cs<T: FieldElement>(config: &mut Config) -> Result<String> {
     }
     let witness = witness.unwrap();
 
-    if let Err(e) = witness::verify::<T>(&constraints, witness) {
+    let solved = witness::verify::<T>(&constraints, witness);
+    if let Err(e) = solved {
         println!("Failed to solve r1cs: {:?}", e);
         std::process::exit(1);
+    }
+    println!();
+    println!("R1CS: built and validated witness ✅");
+    let outputs = solved?;
+    if !outputs.is_empty() {
+        println!("Received the following outputs:");
+        for v in outputs {
+            println!("{}", v.serialize());
+        }
     } else {
-        println!();
-        println!("R1CS: built and validated witness ✅");
+        println!("No outputs were generated");
     }
     Ok(constraints)
 }

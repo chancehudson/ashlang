@@ -1,0 +1,6 @@
+(v) -> (_)
+
+# symbolic constraint marking v as public
+
+_ = (1*one) * (1*v)
+_ = (1*one) output (1*one)

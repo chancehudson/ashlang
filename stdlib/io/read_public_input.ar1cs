@@ -1,0 +1,8 @@
+() -> (out)
+
+# we specify a result `out` that should be set as the next
+# input value
+#
+# we'll also mark this value as public
+
+out = (1*one) public_input (1*one)
