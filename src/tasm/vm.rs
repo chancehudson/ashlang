@@ -162,6 +162,41 @@ impl<'a, T: FieldElement> VM<'a, T> {
         self.block_depth += 1;
     }
 
+    // remove variables from the stack and the
+    // local vm
+    pub fn end_block(&mut self) -> Result<()> {
+        if self.block_depth == 0 {
+            return Err(anyhow::anyhow!("cannot exit execution root"));
+        }
+        // find all variables in this depth
+        // and remove them from the stack
+        let entries_to_remove = self
+            .vars
+            .iter()
+            .filter(|(_k, v)| v.block_index >= self.block_depth)
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect::<Vec<(String, Var)>>();
+        if entries_to_remove.is_empty() {
+            self.block_depth -= 1;
+            return Ok(());
+        }
+        let mut pop_count = 0;
+        for (k, v) in &entries_to_remove {
+            // swap with the bottom of the stack
+            if v.stack_index.is_some() {
+                pop_count += 1;
+            }
+            self.vars.remove(k);
+        }
+        self.stack_pop(pop_count);
+        self.block_depth -= 1;
+        Ok(())
+    }
+
+    /**********
+    Stack operations
+    **/
+
     fn stack_pop(&mut self, count: usize) {
         if count == 0 {
             return;
@@ -217,37 +252,6 @@ impl<'a, T: FieldElement> VM<'a, T> {
     fn stack_write_mem(&mut self, count: usize) {
         self.asm.push(format!("write_mem {count}"));
         self.stack.truncate(self.stack.len() - count);
-    }
-
-    // remove variables from the stack and the
-    // local vm
-    pub fn end_block(&mut self) -> Result<()> {
-        if self.block_depth == 0 {
-            return Err(anyhow::anyhow!("cannot exit execution root"));
-        }
-        // find all variables in this depth
-        // and remove them from the stack
-        let entries_to_remove = self
-            .vars
-            .iter()
-            .filter(|(_k, v)| v.block_index >= self.block_depth)
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect::<Vec<(String, Var)>>();
-        if entries_to_remove.is_empty() {
-            self.block_depth -= 1;
-            return Ok(());
-        }
-        let mut pop_count = 0;
-        for (k, v) in &entries_to_remove {
-            // swap with the bottom of the stack
-            if v.stack_index.is_some() {
-                pop_count += 1;
-            }
-            self.vars.remove(k);
-        }
-        self.stack_pop(pop_count);
-        self.block_depth -= 1;
-        Ok(())
     }
 
     // define a static that will be available in
@@ -713,7 +717,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
             }
         }
         if is_static {
-            let offset = Self::calc_vec_offset_static(dimensions, indices)?;
+            let offset = self.calc_vec_offset_static(dimensions, indices)?;
             self.stack_push(offset.try_into().unwrap());
             return Ok(());
         }
@@ -738,7 +742,11 @@ impl<'a, T: FieldElement> VM<'a, T> {
         Ok(())
     }
 
-    pub fn calc_vec_offset_static(dimensions: &Vec<usize>, indices: &[Expr]) -> Result<usize> {
+    pub fn calc_vec_offset_static(
+        &mut self,
+        dimensions: &Vec<usize>,
+        indices: &[Expr],
+    ) -> Result<usize> {
         let sum = |vec: &Vec<usize>, start: usize| -> usize {
             let mut out = 1;
             for v in &vec[start..] {
@@ -749,11 +757,25 @@ impl<'a, T: FieldElement> VM<'a, T> {
         let indices = indices
             .iter()
             .map(|v| match v {
-                Expr::Lit(v) => (*v).parse::<usize>().unwrap(),
+                Expr::Lit(v) => Ok((*v).parse::<usize>().unwrap()),
+                Expr::Val(_, _) => {
+                    let out = self.eval(v.clone(), false)?;
+                    if out.is_none() {
+                        return log::error!("vector cannot be indexed by stack variable");
+                    }
+                    let out = out.unwrap();
+                    if out.location != VarLocation::Static {
+                        return log::error!("non-static variables are not allowed as indices");
+                    }
+                    if !out.dimensions.is_empty() {
+                        return log::error!("vector cannot be indexed by non-scalar");
+                    }
+                    Ok(out.value.unwrap()[0].try_into().unwrap())
+                }
                 // we should probably do some additional checks here
                 _ => unreachable!(),
             })
-            .collect::<Vec<usize>>();
+            .collect::<Result<Vec<usize>>>()?;
         let mut offset = 0;
         for x in 0..indices.len() {
             // for each index we sum the deeper dimensions
@@ -809,8 +831,11 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 for v in vars {
                     // if it's a stack variable the asm will be modified as needed
                     let o = if self.compiler_state.is_fn_ash.contains_key(name) {
+                        // if it's an ash function we can statically evaluate
+                        // as needed
                         self.eval((*v).clone(), false)?
                     } else {
+                        // if it's an assembly function we have to push the variable to the stack
                         self.eval_to_stack((*v).clone(), false)?
                     };
                     // let o = self.eval(Expr::Val(v.clone(), vec![]));
@@ -1374,7 +1399,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                         return Err(anyhow!("unexpected: variable has no memory or stack index"));
                     }
                 } else {
-                    let offset = VM::<T>::calc_vec_offset_static(&v.dimensions, indices)?;
+                    let offset = self.calc_vec_offset_static(&v.dimensions, indices)?;
                     // we're accessing a vec/mat, leave it in memory
                     if let Some(mem_index) = v.memory_index {
                         if v.stack_index.is_some() {
@@ -1416,15 +1441,29 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     return Err(anyhow!("static variable does not have values defined"));
                 }
                 let value = v.value.as_ref().unwrap();
-                let offset = VM::<T>::calc_vec_offset_static(&v.dimensions, indices)?;
-                return Ok(Some(Var {
-                    stack_index: v.stack_index,
-                    block_index: v.block_index,
-                    location: v.location.clone(),
-                    memory_index: v.memory_index,
-                    dimensions: v.dimensions[indices.len()..].to_vec(),
-                    value: Some(value[offset..].to_vec()),
-                }));
+                let offset = self.calc_vec_offset_static(&v.dimensions, indices)?;
+                if indices.len() == v.dimensions.len() {
+                    // returning a scalar
+                    return Ok(Some(Var {
+                        stack_index: v.stack_index,
+                        block_index: v.block_index,
+                        location: v.location.clone(),
+                        memory_index: v.memory_index,
+                        dimensions: vec![],
+                        value: Some(vec![value[offset]]),
+                    }));
+                } else {
+                    // returning a vector
+                    anyhow::bail!("static vector slices not supported");
+                    // return Ok(Some(Var {
+                    //     stack_index: v.stack_index,
+                    //     block_index: v.block_index,
+                    //     location: v.location.clone(),
+                    //     memory_index: v.memory_index,
+                    //     dimensions: v.dimensions[indices.len()..].to_vec(),
+                    //     value: Some(value[offset..].to_vec()),
+                    // }));
+                }
             }
         }
         Ok(None)
