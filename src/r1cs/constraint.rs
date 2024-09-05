@@ -28,6 +28,7 @@ pub enum SymbolicOp {
     Mul,
     Add,
     Sqrt,
+    Input, // mark a variable as being an input. Value will be assigned as part of witness
 }
 
 impl From<&str> for SymbolicOp {
@@ -37,6 +38,7 @@ impl From<&str> for SymbolicOp {
             "*" => SymbolicOp::Mul,
             "+" => SymbolicOp::Add,
             "radix" => SymbolicOp::Sqrt,
+            "input" => SymbolicOp::Input,
             _ => panic!("bad symbolic_op input \"{input}\""),
         }
     }
@@ -49,6 +51,7 @@ impl Display for SymbolicOp {
             SymbolicOp::Mul => "*".to_owned(),
             SymbolicOp::Add => "+".to_owned(),
             SymbolicOp::Sqrt => "radix".to_owned(),
+            SymbolicOp::Input => "input".to_owned(),
         };
         write!(f, "{}", out)
     }
@@ -222,6 +225,10 @@ impl<T: FieldElement> R1csConstraint<T> {
                     ));
                 }
             }
+            SymbolicOp::Input => crate::log::error!(
+                "cannot solve symbolic variable of type \"Input\"",
+                "witness builder should provide input values"
+            ),
         }
     }
 }
