@@ -74,7 +74,7 @@ impl AshlangProver<SpartanProof> for SpartanProver {
         let r1cs = compiler.compile(&config.entry_fn)?;
 
         // produce public parameters
-        let spartan_config = transform_r1cs(&r1cs)?;
+        let spartan_config = transform_r1cs(&r1cs, config.secret_inputs.iter().map(|v| Curve25519FieldElement::deserialize(v)).collect::<Vec<_>>())?;
         let (
             num_cons,
             num_vars,
@@ -129,8 +129,9 @@ impl AshlangProver<SpartanProof> for SpartanProver {
 /// - calculate a witness given some inputs
 /// - rearrange the R1CS variables such that the `one` variable and all inputs are at the end
 /// - prepare a SpartanConfig structure to be used with `ashlang_spartan::prove`
-pub fn transform_r1cs(r1cs: &str) -> Result<SpartanConfig> {
-    let mut witness = crate::r1cs::witness::build::<Curve25519FieldElement>(r1cs)?;
+pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result<SpartanConfig> {
+    let witness = crate::r1cs::witness::build::<Curve25519FieldElement>(r1cs, inputs)?;
+    let mut witness = witness.variables;
 
     // put the one variable at the end of the witness vector
     // all the R1csConstraint variables need to be modified similary
