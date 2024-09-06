@@ -4,6 +4,8 @@ The r1cs compile target outputs system of constraints as well as symbolic constr
 
 ## `ar1cs` file format
 
+"Abstract R1CS"
+
 The ashlang r1cs file format is designed to express constraint systems in a readable way. Each line is either a constraint, or a symbolic constraint.
 
 ### Constraints

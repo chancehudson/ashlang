@@ -6,6 +6,7 @@ use clap::Command;
 
 use crate::log;
 
+#[derive(Clone, Debug)]
 pub struct Config {
     pub include_paths: Vec<Utf8PathBuf>,
     pub verbosity: u8,
