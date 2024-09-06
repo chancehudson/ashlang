@@ -36,6 +36,7 @@ ashlang is designed to be written in conjunction with a lower level language. Ea
 - throws if vectors of mismatched size are used in an operation e.g. `val[0..10] * lav[0..5]`
 - functions cannot be declared, each file is a single function
 - files are not imported, function calls match the filename and tell the compiler what files are needed
+- r1cs witnesses can be computed without specialized code
 
 ## Language support tracking
 
