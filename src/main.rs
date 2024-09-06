@@ -38,7 +38,6 @@ fn main() -> Result<()> {
                 Ok(())
             }
             "curve25519" => {
-                // let constraints = compile_r1cs::<Curve25519FieldElement>(&mut config)?;
                 let proof = provers::spartan::prove(&config)?;
                 if provers::spartan::verify(proof)? {
                     println!("✅ spartan proof is valid");
