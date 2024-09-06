@@ -13,7 +13,7 @@ workflows:
       - compile-tasm:
           matrix:
             parameters:
-              field: ["foi"]
+              #field: ["foi"] # tasm only executes in oxfoi
               rust-version: ["stable", "beta", "nightly"]
 
 step_defs:
@@ -80,6 +80,8 @@ jobs:
     parameters:
       field:
         type: string
+      rust-version:
+        type: string
     steps:
       - checkout
       - run: *rust_version
@@ -99,6 +101,9 @@ jobs:
     machine:
       image: ubuntu-2204:current
     environment: *rust_env
+    parameters:
+      rust-version:
+        type: string
     steps:
       - checkout
       - run: *rust_version
