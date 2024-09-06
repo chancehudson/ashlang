@@ -38,10 +38,9 @@ fn main() -> Result<()> {
                 Ok(())
             }
             "curve25519" => {
-                let constraints = compile_r1cs::<Curve25519FieldElement>(&mut config)?;
-                let t = ashlang_spartan::transform_r1cs(&constraints)?;
-                let proof = ashlang_spartan::prove(t);
-                if ashlang_spartan::verify(proof) {
+                // let constraints = compile_r1cs::<Curve25519FieldElement>(&mut config)?;
+                let proof = provers::spartan::prove(&config)?;
+                if provers::spartan::verify(proof)? {
                     println!("✅ spartan proof is valid");
                 } else {
                     println!("🔴 spartan proof is NOT valid");
@@ -65,6 +64,7 @@ fn main() -> Result<()> {
     };
 }
 
+/// Used to compile and verify r1cs that does not yet have a default prover
 fn compile_r1cs<T: FieldElement>(config: &mut Config) -> Result<String> {
     config.extension_priorities.push("ar1cs".to_string());
     let mut compiler: Compiler<T> = Compiler::new(config)?;
@@ -86,11 +86,4 @@ fn compile_r1cs<T: FieldElement>(config: &mut Config) -> Result<String> {
         println!("R1CS: built and validated witness ✅");
     }
     Ok(constraints)
-}
-
-fn compile_tasm(config: &mut Config) -> Result<String> {
-    config.extension_priorities.push("tasm".to_string());
-
-    let mut compiler: Compiler<FoiFieldElement> = Compiler::new(config)?;
-    compiler.compile(&config.entry_fn)
 }
