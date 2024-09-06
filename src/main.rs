@@ -9,6 +9,8 @@ use scalarff::curve_25519::Curve25519FieldElement;
 use scalarff::foi::FoiFieldElement;
 use scalarff::FieldElement;
 
+use crate::provers::AshlangProver;
+
 mod cli;
 mod compiler;
 mod log;
@@ -20,7 +22,7 @@ mod tasm;
 fn main() -> Result<()> {
     let mut config = cli::parse()?;
     return match config.target.as_str() {
-        "tasm" => match provers::tritonvm::prove(&config) {
+        "tasm" => match provers::TritonVMProver::prove(&config) {
             Ok((_stark, _claim, _proof)) => {
                 println!("{:?}", _stark);
                 println!("{:?}", _claim);
@@ -38,8 +40,8 @@ fn main() -> Result<()> {
                 Ok(())
             }
             "curve25519" => {
-                let proof = provers::spartan::prove(&config)?;
-                if provers::spartan::verify(proof)? {
+                let proof = provers::SpartanProver::prove(&config)?;
+                if provers::SpartanProver::verify(proof)? {
                     println!("✅ spartan proof is valid");
                 } else {
                     println!("🔴 spartan proof is NOT valid");

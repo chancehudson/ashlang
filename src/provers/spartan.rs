@@ -15,6 +15,7 @@ use merlin::Transcript;
 
 use crate::cli::Config;
 use crate::log;
+use crate::provers::AshlangProver;
 use crate::r1cs::constraint::R1csConstraint;
 use crate::r1cs::parser::R1csParser;
 use crate::r1cs::witness;
@@ -40,72 +41,6 @@ pub struct SpartanProof {
     pub inputs: Assignment,
 }
 
-/// We return a SNARK, commitment,
-pub fn prove(config: &Config) -> Result<SpartanProof> {
-    let mut config = config.clone();
-    config.extension_priorities.push("ar1cs".to_string());
-
-    if config.field != "curve25519" {
-        return log::error!(
-            "unsupported curve for microsoft/spartan proof",
-            "field must be \"curve25519\""
-        );
-    }
-
-    let mut compiler: Compiler<Curve25519FieldElement> = Compiler::new(&config)?;
-    let r1cs = compiler.compile(&config.entry_fn)?;
-
-    // produce public parameters
-    let spartan_config = transform_r1cs(&r1cs)?;
-    let (
-        num_cons,
-        num_vars,
-        num_inputs,
-        num_non_zero_entries,
-        inst,
-        assignment_vars,
-        assignment_inputs,
-    ) = spartan_config;
-    let gens = SNARKGens::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
-
-    // create a commitment to the R1CS instance
-    let (comm, decomm) = SNARK::encode(&inst, &gens);
-
-    // produce a proof of satisfiability
-    let mut prover_transcript = Transcript::new(b"ashlang-spartan");
-    Ok(SpartanProof {
-        snark: SNARK::prove(
-            &inst,
-            &comm,
-            &decomm,
-            assignment_vars,
-            &assignment_inputs,
-            &gens,
-            &mut prover_transcript,
-        ),
-        comm,
-        gens,
-        inputs: assignment_inputs,
-    })
-}
-
-pub fn verify(serialized_proof: SpartanProof) -> Result<bool> {
-    // verify the proof of satisfiability
-    let mut verifier_transcript = Transcript::new(b"ashlang-spartan");
-
-    // TODO: deal with the return value of this function
-    // instead of discarding it with is_ok
-    Ok(serialized_proof
-        .snark
-        .verify(
-            &serialized_proof.comm,
-            &serialized_proof.inputs,
-            &mut verifier_transcript,
-            &serialized_proof.gens,
-        )
-        .is_ok())
-}
-
 /// Convert a vector into a fixed-size slice
 /// panic if the input vector.len() > 32
 /// if the input vector.len() < 32, fill the remainder with zeros
@@ -120,6 +55,75 @@ fn to_32(v: Vec<u8>) -> [u8; 32] {
         }
     }
     out
+}
+
+pub struct SpartanProver {}
+
+impl AshlangProver<SpartanProof> for SpartanProver {
+    fn prove(config: &Config) -> Result<SpartanProof> {
+        let mut config = config.clone();
+        config.extension_priorities.push("ar1cs".to_string());
+
+        if config.field != "curve25519" {
+            return log::error!(
+                "unsupported curve for microsoft/spartan proof",
+                "field must be \"curve25519\""
+            );
+        }
+
+        let mut compiler: Compiler<Curve25519FieldElement> = Compiler::new(&config)?;
+        let r1cs = compiler.compile(&config.entry_fn)?;
+
+        // produce public parameters
+        let spartan_config = transform_r1cs(&r1cs)?;
+        let (
+            num_cons,
+            num_vars,
+            num_inputs,
+            num_non_zero_entries,
+            inst,
+            assignment_vars,
+            assignment_inputs,
+        ) = spartan_config;
+        let gens = SNARKGens::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
+
+        // create a commitment to the R1CS instance
+        let (comm, decomm) = SNARK::encode(&inst, &gens);
+
+        // produce a proof of satisfiability
+        let mut prover_transcript = Transcript::new(b"ashlang-spartan");
+        Ok(SpartanProof {
+            snark: SNARK::prove(
+                &inst,
+                &comm,
+                &decomm,
+                assignment_vars,
+                &assignment_inputs,
+                &gens,
+                &mut prover_transcript,
+            ),
+            comm,
+            gens,
+            inputs: assignment_inputs,
+        })
+    }
+
+    fn verify(serialized_proof: SpartanProof) -> Result<bool> {
+        // verify the proof of satisfiability
+        let mut verifier_transcript = Transcript::new(b"ashlang-spartan");
+
+        // TODO: deal with the return value of this function
+        // instead of discarding it with is_ok
+        Ok(serialized_proof
+            .snark
+            .verify(
+                &serialized_proof.comm,
+                &serialized_proof.inputs,
+                &mut verifier_transcript,
+                &serialized_proof.gens,
+            )
+            .is_ok())
+    }
 }
 
 /// Take an ar1cs source file and do the following:
