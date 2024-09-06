@@ -1522,8 +1522,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
             self.load_scalar(v2, Some(x))?;
             // v1 and v2 are operated on and a single output
             // remains
-            self.asm
-                .append(&mut ops(T::zero(), T::one()).1);
+            self.asm.append(&mut ops(T::zero(), T::one()).1);
             self.stack.pop();
 
             if let Some(memory_index) = out.memory_index {
