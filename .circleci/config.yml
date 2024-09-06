@@ -106,7 +106,7 @@ jobs:
           command: cargo build --release
       - run:
           name: Run r1cs test
-          command: cargo run --release -- r1cs_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
+          command: cargo run --release -- r1cs_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >> -s 55
       - run:
           name: Run r1cs loop test
           command: cargo run --release -- loop_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
