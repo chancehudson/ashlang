@@ -130,7 +130,8 @@ impl AshlangProver<SpartanProof> for SpartanProver {
 /// - rearrange the R1CS variables such that the `one` variable and all inputs are at the end
 /// - prepare a SpartanConfig structure to be used with `ashlang_spartan::prove`
 pub fn transform_r1cs(r1cs: &str) -> Result<SpartanConfig> {
-    let mut witness = crate::r1cs::witness::build::<Curve25519FieldElement>(r1cs)?;
+    let mut witness = crate::r1cs::witness::build::<Curve25519FieldElement>(r1cs, vec![])?;
+    let mut witness = witness.variables;
 
     // put the one variable at the end of the witness vector
     // all the R1csConstraint variables need to be modified similary
