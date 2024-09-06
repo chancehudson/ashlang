@@ -11,8 +11,8 @@ use super::constraint::SymbolicOp;
 /// outputs represents a list of indices of the variables that should be publicly revealed
 /// variables represents the values of the variables in the computation
 pub struct Witness<T: FieldElement> {
-    outputs: Vec<usize>,
-    variables: Vec<T>,
+    pub outputs: Vec<usize>,
+    pub variables: Vec<T>,
 }
 
 pub fn verify<T: FieldElement>(r1cs: &str, witness: Witness<T>) -> Result<Vec<T>> {
