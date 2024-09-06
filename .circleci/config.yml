@@ -51,7 +51,7 @@ jobs:
       - run: *build_version_stable
       - run:
           name: Clippy
-          command: cargo clippy --features=prove
+          command: cargo clippy
   lint:
     machine:
       image: ubuntu-2204:current
@@ -74,7 +74,7 @@ jobs:
       - run: *rust_version
       - run:
           name: Build
-          command: cargo build --features=prove
+          command: cargo build
       - run:
           name: Test
           command: cargo test
@@ -87,10 +87,10 @@ jobs:
       - run: *build_version_stable
       - run:
           name: Build
-          command: cargo build --features=prove --release
+          command: cargo build
       - run:
           name: Run r1cs readme test
-          command: cargo run --features=prove --release -- r1cs_readme -t r1cs -i ./test-vectors -i stdlib -v -f foi
+          command: cargo run --release -- r1cs_readme -t r1cs -i ./test-vectors -i stdlib -v -f foi
   compile-r1cs:
     machine:
       image: ubuntu-2204:current
@@ -103,16 +103,16 @@ jobs:
       - run: *build_version_stable
       - run:
           name: Build
-          command: cargo build --features=prove --release
+          command: cargo build --release
       - run:
           name: Run r1cs test
-          command: cargo run --features=prove --release -- r1cs_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
+          command: cargo run --release -- r1cs_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
       - run:
           name: Run r1cs loop test
-          command: cargo run --features=prove --release -- loop_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
+          command: cargo run --release -- loop_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
       - run:
           name: Run r1cs matrix math test
-          command: cargo run --features=prove --release -- mat_math_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
+          command: cargo run --release -- mat_math_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
   compile-tasm:
     machine:
       image: ubuntu-2204:current
@@ -122,7 +122,7 @@ jobs:
       - run: *build_version_stable
       - run:
           name: Build
-          command: cargo build --features=prove --release
+          command: cargo build --release
       - run:
           name: Run TritonVM tests
           command: sh ./test.sh
