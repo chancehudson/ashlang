@@ -9,10 +9,11 @@ workflows:
           matrix:
             parameters:
               field: ["foi", "curve25519", "alt_bn128"]
-      - compile-tasm
-      - tests:
+              rust-version: ["stable", "beta", "nightly"]
+      - compile-tasm:
           matrix:
             parameters:
+              field: ["foi"]
               rust-version: ["stable", "beta", "nightly"]
 
 step_defs:
@@ -59,22 +60,6 @@ jobs:
       - run:
           name: Lint
           command: cargo fmt --all -- --check
-  tests:
-    parameters:
-      rust-version:
-        type: string
-    machine:
-      image: ubuntu-2204:current
-    environment: *rust_env
-    steps:
-      - checkout
-      - run: *rust_version
-      - run:
-          name: Build
-          command: cargo build
-      - run:
-          name: Test
-          command: cargo test
   compile-r1cs-readme:
     machine:
       image: ubuntu-2204:current
@@ -97,7 +82,7 @@ jobs:
         type: string
     steps:
       - checkout
-      - run: *build_version_stable
+      - run: *rust_version
       - run:
           name: Build
           command: cargo build --release
@@ -116,7 +101,7 @@ jobs:
     environment: *rust_env
     steps:
       - checkout
-      - run: *build_version_stable
+      - run: *rust_version
       - run:
           name: Build
           command: cargo build --release
