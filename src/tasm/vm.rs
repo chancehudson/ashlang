@@ -3,7 +3,6 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use anyhow::Result;
-use scalarff::foi::FoiFieldElement;
 use scalarff::FieldElement;
 
 use crate::compiler::CompilerState;
@@ -1476,7 +1475,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
         v1: &Var,
         v2: &Var,
         out_: Option<Var>,
-        ops: fn(FoiFieldElement, FoiFieldElement) -> (FoiFieldElement, Vec<String>),
+        ops: fn(T, T) -> (T, Vec<String>),
     ) -> Result<Option<Var>> {
         let total_len = VM::<T>::dimensions_to_len(v1.dimensions.clone());
         if v1.location == VarLocation::Static
@@ -1493,8 +1492,8 @@ impl<'a, T: FieldElement> VM<'a, T> {
             };
             for x in 0..total_len {
                 let (out_v, _) = ops(
-                    FoiFieldElement::from(v1.value.as_ref().unwrap()[x]),
-                    FoiFieldElement::from(v2.value.as_ref().unwrap()[x]),
+                    T::from(v1.value.as_ref().unwrap()[x]),
+                    T::from(v2.value.as_ref().unwrap()[x]),
                 );
                 let out_v = out_v.to_string().parse::<u64>().unwrap();
                 out.value.as_mut().unwrap().push(out_v);
@@ -1524,7 +1523,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
             // v1 and v2 are operated on and a single output
             // remains
             self.asm
-                .append(&mut ops(FoiFieldElement::zero(), FoiFieldElement::one()).1);
+                .append(&mut ops(T::zero(), T::one()).1);
             self.stack.pop();
 
             if let Some(memory_index) = out.memory_index {
