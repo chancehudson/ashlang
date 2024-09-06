@@ -69,19 +69,35 @@ fn compile_r1cs<T: FieldElement>(config: &mut Config) -> Result<String> {
 
     let constraints = compiler.compile(&config.entry_fn)?;
 
-    let witness = witness::build::<T>(&constraints);
+    let witness = witness::build::<T>(
+        &constraints,
+        config
+            .secret_inputs
+            .iter()
+            .map(|v| T::deserialize(v))
+            .collect::<Vec<_>>(),
+    );
     if let Err(e) = witness {
         println!("Failed to build witness: {:?}", e);
         std::process::exit(1);
     }
     let witness = witness.unwrap();
 
-    if let Err(e) = witness::verify::<T>(&constraints, witness) {
+    let solved = witness::verify::<T>(&constraints, witness);
+    if let Err(e) = solved {
         println!("Failed to solve r1cs: {:?}", e);
         std::process::exit(1);
+    }
+    println!();
+    println!("R1CS: built and validated witness ✅");
+    let outputs = solved?;
+    if !outputs.is_empty() {
+        println!("Received the following outputs:");
+        for v in outputs {
+            println!("{}", v.serialize());
+        }
     } else {
-        println!();
-        println!("R1CS: built and validated witness ✅");
+        println!("No outputs were generated");
     }
     Ok(constraints)
 }

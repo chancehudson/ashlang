@@ -28,6 +28,9 @@ pub enum SymbolicOp {
     Mul,
     Add,
     Sqrt,
+    Input,       // mark a variable as being an input. Value will be assigned as part of witness
+    PublicInput, // mark a variable as being exposed as a public value, if possible
+    Output,
 }
 
 impl From<&str> for SymbolicOp {
@@ -37,6 +40,9 @@ impl From<&str> for SymbolicOp {
             "*" => SymbolicOp::Mul,
             "+" => SymbolicOp::Add,
             "radix" => SymbolicOp::Sqrt,
+            "input" => SymbolicOp::Input,
+            "public_input" => SymbolicOp::PublicInput,
+            "output" => SymbolicOp::Output,
             _ => panic!("bad symbolic_op input \"{input}\""),
         }
     }
@@ -49,6 +55,9 @@ impl Display for SymbolicOp {
             SymbolicOp::Mul => "*".to_owned(),
             SymbolicOp::Add => "+".to_owned(),
             SymbolicOp::Sqrt => "radix".to_owned(),
+            SymbolicOp::Input => "input".to_owned(),
+            SymbolicOp::PublicInput => "public_input".to_owned(),
+            SymbolicOp::Output => "output".to_owned(),
         };
         write!(f, "{}", out)
     }
@@ -222,6 +231,18 @@ impl<T: FieldElement> R1csConstraint<T> {
                     ));
                 }
             }
+            SymbolicOp::PublicInput => crate::log::error!(
+                "cannot solve symbolic variable of type \"PublicInput\"",
+                "witness build should prove public input values"
+            ),
+            SymbolicOp::Input => crate::log::error!(
+                "cannot solve symbolic variable of type \"Input\"",
+                "witness builder should provide input values"
+            ),
+            SymbolicOp::Output => crate::log::error!(
+                "cannot solve symbolic variable of type \"Output\"",
+                "witness builder should mark output values"
+            ),
         }
     }
 }

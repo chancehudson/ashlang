@@ -13,7 +13,7 @@ constraint       =  { "(" ~ (constraint_inner ~ ("+" | ")"))+ | ")" }
 constraint_inner = _{ literal ~ "*" ~ varname }
 
 symbolic    = { "(" ~ (constraint_inner ~ ("+" | ")"))+ | ")" }
-symbolic_op = { "+" | "*" | "/" | "radix" }
+symbolic_op = { "+" | "*" | "/" | "radix" | "input" | "public_input" | "output" }
 
 varname = @{ char+ }
 char    = _{ ASCII_ALPHANUMERIC | "_" }
