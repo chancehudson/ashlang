@@ -74,7 +74,14 @@ impl AshlangProver<SpartanProof> for SpartanProver {
         let r1cs = compiler.compile(&config.entry_fn)?;
 
         // produce public parameters
-        let spartan_config = transform_r1cs(&r1cs, config.secret_inputs.iter().map(|v| Curve25519FieldElement::deserialize(v)).collect::<Vec<_>>())?;
+        let spartan_config = transform_r1cs(
+            &r1cs,
+            config
+                .secret_inputs
+                .iter()
+                .map(|v| Curve25519FieldElement::deserialize(v))
+                .collect::<Vec<_>>(),
+        )?;
         let (
             num_cons,
             num_vars,
