@@ -7,10 +7,12 @@ edition = "2021"
 
 [[bin]]
 name = "ashlang"
-required-features = ["prove"]
+required-features = ["default"]
 
 [features]
-prove = ["curve25519-dalek", "merlin", "spartan", "triton-vm"]
+default = ["tritonvm-prover", "spartan-prover"]
+tritonvm-prover = ["triton-vm"]
+spartan-prover = ["curve25519-dalek", "merlin", "spartan"]
 
 [dependencies]
 

@@ -14,12 +14,11 @@ use libspartan::SNARK;
 use merlin::Transcript;
 
 use crate::cli::Config;
+use crate::compiler::Compiler;
 use crate::log;
 use crate::provers::AshlangProver;
 use crate::r1cs::constraint::R1csConstraint;
 use crate::r1cs::parser::R1csParser;
-use crate::r1cs::witness;
-use crate::Compiler;
 
 pub type SpartanConfig = (
     usize,
@@ -131,7 +130,7 @@ impl AshlangProver<SpartanProof> for SpartanProver {
 /// - rearrange the R1CS variables such that the `one` variable and all inputs are at the end
 /// - prepare a SpartanConfig structure to be used with `ashlang_spartan::prove`
 pub fn transform_r1cs(r1cs: &str) -> Result<SpartanConfig> {
-    let mut witness = ashlang::r1cs::witness::build::<Curve25519FieldElement>(r1cs)?;
+    let mut witness = crate::r1cs::witness::build::<Curve25519FieldElement>(r1cs)?;
 
     // put the one variable at the end of the witness vector
     // all the R1csConstraint variables need to be modified similary

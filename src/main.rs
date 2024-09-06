@@ -1,11 +1,8 @@
-use std::str::FromStr;
-
 use anyhow::Result;
 use cli::Config;
 use compiler::Compiler;
 use r1cs::witness;
 use scalarff::alt_bn128::Bn128FieldElement;
-use scalarff::curve_25519::Curve25519FieldElement;
 use scalarff::foi::FoiFieldElement;
 use scalarff::FieldElement;
 
