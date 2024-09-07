@@ -118,9 +118,11 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     }
                 }
                 AstNode::Rtrn(expr) => {
-                    self.compiler_state
-                        .messages
-                        .insert(0, format!("return call in {}", self.name));
+                    let fn_source_path = self.compiler_state.fn_to_path.get(&self.name).unwrap();
+                    self.compiler_state.messages.insert(
+                        0,
+                        format!("return call in {}() ({})", self.name, fn_source_path),
+                    );
                     if self.return_val.is_some() {
                         return log::error!(
                             "return value already set",
@@ -275,7 +277,10 @@ impl<'a, T: FieldElement> VM<'a, T> {
             }
             Expr::FnCall(name, vars) => {
                 // TODO: break this into separate functions
-                self.compiler_state.messages.insert(0, format!("{name}()"));
+                let path = self.compiler_state.fn_to_path.get(name).unwrap();
+                self.compiler_state
+                    .messages
+                    .insert(0, format!("{}() ({})", name, path));
                 let args: Vec<Var<T>> = vars.iter().map(|v| self.eval(v)).collect::<Result<_>>()?;
                 // look for an ar1cs implementation first
                 if let Some(v) = self.compiler_state.fn_to_r1cs_parser.get(name) {
