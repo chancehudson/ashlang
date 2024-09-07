@@ -4,7 +4,6 @@ use std::fs;
 use anyhow::Result;
 use camino::Utf8PathBuf;
 use scalarff::FieldElement;
-use vfs::FileSystem;
 
 use crate::cli::Config;
 use crate::log;
@@ -62,7 +61,7 @@ pub struct Compiler<'a, T: FieldElement> {
     state: CompilerState<T>,
     extensions: Vec<String>,
     target: String,
-    vfs: Option<&'a dyn FileSystem>,
+    vfs: Option<&'a HashMap<String, String>>,
 }
 
 /**
@@ -99,12 +98,10 @@ impl<'a, T: FieldElement> Compiler<'a, T> {
         Ok(())
     }
 
-    pub fn include_vfs(&mut self, vfs: &'a dyn FileSystem) -> Result<()> {
+    pub fn include_vfs(&mut self, vfs: &'a HashMap<String, String>) -> Result<()> {
         self.vfs = Some(vfs);
-        let files = vfs.read_dir("")?;
-        // read the root directory and assume everything is a file
-        for filename in files {
-            let path = Utf8PathBuf::from(format!("/{filename}"));
+        for (filename, source) in vfs {
+            let path = Utf8PathBuf::from(filename);
             let ext = path.extension();
             if ext.is_none() {
                 anyhow::bail!("Failed to get extension for path: {:?}", path)
@@ -250,10 +247,13 @@ Path 2: {:?}",
         if let Some(file_path) = self.fn_to_path.get(fn_name) {
             if let Some(ext) = file_path.extension() {
                 if let Some(vfs) = self.vfs {
-                    let mut file = vfs.open_file(&file_path.to_string())?;
-                    let mut file_contents = String::new();
-                    file.read_to_string(&mut file_contents)?;
-                    Ok((file_contents, ext.to_string()))
+                    let source = vfs.get(&file_path.to_string());
+                    if source.is_none() {
+                        return log::error!(&format!(
+                            "function is not present vfs source: {fn_name}"
+                        ));
+                    }
+                    Ok((source.unwrap().clone(), ext.to_string()))
                 } else {
                     let unparsed_file = std::fs::read_to_string(file_path)
                         .unwrap_or_else(|_| panic!("Failed to read source file: {:?}", file_path));
