@@ -139,7 +139,7 @@ pub struct VM<'a, T: FieldElement> {
 impl<'a, T: FieldElement> VM<'a, T> {
     pub fn new(compiler_state: &'a mut CompilerState<T>) -> Self {
         let memory_start = compiler_state.memory_offset;
-        compiler_state.memory_offset += 2_usize.pow(32);
+        compiler_state.memory_offset += 2_usize.pow(20);
         VM {
             vars: HashMap::new(),
             stack: Vec::new(),

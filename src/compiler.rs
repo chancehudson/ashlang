@@ -54,13 +54,14 @@ impl<T: FieldElement> CompilerState<T> {
     }
 }
 
-pub struct Compiler<T: FieldElement> {
+pub struct Compiler<'a, T: FieldElement> {
     path_to_fn: HashMap<Utf8PathBuf, String>,
     fn_to_path: HashMap<String, Utf8PathBuf>,
     pub print_asm: bool,
     state: CompilerState<T>,
     extensions: Vec<String>,
     target: String,
+    vfs: Option<&'a HashMap<String, String>>,
 }
 
 /**
@@ -72,7 +73,7 @@ pub struct Compiler<T: FieldElement> {
  * Compiler is responsible for structuring each function asm into
  * a full output file.
  */
-impl<T: FieldElement> Compiler<T> {
+impl<'a, T: FieldElement> Compiler<'a, T> {
     pub fn new(config: &Config) -> Result<Self> {
         let mut compiler = Compiler {
             path_to_fn: HashMap::new(),
@@ -81,6 +82,7 @@ impl<T: FieldElement> Compiler<T> {
             state: CompilerState::new(),
             extensions: config.extension_priorities.clone(),
             target: config.target.clone(),
+            vfs: None,
         };
         if let Err(e) = compiler.include_many(&config.include_paths) {
             return log::error!(&format!("Failed to include path: {:?}", e));
@@ -92,6 +94,69 @@ impl<T: FieldElement> Compiler<T> {
     pub fn include_many(&mut self, paths: &Vec<Utf8PathBuf>) -> Result<()> {
         for path in paths {
             self.include(path)?;
+        }
+        Ok(())
+    }
+
+    pub fn include_vfs(&mut self, vfs: &'a HashMap<String, String>) -> Result<()> {
+        self.vfs = Some(vfs);
+        for (filename, source) in vfs {
+            let path = Utf8PathBuf::from(filename);
+            let ext = path.extension();
+            if ext.is_none() {
+                anyhow::bail!("Failed to get extension for path: {:?}", path)
+            }
+            let ext = ext.unwrap();
+            if !self.extensions.contains(&ext.to_string()) {
+                continue;
+            }
+            let name_str = path.file_stem();
+            if name_str.is_none() {
+                anyhow::bail!("Failed to parse file stem for include path: {:?}", path)
+            }
+            let name_str = name_str.unwrap().to_string();
+            if self.fn_to_path.contains_key(&name_str) {
+                // check if another file exists at the same path with a different
+                // extension
+                //
+                // if so prefer the higher index file
+
+                let existing_path = self
+                    .fn_to_path
+                    .get(&name_str)
+                    .unwrap()
+                    .canonicalize_utf8()?;
+                if existing_path.parent().is_none() {
+                    anyhow::bail!(
+                        "Failed to canonicalize path: {:?}",
+                        self.fn_to_path.get(&name_str).unwrap()
+                    )
+                }
+                if existing_path.parent() != path.canonicalize_utf8()?.parent() {
+                    return log::error!(&format!(
+                        "Duplicate file/function names detected: {name_str}
+    Path 1: {:?}
+    Path 2: {:?}",
+                        &path,
+                        self.fn_to_path.get(&name_str).unwrap()
+                    ));
+                }
+                let existing_extension = existing_path.extension().unwrap();
+                let existing_index = self
+                    .extensions
+                    .iter()
+                    .position(|x| *x == *existing_extension)
+                    .unwrap();
+                let current_index = self.extensions.iter().position(|x| *x == *ext).unwrap();
+                if current_index > existing_index {
+                    // we'll prefer the higher indexed impl
+                    self.fn_to_path.insert(name_str.clone(), path.clone());
+                    self.path_to_fn.insert(path.clone(), name_str);
+                }
+                continue;
+            }
+            self.fn_to_path.insert(name_str.clone(), path.clone());
+            self.path_to_fn.insert(path.clone(), name_str);
         }
         Ok(())
     }
@@ -181,9 +246,19 @@ Path 2: {:?}",
     pub fn parse_fn(&self, fn_name: &str) -> Result<(String, String)> {
         if let Some(file_path) = self.fn_to_path.get(fn_name) {
             if let Some(ext) = file_path.extension() {
-                let unparsed_file = std::fs::read_to_string(file_path)
-                    .unwrap_or_else(|_| panic!("Failed to read source file: {:?}", file_path));
-                Ok((unparsed_file, ext.to_string()))
+                if let Some(vfs) = self.vfs {
+                    let source = vfs.get(&file_path.to_string());
+                    if source.is_none() {
+                        return log::error!(&format!(
+                            "function is not present vfs source: {fn_name}"
+                        ));
+                    }
+                    Ok((source.unwrap().clone(), ext.to_string()))
+                } else {
+                    let unparsed_file = std::fs::read_to_string(file_path)
+                        .unwrap_or_else(|_| panic!("Failed to read source file: {:?}", file_path));
+                    Ok((unparsed_file, ext.to_string()))
+                }
             } else {
                 panic!("unexpected: cannot get file extension");
             }
