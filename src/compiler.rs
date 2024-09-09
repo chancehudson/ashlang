@@ -310,7 +310,7 @@ Path 2: {:?}",
                 // step 2: add functions to file
                 for (fn_call, fn_asm) in &self.state.compiled_fn {
                     asm.push("\n".to_string());
-                    asm.push(format!("{}:", fn_call.typed_name()));
+                    asm.push(format!("{}: // {}", fn_call.typed_name(), self.state.fn_to_path.get(&fn_call.name).unwrap()));
                     asm.append(&mut fn_asm.clone());
                 }
 
@@ -343,14 +343,6 @@ Path 2: {:?}",
                     // prints the assembly
 
                     for l in &final_asm {
-                        // prints the function's path as well if it's a function call
-                        if l.contains("____") {
-                            let mut fn_name = l.split("____").next().unwrap();
-                            fn_name = fn_name.strip_prefix("call ").unwrap_or(fn_name);
-                            println!("{} ({})", l, self.state.fn_to_path.get(fn_name).unwrap());
-                            continue;
-                        }
-
                         println!("{}", l);
                     }
                 }
