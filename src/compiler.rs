@@ -28,6 +28,8 @@ pub struct CompilerState<T: FieldElement> {
     pub block_counter: usize,
     pub block_fn_asm: Vec<Vec<String>>,
     pub fn_to_r1cs_parser: HashMap<String, R1csParser<T>>,
+    pub path_to_fn: HashMap<Utf8PathBuf, String>,
+    pub fn_to_path: HashMap<String, Utf8PathBuf>,
     pub messages: Vec<String>,
 }
 
@@ -49,14 +51,14 @@ impl<T: FieldElement> CompilerState<T> {
             block_counter: 0,
             block_fn_asm: vec![],
             fn_to_r1cs_parser: HashMap::new(),
+            path_to_fn: HashMap::new(),
+            fn_to_path: HashMap::new(),
             messages: vec![],
         }
     }
 }
 
 pub struct Compiler<T: FieldElement> {
-    path_to_fn: HashMap<Utf8PathBuf, String>,
-    fn_to_path: HashMap<String, Utf8PathBuf>,
     pub print_asm: bool,
     state: CompilerState<T>,
     extensions: Vec<String>,
@@ -75,8 +77,6 @@ pub struct Compiler<T: FieldElement> {
 impl<T: FieldElement> Compiler<T> {
     pub fn new(config: &Config) -> Result<Self> {
         let mut compiler = Compiler {
-            path_to_fn: HashMap::new(),
-            fn_to_path: HashMap::new(),
             print_asm: false,
             state: CompilerState::new(),
             extensions: config.extension_priorities.clone(),
@@ -121,13 +121,14 @@ impl<T: FieldElement> Compiler<T> {
                 anyhow::bail!("Failed to parse file stem for include path: {:?}", path)
             }
             let name_str = name_str.unwrap().to_string();
-            if self.fn_to_path.contains_key(&name_str) {
+            if self.state.fn_to_path.contains_key(&name_str) {
                 // check if another file exists at the same path with a different
                 // extension
                 //
                 // if so prefer the higher index file
 
                 let existing_path = self
+                    .state
                     .fn_to_path
                     .get(&name_str)
                     .unwrap()
@@ -135,7 +136,7 @@ impl<T: FieldElement> Compiler<T> {
                 if existing_path.parent().is_none() {
                     anyhow::bail!(
                         "Failed to canonicalize path: {:?}",
-                        self.fn_to_path.get(&name_str).unwrap()
+                        self.state.fn_to_path.get(&name_str).unwrap()
                     )
                 }
                 if existing_path.parent() != path.canonicalize_utf8()?.parent() {
@@ -144,7 +145,7 @@ impl<T: FieldElement> Compiler<T> {
 Path 1: {:?}
 Path 2: {:?}",
                         &path,
-                        self.fn_to_path.get(&name_str).unwrap()
+                        self.state.fn_to_path.get(&name_str).unwrap()
                     ));
                 }
                 let existing_extension = existing_path.extension().unwrap();
@@ -156,13 +157,13 @@ Path 2: {:?}",
                 let current_index = self.extensions.iter().position(|x| *x == *ext).unwrap();
                 if current_index > existing_index {
                     // we'll prefer the higher indexed impl
-                    self.fn_to_path.insert(name_str.clone(), path.clone());
-                    self.path_to_fn.insert(path.clone(), name_str);
+                    self.state.fn_to_path.insert(name_str.clone(), path.clone());
+                    self.state.path_to_fn.insert(path.clone(), name_str);
                 }
                 return Ok(());
             }
-            self.fn_to_path.insert(name_str.clone(), path.clone());
-            self.path_to_fn.insert(path.clone(), name_str);
+            self.state.fn_to_path.insert(name_str.clone(), path.clone());
+            self.state.path_to_fn.insert(path.clone(), name_str);
         } else if metadata.is_dir() {
             let files = fs::read_dir(path)
                 .unwrap_or_else(|_| panic!("Failed to read directory: {:?}", &path));
@@ -179,7 +180,7 @@ Path 2: {:?}",
     // loads, parses, and returns an ashlang function by name
     // returns the function as an ast
     pub fn parse_fn(&self, fn_name: &str) -> Result<(String, String)> {
-        if let Some(file_path) = self.fn_to_path.get(fn_name) {
+        if let Some(file_path) = self.state.fn_to_path.get(fn_name) {
             if let Some(ext) = file_path.extension() {
                 let unparsed_file = std::fs::read_to_string(file_path)
                     .unwrap_or_else(|_| panic!("Failed to read source file: {:?}", file_path));
@@ -309,7 +310,11 @@ Path 2: {:?}",
                 // step 2: add functions to file
                 for (fn_call, fn_asm) in &self.state.compiled_fn {
                     asm.push("\n".to_string());
-                    asm.push(format!("{}:", fn_call.typed_name()));
+                    asm.push(format!(
+                        "{}: // {}",
+                        fn_call.typed_name(),
+                        self.state.fn_to_path.get(&fn_call.name).unwrap()
+                    ));
                     asm.append(&mut fn_asm.clone());
                 }
 
