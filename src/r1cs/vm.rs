@@ -119,10 +119,9 @@ impl<'a, T: FieldElement> VM<'a, T> {
                 }
                 AstNode::Rtrn(expr) => {
                     let fn_source_path = self.compiler_state.fn_to_path.get(&self.name).unwrap();
-                    self.compiler_state.messages.insert(
-                        0,
-                        format!("return call in {}", fn_source_path),
-                    );
+                    self.compiler_state
+                        .messages
+                        .insert(0, format!("return call in {}", fn_source_path));
                     if self.return_val.is_some() {
                         return log::error!(
                             "return value already set",
