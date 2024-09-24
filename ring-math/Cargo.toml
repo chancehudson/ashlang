@@ -1,0 +1,9 @@
+[package]
+name = "ring-math"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+scalarff = "0.4.3"
