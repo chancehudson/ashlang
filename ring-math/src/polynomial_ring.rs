@@ -127,7 +127,7 @@ pub trait PolynomialRingElement:
 macro_rules! polynomial_ring {
     ( $name: ident, $field_element: ident, $modulus: expr, $name_str: expr ) => {
         #[derive(Clone, Debug, PartialEq, Eq, std::hash::Hash)]
-        pub struct $name(Polynomial<$field_element>);
+        pub struct $name(pub Polynomial<$field_element>);
 
         impl PolynomialRingElement for $name {
             type F = $field_element;

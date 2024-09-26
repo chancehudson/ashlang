@@ -1,5 +1,4 @@
 use ring_math::Polynomial;
-use ring_math::PolynomialRingElement;
 use scalarff::Curve25519FieldElement;
 use scalarff::FieldElement;
 extern crate libspartan;
@@ -21,17 +20,7 @@ use crate::log;
 use crate::provers::AshlangProver;
 use crate::r1cs::constraint::R1csConstraint;
 use crate::r1cs::parser::R1csParser;
-
-ring_math::polynomial_ring!(
-    Poly64,
-    Curve25519FieldElement,
-    {
-        let mut p = Polynomial::new(vec![Curve25519FieldElement::one()]);
-        p.term(&Curve25519FieldElement::one(), 64);
-        p
-    },
-    "Poly64"
-);
+use crate::rings::Curve25519PolynomialRing;
 
 pub type SpartanConfig = (
     usize,
@@ -83,7 +72,7 @@ impl AshlangProver<SpartanProof> for SpartanProver {
             );
         }
 
-        let mut compiler: Compiler<Poly64> = Compiler::new(&config)?;
+        let mut compiler: Compiler<Curve25519PolynomialRing> = Compiler::new(&config)?;
         let r1cs = compiler.compile(&config.entry_fn)?;
 
         // produce public parameters
@@ -150,11 +139,11 @@ impl AshlangProver<SpartanProof> for SpartanProver {
 /// - rearrange the R1CS variables such that the `one` variable and all inputs are at the end
 /// - prepare a SpartanConfig structure to be used with `ashlang_spartan::prove`
 pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result<SpartanConfig> {
-    let witness = crate::r1cs::witness::build::<Poly64>(
+    let witness = crate::r1cs::witness::build::<Curve25519PolynomialRing>(
         r1cs,
         inputs
             .iter()
-            .map(|v| Poly64(Polynomial::new(vec![*v])))
+            .map(|v| Curve25519PolynomialRing(Polynomial::new(vec![*v])))
             .collect(),
     )?;
     let mut witness = witness.variables;
@@ -168,7 +157,7 @@ pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result
 
     // filter out the symbolic constraints
     let constraints = {
-        let r1cs_parser: R1csParser<Poly64> = R1csParser::new(r1cs)?;
+        let r1cs_parser: R1csParser<Curve25519PolynomialRing> = R1csParser::new(r1cs)?;
         r1cs_parser
             .constraints
             .into_iter()
