@@ -11,6 +11,7 @@ use std::ops::Sub;
 use std::ops::SubAssign;
 use std::str::FromStr;
 
+use anyhow;
 use scalarff::FieldElement;
 
 use super::polynomial::Polynomial;
@@ -40,9 +41,6 @@ pub trait PolynomialRingElement:
 {
     type F: FieldElement;
 
-    // fn zero() -> Self;
-    // fn one() -> Self;
-
     /// Modulus used in remainder division to form
     /// the polynomial ring.
     ///
@@ -55,6 +53,16 @@ pub trait PolynomialRingElement:
     /// Return the Polynomial representation of the current value
     /// Used to automatically implement norms and other functions.
     fn polynomial(&self) -> &Polynomial<Self::F>;
+
+    /// Attempt to get a scalar representation of the polynomial.
+    /// If the polynomial degree is > 0 this method will error.
+    fn to_scalar(&self) -> anyhow::Result<Self::F> {
+        if self.polynomial().degree() == 0 {
+            Ok(self.polynomial().coefficients[0].clone())
+        } else {
+            anyhow::bail!("Cannot convert polynomial to scalar")
+        }
+    }
 
     /// Calculate the l1 norm for this polynomial. That is
     /// the summation of all coefficients
@@ -127,17 +135,10 @@ macro_rules! polynomial_ring {
         impl PolynomialRingElement for $name {
             type F = T;
 
-            // fn zero() -> Self {
-            //     $name(Polynomial::new(vec![T::zero()]))
-            // }
-
-            // fn one() -> Self {
-            //     $name(Polynomial::new(vec![T::one()]))
-            // }
-
             fn modulus() -> Polynomial<T> {
                 $modulus
             }
+
             fn polynomial(&self) -> &Polynomial<T> {
                 &self.0
             }

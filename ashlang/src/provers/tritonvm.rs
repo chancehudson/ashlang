@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::Result;
+use ring_math::Polynomial;
 use scalarff::foi::FoiFieldElement;
 use triton_vm::prelude::BFieldElement;
 use triton_vm::program::NonDeterminism;
@@ -13,6 +14,8 @@ use super::ashlang_prover::AshlangProver;
 use crate::cli::Config;
 use crate::compiler::Compiler;
 use crate::log;
+
+// ring_math::polynomial_ring!(Ring64, Polynomial::new(vec![]))
 
 pub struct TritonVMProver {}
 

@@ -269,14 +269,14 @@ Path 2: {:?}",
                 let mut vm: VM<T> = VM::new(&mut self.state);
                 // build constraints from the AST
                 vm.eval_ast(parser.ast)?;
-                let mut final_constraints: Vec<R1csConstraint<T>> = Vec::new();
+                let mut final_constraints: Vec<R1csConstraint<T::F>> = Vec::new();
                 final_constraints.append(
                     &mut vm
                         .constraints
                         .iter()
                         .filter(|v| v.symbolic)
                         .cloned()
-                        .collect::<Vec<R1csConstraint<T>>>()
+                        .collect::<Vec<R1csConstraint<T::F>>>()
                         .to_vec(),
                 );
                 final_constraints.append(
@@ -285,7 +285,7 @@ Path 2: {:?}",
                         .iter()
                         .filter(|v| !v.symbolic)
                         .cloned()
-                        .collect::<Vec<R1csConstraint<T>>>()
+                        .collect::<Vec<R1csConstraint<T::F>>>()
                         .to_vec(),
                 );
                 if self.print_asm {

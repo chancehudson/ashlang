@@ -7,7 +7,10 @@ use scalarff::FieldElement;
 /// The base field may be finite or infinite depending
 /// on T
 #[derive(Clone, Debug, Eq, Hash)]
-pub struct Polynomial<T: FieldElement> {
+pub struct Polynomial<T>
+where
+    T: FieldElement,
+{
     pub coefficients: Vec<T>, // len() <= degree, non-existent elements assumed to be zero
 }
 

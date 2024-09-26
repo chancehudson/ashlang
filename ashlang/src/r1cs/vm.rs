@@ -40,7 +40,7 @@ where
     pub vars: HashMap<String, Var<T>>,
     pub compiler_state: &'a mut CompilerState<T>,
     // a, b, c
-    pub constraints: Vec<R1csConstraint<T>>,
+    pub constraints: Vec<R1csConstraint<T::F>>,
     pub args: Vec<Var<T>>,
     pub return_val: Option<Var<T>>,
     pub name: String,
@@ -247,9 +247,9 @@ where
             // constrain each entry in the vector literal
             // (v_i*one * 1*one) - v*one = 0
             self.constraints.push(R1csConstraint::new(
-                vec![(T::one(), self.var_index + i)],
-                vec![(T::one(), 0)],
-                vec![(matrix.values[i].clone(), 0)],
+                vec![(T::F::one(), self.var_index + i)],
+                vec![(T::F::one(), 0)],
+                vec![(matrix.values[i].to_scalar()?, 0)],
                 &format!(
                     "scalar literal ({}) to signal index ({}) (member of vector)",
                     matrix.values[i], i,
@@ -257,8 +257,8 @@ where
             ));
             self.constraints.push(R1csConstraint::symbolic(
                 self.var_index + i,
-                vec![(T::one(), 0)],
-                vec![(matrix.values[i].clone(), 0)],
+                vec![(T::F::one(), 0)],
+                vec![(matrix.values[i].to_scalar()?, 0)],
                 SymbolicOp::Mul,
                 format!(
                     "scalar literal ({}) to signal index {} (member of vector)",
@@ -311,9 +311,9 @@ where
                             let index = self.var_index;
                             self.var_index += 1;
                             self.constraints.push(R1csConstraint::new(
-                                vec![(T::one(), index)],
-                                vec![(T::one(), 0)],
-                                vec![(v.value.values[0].clone(), 0)],
+                                vec![(T::F::one(), index)],
+                                vec![(T::F::one(), 0)],
+                                vec![(v.value.values[0].to_scalar()?, 0)],
                                 &format!(
                                     "assigning literal ({}) to signal {index}",
                                     v.value.values[0]
@@ -321,8 +321,8 @@ where
                             ));
                             self.constraints.push(R1csConstraint::symbolic(
                                 index,
-                                vec![(v.value.values[0].clone(), 0)],
-                                vec![(T::zero(), 0)],
+                                vec![(v.value.values[0].to_scalar()?, 0)],
+                                vec![(T::F::zero(), 0)],
                                 SymbolicOp::Add,
                                 self.compiler_state.messages[0].clone(),
                             ));
@@ -496,15 +496,15 @@ where
                     // cv + sv - ov = 0
                     self.constraints.append(&mut vec![
                         R1csConstraint::new(
-                            vec![(cv.clone(), 0), (T::one(), svi)],
-                            vec![(T::one(), 0)],
-                            vec![(T::one(), ovi)],
+                            vec![(cv.to_scalar()?, 0), (T::F::one(), svi)],
+                            vec![(T::F::one(), 0)],
+                            vec![(T::F::one(), ovi)],
                             &format!("addition between ({cv}) and {svi} into {ovi}"),
                         ),
                         R1csConstraint::symbolic(
                             ovi,
-                            vec![(cv, 0), (T::one(), svi)],
-                            vec![(T::one(), 0)],
+                            vec![(cv.to_scalar()?, 0), (T::F::one(), svi)],
+                            vec![(T::F::one(), 0)],
                             SymbolicOp::Mul,
                             self.compiler_state.messages[0].clone(),
                         ),
@@ -528,15 +528,15 @@ where
                     // cv * sv - ov = 0
                     self.constraints.append(&mut vec![
                         R1csConstraint::new(
-                            vec![(cv.clone(), 0)],
-                            vec![(T::one(), svi)],
-                            vec![(T::one(), ovi)],
+                            vec![(cv.to_scalar()?, 0)],
+                            vec![(T::F::one(), svi)],
+                            vec![(T::F::one(), ovi)],
                             &format!("multiplication between ({cv}) and {svi} into {ovi}"),
                         ),
                         R1csConstraint::symbolic(
                             ovi,
-                            vec![(cv, 0)],
-                            vec![(T::one(), svi)],
+                            vec![(cv.to_scalar()?, 0)],
+                            vec![(T::F::one(), svi)],
                             SymbolicOp::Mul,
                             self.compiler_state.messages[0].clone(),
                         ),
@@ -562,15 +562,15 @@ where
                         // (cv + ovi)*1 - lvi = 0
                         self.constraints.append(&mut vec![
                             R1csConstraint::new(
-                                vec![(cv.clone(), 0), (T::one(), ovi)],
-                                vec![(T::one(), 0)],
-                                vec![(T::one(), lvi)],
+                                vec![(cv.to_scalar()?, 0), (T::F::one(), ovi)],
+                                vec![(T::F::one(), 0)],
+                                vec![(T::F::one(), lvi)],
                                 &format!("subtraction between {lvi} and ({cv}) into {ovi}"),
                             ),
                             R1csConstraint::symbolic(
                                 ovi,
-                                vec![(T::one(), lvi), (-cv.clone(), 0)],
-                                vec![(T::one(), 0)],
+                                vec![(T::F::one(), lvi), (-cv.to_scalar()?, 0)],
+                                vec![(T::F::one(), 0)],
                                 SymbolicOp::Mul,
                                 self.compiler_state.messages[0].clone(),
                             ),
@@ -587,15 +587,15 @@ where
                         // (rvi + ovi)*1 - lv = 0
                         self.constraints.append(&mut vec![
                             R1csConstraint::new(
-                                vec![(T::one(), rvi), (T::one(), ovi)],
-                                vec![(T::one(), 0)],
-                                vec![(lv.clone(), 0)],
+                                vec![(T::F::one(), rvi), (T::F::one(), ovi)],
+                                vec![(T::F::one(), 0)],
+                                vec![(lv.to_scalar()?, 0)],
                                 &format!("subtraction between ({lv}) and {rvi} into {ovi}"),
                             ),
                             R1csConstraint::symbolic(
                                 ovi,
-                                vec![(lv, 0), (-T::one(), rvi)],
-                                vec![(T::one(), 0)],
+                                vec![(lv.to_scalar()?, 0), (-T::F::one(), rvi)],
+                                vec![(T::F::one(), 0)],
                                 SymbolicOp::Mul,
                                 self.compiler_state.messages[0].clone(),
                             ),
@@ -624,15 +624,15 @@ where
                         // (icv*lvi)*1 - ovi = 0
                         self.constraints.append(&mut vec![
                             R1csConstraint::new(
-                                vec![(icv.clone(), lvi)],
-                                vec![(T::one(), 0)],
-                                vec![(T::one(), ovi)],
+                                vec![(icv.to_scalar()?, lvi)],
+                                vec![(T::F::one(), 0)],
+                                vec![(T::F::one(), ovi)],
                                 &format!("modinv between {lvi} and ({cv}) into {ovi}"),
                             ),
                             R1csConstraint::symbolic(
                                 ovi,
-                                vec![(icv.clone(), lvi)],
-                                vec![(T::one(), 0)],
+                                vec![(icv.to_scalar()?, lvi)],
+                                vec![(T::F::one(), 0)],
                                 SymbolicOp::Mul,
                                 self.compiler_state.messages[0].clone(),
                             ),
@@ -655,15 +655,15 @@ where
                         // rvi*ovi - 1 = 0
                         self.constraints.append(&mut vec![
                             R1csConstraint::new(
-                                vec![(T::one(), rvi)],
-                                vec![(T::one(), ovi)],
-                                vec![(T::one(), 0)],
+                                vec![(T::F::one(), rvi)],
+                                vec![(T::F::one(), ovi)],
+                                vec![(T::F::one(), 0)],
                                 &format!("modinv {rvi} into {ovi}"),
                             ),
                             R1csConstraint::symbolic(
                                 ovi,
-                                vec![(T::one(), 0)],
-                                vec![(T::one(), rvi)],
+                                vec![(T::F::one(), 0)],
+                                vec![(T::F::one(), rvi)],
                                 SymbolicOp::Inv,
                                 self.compiler_state.messages[0].clone(),
                             ),
@@ -676,15 +676,15 @@ where
                         // (lv*rvi)*1 - ovi = 0
                         self.constraints.append(&mut vec![
                             R1csConstraint::new(
-                                vec![(lv.clone(), rvi)],
-                                vec![(T::one(), 0)],
-                                vec![(T::one(), ovi)],
+                                vec![(lv.to_scalar()?, rvi)],
+                                vec![(T::F::one(), 0)],
+                                vec![(T::F::one(), ovi)],
                                 &format!("multiply {rvi} and ({lv}) into {ovi}"),
                             ),
                             R1csConstraint::symbolic(
                                 ovi,
-                                vec![(lv.clone(), rvi)],
-                                vec![(T::one(), 0)],
+                                vec![(lv.to_scalar()?, rvi)],
+                                vec![(T::F::one(), 0)],
                                 SymbolicOp::Mul,
                                 self.compiler_state.messages[0].clone(),
                             ),
@@ -715,15 +715,15 @@ where
                     // lv + rv - new_var = 0
                     self.constraints.append(&mut vec![
                         R1csConstraint::new(
-                            vec![(T::one(), lvi), (T::one(), rvi)],
-                            vec![(T::one(), 0)],
-                            vec![(T::one(), ovi)],
+                            vec![(T::F::one(), lvi), (T::F::one(), rvi)],
+                            vec![(T::F::one(), 0)],
+                            vec![(T::F::one(), ovi)],
                             &format!("addition between {lvi} and {rvi} into {ovi}"),
                         ),
                         R1csConstraint::symbolic(
                             ovi,
-                            vec![(T::one(), lvi), (T::one(), rvi)],
-                            vec![(T::one(), 0)],
+                            vec![(T::F::one(), lvi), (T::F::one(), rvi)],
+                            vec![(T::F::one(), 0)],
                             SymbolicOp::Mul,
                             self.compiler_state.messages[0].clone(),
                         ),
@@ -746,15 +746,15 @@ where
                     // lv + rv - new_var = 0
                     self.constraints.append(&mut vec![
                         R1csConstraint::new(
-                            vec![(T::one(), lvi)],
-                            vec![(T::one(), rvi)],
-                            vec![(T::one(), ovi)],
+                            vec![(T::F::one(), lvi)],
+                            vec![(T::F::one(), rvi)],
+                            vec![(T::F::one(), ovi)],
                             &format!("multiplication between {lvi} and {rvi} into {ovi}"),
                         ),
                         R1csConstraint::symbolic(
                             ovi,
-                            vec![(T::one(), lvi)],
-                            vec![(T::one(), rvi)],
+                            vec![(T::F::one(), lvi)],
+                            vec![(T::F::one(), rvi)],
                             SymbolicOp::Mul,
                             self.compiler_state.messages[0].clone(),
                         ),
@@ -777,15 +777,15 @@ where
                     // lv + -1*rv - new_var = 0
                     self.constraints.append(&mut vec![
                         R1csConstraint::new(
-                            vec![(T::one(), lvi), (T::one().neg(), rvi)],
-                            vec![(T::one(), 0)],
-                            vec![(T::one(), ovi)],
+                            vec![(T::F::one(), lvi), (-T::F::one(), rvi)],
+                            vec![(T::F::one(), 0)],
+                            vec![(T::F::one(), ovi)],
                             &format!("subtraction between {lvi} and {rvi} into {ovi}"),
                         ),
                         R1csConstraint::symbolic(
                             ovi,
-                            vec![(T::one(), lvi), (T::one().neg(), rvi)],
-                            vec![(T::one(), 0)],
+                            vec![(T::F::one(), lvi), (-T::F::one(), rvi)],
+                            vec![(T::F::one(), 0)],
                             SymbolicOp::Mul,
                             self.compiler_state.messages[0].clone(),
                         ),
@@ -808,15 +808,15 @@ where
                     // rhs * rhs_inv - 1 = 0
                     self.constraints.append(&mut vec![
                         R1csConstraint::new(
-                            vec![(T::one(), rvi)],
-                            vec![(T::one(), ovi)],
-                            vec![(T::one(), 0)],
+                            vec![(T::F::one(), rvi)],
+                            vec![(T::F::one(), ovi)],
+                            vec![(T::F::one(), 0)],
                             &format!("inversion of {rvi} into {ovi} (1/2)"),
                         ),
                         R1csConstraint::symbolic(
                             ovi,
-                            vec![(T::one(), 0)],
-                            vec![(T::one(), rvi)],
+                            vec![(T::F::one(), 0)],
+                            vec![(T::F::one(), rvi)],
                             SymbolicOp::Inv,
                             self.compiler_state.messages[0].clone(),
                         ),
@@ -837,15 +837,15 @@ where
                     // lv * rv - new_var = 0
                     self.constraints.append(&mut vec![
                         R1csConstraint::new(
-                            vec![(T::one(), lvi)],
-                            vec![(T::one(), rvi)],
-                            vec![(T::one(), ovi)],
+                            vec![(T::F::one(), lvi)],
+                            vec![(T::F::one(), rvi)],
+                            vec![(T::F::one(), ovi)],
                             &format!("multiplication of {lvi} and {rvi} into {ovi} (2/2)"),
                         ),
                         R1csConstraint::symbolic(
                             ovi,
-                            vec![(T::one(), lvi)],
-                            vec![(T::one(), rvi)],
+                            vec![(T::F::one(), lvi)],
+                            vec![(T::F::one(), rvi)],
                             SymbolicOp::Mul,
                             self.compiler_state.messages[0].clone(),
                         ),
