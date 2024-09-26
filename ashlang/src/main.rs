@@ -2,13 +2,12 @@ use anyhow::Result;
 use cli::Config;
 use compiler::Compiler;
 use r1cs::witness;
-use ring_math::Polynomial;
 use ring_math::PolynomialRingElement;
-use scalarff::alt_bn128::Bn128FieldElement;
-use scalarff::foi::FoiFieldElement;
-use scalarff::{Curve25519FieldElement, FieldElement};
+use scalarff::FieldElement;
 
 use crate::provers::AshlangProver;
+use crate::rings::Bn128PolynomialRing;
+use crate::rings::OxfoiPolynomialRing;
 
 mod cli;
 mod compiler;
@@ -16,25 +15,8 @@ mod log;
 mod parser;
 mod provers;
 mod r1cs;
+mod rings;
 mod tasm;
-
-ring_math::polynomial_ring!(
-    Bn128Poly,
-    Bn128FieldElement,
-    {
-        let mut p = Polynomial::new(vec![Bn128FieldElement::one()]);
-        p.term(&Bn128FieldElement::one(), 64);
-        p
-    },
-    "Bn128Poly"
-);
-
-// ring_math::polynomial_ring!(
-//     Bn128Poly,
-//     Bn128FieldElement,
-//     Polynomial::new(vec![Bn128FieldElement::one(), Bn128FieldElement::one(),]),
-//     "Bn128Poly"
-// );
 
 fn main() -> Result<()> {
     let mut config = cli::parse()?;
@@ -53,7 +35,7 @@ fn main() -> Result<()> {
         },
         "r1cs" => match config.field.as_str() {
             "foi" => {
-                compile_r1cs::<Bn128Poly>(&mut config)?;
+                compile_r1cs::<OxfoiPolynomialRing>(&mut config)?;
                 Ok(())
             }
             "curve25519" => {
@@ -66,7 +48,7 @@ fn main() -> Result<()> {
                 Ok(())
             }
             "alt_bn128" => {
-                compile_r1cs::<Bn128Poly>(&mut config)?;
+                compile_r1cs::<Bn128PolynomialRing>(&mut config)?;
                 Ok(())
             }
             _ => {

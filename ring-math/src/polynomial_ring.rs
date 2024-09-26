@@ -127,25 +127,23 @@ pub trait PolynomialRingElement:
 #[macro_export]
 macro_rules! polynomial_ring {
     ( $name: ident, $field_element: ident, $modulus: expr, $name_str: expr ) => {
-        type T = $field_element;
-
         #[derive(Clone, Debug, PartialEq, Eq, std::hash::Hash)]
-        pub struct $name(Polynomial<T>);
+        pub struct $name(Polynomial<$field_element>);
 
         impl PolynomialRingElement for $name {
-            type F = T;
+            type F = $field_element;
 
-            fn modulus() -> Polynomial<T> {
+            fn modulus() -> Polynomial<$field_element> {
                 $modulus
             }
 
-            fn polynomial(&self) -> &Polynomial<T> {
+            fn polynomial(&self) -> &Polynomial<$field_element> {
                 &self.0
             }
         }
 
-        impl From<Polynomial<T>> for $name {
-            fn from(p: Polynomial<T>) -> Self {
+        impl From<Polynomial<$field_element>> for $name {
+            fn from(p: Polynomial<$field_element>) -> Self {
                 $name(p.div(&Self::modulus()).1)
             }
         }
@@ -153,7 +151,7 @@ macro_rules! polynomial_ring {
         impl FieldElement for $name {
             fn zero() -> Self {
                 $name(Polynomial {
-                    coefficients: vec![T::zero()],
+                    coefficients: vec![$field_element::zero()],
                 })
             }
 
@@ -162,7 +160,7 @@ macro_rules! polynomial_ring {
             }
 
             fn byte_len() -> usize {
-                Self::modulus().degree() * T::byte_len()
+                Self::modulus().degree() * $field_element::byte_len()
             }
 
             fn serialize(&self) -> String {
@@ -178,7 +176,7 @@ macro_rules! polynomial_ring {
                 $name(Polynomial {
                     coefficients: str
                         .split(',')
-                        .map(|v| T::deserialize(v))
+                        .map(|v| $field_element::deserialize(v))
                         .collect::<Vec<_>>(),
                 })
             }
@@ -195,7 +193,7 @@ macro_rules! polynomial_ring {
             /// value
             fn from_usize(value: usize) -> Self {
                 $name(Polynomial {
-                    coefficients: vec![T::from_usize(value)],
+                    coefficients: vec![$field_element::from_usize(value)],
                 })
             }
 
@@ -210,8 +208,8 @@ macro_rules! polynomial_ring {
             fn from_bytes_le(bytes: &[u8]) -> Self {
                 $name(Polynomial {
                     coefficients: bytes
-                        .chunks(T::byte_len())
-                        .map(|chunk| T::from_bytes_le(chunk))
+                        .chunks($field_element::byte_len())
+                        .map(|chunk| $field_element::from_bytes_le(chunk))
                         .collect::<Vec<_>>(),
                 })
             }
@@ -242,7 +240,7 @@ macro_rules! polynomial_ring {
         impl From<u64> for $name {
             fn from(value: u64) -> Self {
                 Self::from(Polynomial {
-                    coefficients: vec![T::from(value)],
+                    coefficients: vec![$field_element::from(value)],
                 })
             }
         }
@@ -310,7 +308,6 @@ macro_rules! polynomial_ring {
 
 #[cfg(test)]
 mod test {
-    use scalarff::BigUint;
     use scalarff::FieldElement;
     use scalarff::FoiFieldElement;
 
