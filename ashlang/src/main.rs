@@ -21,7 +21,11 @@ mod tasm;
 ring_math::polynomial_ring!(
     Bn128Poly,
     Bn128FieldElement,
-    Polynomial::new(vec![Bn128FieldElement::one(), Bn128FieldElement::one(),]),
+    {
+        let mut p = Polynomial::new(vec![Bn128FieldElement::one()]);
+        p.term(&Bn128FieldElement::one(), 64);
+        p
+    },
     "Bn128Poly"
 );
 

@@ -103,6 +103,9 @@ impl<T: FieldElement> Polynomial<T> {
         if divisor.is_zero() {
             panic!("divide by zero");
         }
+        if self.degree() < divisor.degree() {
+            return (Self::zero(), self.clone());
+        }
         let mut dclone = divisor.clone();
         let mut quotient = Self::zero();
         let (divisor_term, divisor_term_exp) = dclone.pop_term();
@@ -196,7 +199,7 @@ impl<T: FieldElement> std::ops::Mul for Polynomial<T> {
     fn mul(self, other: Self) -> Self {
         let mut coefficients = Vec::new();
         coefficients.resize(
-            self.coefficients.len() + other.coefficients.len(),
+            usize::max(self.coefficients.len(), other.coefficients.len()),
             T::zero(),
         );
         for i in 0..other.coefficients.len() {
