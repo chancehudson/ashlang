@@ -1,10 +1,6 @@
 use std::str::FromStr;
 
 use anyhow::Result;
-use ring_math::Polynomial;
-use ring_math::PolynomialRingElement;
-use scalarff::foi::FoiFieldElement;
-use scalarff::FieldElement;
 use triton_vm::prelude::BFieldElement;
 use triton_vm::program::NonDeterminism;
 use triton_vm::program::PublicInput;
@@ -16,17 +12,7 @@ use super::ashlang_prover::AshlangProver;
 use crate::cli::Config;
 use crate::compiler::Compiler;
 use crate::log;
-
-ring_math::polynomial_ring!(
-    Poly64,
-    FoiFieldElement,
-    {
-        let mut p = Polynomial::new(vec![FoiFieldElement::one()]);
-        p.term(&FoiFieldElement::one(), 64);
-        p
-    },
-    "Poly64"
-);
+use crate::rings::OxfoiPolynomialRing;
 
 pub struct TritonVMProver {}
 
@@ -42,7 +28,7 @@ impl AshlangProver<(Stark, Claim, Proof)> for TritonVMProver {
         // adjust the extension priorities on the config for TritonVM
         config.extension_priorities.push("tasm".to_string());
         // get a compiler instance in the oxfoi field
-        let mut compiler: Compiler<Poly64> = Compiler::new(&config)?;
+        let mut compiler: Compiler<OxfoiPolynomialRing> = Compiler::new(&config)?;
 
         // compile as needed
         //
