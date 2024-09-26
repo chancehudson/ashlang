@@ -175,7 +175,7 @@ where
                     // track the old variables, delete any variables
                     // created inside the loop body
                     let old_vars = self.vars.clone();
-                    let loop_count = v.value.values[0].to_biguint();
+                    let loop_count = v.value.values[0].to_scalar()?.to_biguint();
                     let mut i = T::from(0).to_biguint();
                     while i < loop_count {
                         self.compiler_state
@@ -386,7 +386,12 @@ where
                             "index notation must contain a scalar static expression in: {name}"
                         );
                     }
-                    if let Ok(index) = v.value.values[0].to_biguint().to_string().parse::<usize>() {
+                    if let Ok(index) = v.value.values[0]
+                        .to_scalar()?
+                        .to_biguint()
+                        .to_string()
+                        .parse::<usize>()
+                    {
                         new_indices.push(index);
                     }
                 }

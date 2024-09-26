@@ -16,12 +16,12 @@ pub struct Witness<T: FieldElement> {
     pub variables: Vec<T>,
 }
 
-pub fn verify<T: PolynomialRingElement>(r1cs: &str, witness: Witness<T>) -> Result<Vec<T>> {
+pub fn verify<T: PolynomialRingElement>(r1cs: &str, witness: Witness<T::F>) -> Result<Vec<T::F>> {
     // confirm that the witness is correct
     let r1cs: R1csParser<T> = R1csParser::new(r1cs)?;
     let mut vars: HashMap<usize, T::F> = HashMap::new();
     for (i, v) in witness.variables.iter().enumerate() {
-        vars.insert(i, v.to_scalar()?);
+        vars.insert(i, v.clone());
     }
 
     for c in &r1cs.constraints {

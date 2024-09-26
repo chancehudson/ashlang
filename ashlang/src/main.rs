@@ -2,9 +2,11 @@ use anyhow::Result;
 use cli::Config;
 use compiler::Compiler;
 use r1cs::witness;
+use ring_math::Polynomial;
+use ring_math::PolynomialRingElement;
 use scalarff::alt_bn128::Bn128FieldElement;
 use scalarff::foi::FoiFieldElement;
-use scalarff::FieldElement;
+use scalarff::{Curve25519FieldElement, FieldElement};
 
 use crate::provers::AshlangProver;
 
@@ -15,6 +17,20 @@ mod parser;
 mod provers;
 mod r1cs;
 mod tasm;
+
+ring_math::polynomial_ring!(
+    Bn128Poly,
+    Bn128FieldElement,
+    Polynomial::new(vec![Bn128FieldElement::one(), Bn128FieldElement::one(),]),
+    "Bn128Poly"
+);
+
+// ring_math::polynomial_ring!(
+//     Bn128Poly,
+//     Bn128FieldElement,
+//     Polynomial::new(vec![Bn128FieldElement::one(), Bn128FieldElement::one(),]),
+//     "Bn128Poly"
+// );
 
 fn main() -> Result<()> {
     let mut config = cli::parse()?;
@@ -33,7 +49,7 @@ fn main() -> Result<()> {
         },
         "r1cs" => match config.field.as_str() {
             "foi" => {
-                compile_r1cs::<FoiFieldElement>(&mut config)?;
+                compile_r1cs::<Bn128Poly>(&mut config)?;
                 Ok(())
             }
             "curve25519" => {
@@ -46,7 +62,7 @@ fn main() -> Result<()> {
                 Ok(())
             }
             "alt_bn128" => {
-                compile_r1cs::<Bn128FieldElement>(&mut config)?;
+                compile_r1cs::<Bn128Poly>(&mut config)?;
                 Ok(())
             }
             _ => {
@@ -63,7 +79,7 @@ fn main() -> Result<()> {
 }
 
 /// Used to compile and verify r1cs that does not yet have a default prover
-fn compile_r1cs<T: FieldElement>(config: &mut Config) -> Result<String> {
+fn compile_r1cs<T: PolynomialRingElement>(config: &mut Config) -> Result<String> {
     config.extension_priorities.push("ar1cs".to_string());
     let mut compiler: Compiler<T> = Compiler::new(config)?;
 

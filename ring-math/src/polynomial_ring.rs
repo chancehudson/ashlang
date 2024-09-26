@@ -60,7 +60,7 @@ pub trait PolynomialRingElement:
         if self.polynomial().degree() == 0 {
             Ok(self.polynomial().coefficients[0].clone())
         } else {
-            anyhow::bail!("Cannot convert polynomial to scalar")
+            anyhow::bail!("Cannot convert polynomial of degree > 0 to scalar")
         }
     }
 
@@ -183,7 +183,7 @@ macro_rules! polynomial_ring {
                 })
             }
 
-            fn prime() -> BigUint {
+            fn prime() -> scalarff::BigUint {
                 panic!("cannot retrieve a scalar prime for a polynomial field");
             }
 
@@ -199,11 +199,11 @@ macro_rules! polynomial_ring {
                 })
             }
 
-            fn to_biguint(&self) -> BigUint {
+            fn to_biguint(&self) -> scalarff::BigUint {
                 panic!("cannot retrieve a scalar representation for a polynomial field element");
             }
 
-            fn from_biguint(v: &BigUint) -> Self {
+            fn from_biguint(_v: &scalarff::BigUint) -> Self {
                 panic!();
             }
 
@@ -320,7 +320,11 @@ mod test {
     polynomial_ring!(
         Poly64,
         FoiFieldElement,
-        Polynomial::new(vec![FoiFieldElement::one(), FoiFieldElement::one()]),
+        {
+            let mut p = Polynomial::new(vec![FoiFieldElement::one()]);
+            p.term(&FoiFieldElement::one(), 64);
+            p
+        },
         "Poly64"
     );
 

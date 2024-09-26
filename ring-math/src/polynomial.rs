@@ -124,15 +124,21 @@ impl<T: FieldElement> Polynomial<T> {
 impl<T: FieldElement> std::fmt::Display for Polynomial<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.is_zero() {
-            write!(f, "[0]")
+            write!(f, "0")
         } else {
             write!(
                 f,
-                "[{}]",
+                "{}",
                 self.coefficients
                     .iter()
                     .enumerate()
-                    .map(|(i, v)| format!("{}x^{i}", v.serialize()))
+                    .map(|(i, v)| {
+                        if i > 0 {
+                            format!("{}x^{i}", v.serialize())
+                        } else {
+                            format!("{}", v.serialize())
+                        }
+                    })
                     .collect::<Vec<_>>()
                     .join(",")
             )
