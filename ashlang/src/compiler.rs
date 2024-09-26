@@ -4,7 +4,6 @@ use std::fs;
 use anyhow::Result;
 use camino::Utf8PathBuf;
 use ring_math::PolynomialRingElement;
-use scalarff::FieldElement;
 
 use crate::cli::Config;
 use crate::log;

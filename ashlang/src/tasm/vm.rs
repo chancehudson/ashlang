@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use anyhow::anyhow;
 use anyhow::Result;
 use ring_math::PolynomialRingElement;
-use scalarff::FieldElement;
 
 use crate::compiler::CompilerState;
 use crate::log;
@@ -1496,7 +1495,7 @@ impl<'a, T: PolynomialRingElement> VM<'a, T> {
                     T::from(v1.value.as_ref().unwrap()[x]),
                     T::from(v2.value.as_ref().unwrap()[x]),
                 );
-                println!("fuckmylife: {}", out_v.to_string());
+                println!("fuckmylife: {}", out_v);
                 let out_v = out_v.to_string().parse::<u64>().unwrap();
                 out.value.as_mut().unwrap().push(out_v);
             }

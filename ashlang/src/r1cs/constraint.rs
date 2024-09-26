@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use std::fmt::Display;
 
 use anyhow::Result;
-use ring_math::Polynomial;
-use ring_math::PolynomialRingElement;
 use scalarff::FieldElement;
 
 // a b and c represent values in

@@ -154,7 +154,7 @@ pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result
         r1cs,
         inputs
             .iter()
-            .map(|v| Poly64(Polynomial::new(vec![v.clone()])))
+            .map(|v| Poly64(Polynomial::new(vec![*v])))
             .collect(),
     )?;
     let mut witness = witness.variables;

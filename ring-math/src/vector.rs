@@ -3,6 +3,12 @@ use scalarff::FieldElement;
 #[derive(Clone, PartialEq)]
 pub struct Vector<T: FieldElement>(pub Vec<T>);
 
+impl<T: FieldElement> Default for Vector<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: FieldElement> Vector<T> {
     pub fn new() -> Self {
         Vector(Vec::new())
@@ -41,6 +47,10 @@ impl<T: FieldElement> Vector<T> {
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     pub fn push(&mut self, v: T) {

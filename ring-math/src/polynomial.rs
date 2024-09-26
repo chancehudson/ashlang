@@ -6,7 +6,7 @@ use scalarff::FieldElement;
 ///
 /// The base field may be finite or infinite depending
 /// on T
-#[derive(Clone, Debug, Eq, Hash)]
+#[derive(Clone, Debug, Eq)]
 pub struct Polynomial<T>
 where
     T: FieldElement,
@@ -35,7 +35,7 @@ impl<T: FieldElement> Polynomial<T> {
 
     /// Returns true if `self` is the zero polynomial
     pub fn is_zero(&self) -> bool {
-        if self.coefficients.len() == 0 {
+        if self.coefficients.is_empty() {
             return true;
         }
         for v in &self.coefficients {
@@ -43,7 +43,7 @@ impl<T: FieldElement> Polynomial<T> {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     /// Do a scalar multiplication in place
@@ -139,7 +139,7 @@ impl<T: FieldElement> std::fmt::Display for Polynomial<T> {
                         if i > 0 {
                             format!("{}x^{i}", v.serialize())
                         } else {
-                            format!("{}", v.serialize())
+                            v.serialize().to_string()
                         }
                     })
                     .collect::<Vec<_>>()
@@ -235,6 +235,15 @@ impl<T: FieldElement> std::cmp::PartialEq for Polynomial<T> {
             }
         }
         true
+    }
+}
+
+impl<T: FieldElement> std::hash::Hash for Polynomial<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // hash only the non-zero coefficients
+        for i in 0..self.degree() {
+            self.coefficients[i].hash(state);
+        }
     }
 }
 

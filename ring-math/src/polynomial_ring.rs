@@ -11,7 +11,6 @@ use std::ops::Sub;
 use std::ops::SubAssign;
 use std::str::FromStr;
 
-use anyhow;
 use scalarff::FieldElement;
 
 use super::polynomial::Polynomial;
