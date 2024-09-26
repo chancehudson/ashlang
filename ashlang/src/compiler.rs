@@ -3,6 +3,7 @@ use std::fs;
 
 use anyhow::Result;
 use camino::Utf8PathBuf;
+use ring_math::PolynomialRingElement;
 use scalarff::FieldElement;
 
 use crate::cli::Config;
@@ -16,7 +17,7 @@ use crate::tasm::vm::FnCall;
 
 // things that both Compiler and VM
 // need to modify
-pub struct CompilerState<T: FieldElement> {
+pub struct CompilerState<T: PolynomialRingElement> {
     // each function gets it's own memory space
     // track where in the memory we're at
     pub memory_offset: usize,
@@ -33,13 +34,13 @@ pub struct CompilerState<T: FieldElement> {
     pub messages: Vec<String>,
 }
 
-impl<T: FieldElement> Default for CompilerState<T> {
+impl<T: PolynomialRingElement> Default for CompilerState<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: FieldElement> CompilerState<T> {
+impl<T: PolynomialRingElement> CompilerState<T> {
     pub fn new() -> Self {
         CompilerState {
             memory_offset: 0,
@@ -58,7 +59,7 @@ impl<T: FieldElement> CompilerState<T> {
     }
 }
 
-pub struct Compiler<T: FieldElement> {
+pub struct Compiler<T: PolynomialRingElement> {
     pub print_asm: bool,
     state: CompilerState<T>,
     extensions: Vec<String>,
@@ -74,7 +75,7 @@ pub struct Compiler<T: FieldElement> {
  * Compiler is responsible for structuring each function asm into
  * a full output file.
  */
-impl<T: FieldElement> Compiler<T> {
+impl<T: PolynomialRingElement> Compiler<T> {
     pub fn new(config: &Config) -> Result<Self> {
         let mut compiler = Compiler {
             print_asm: false,

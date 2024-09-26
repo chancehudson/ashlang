@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use scalarff::matrix::Matrix;
+use ring_math::Matrix;
+use ring_math::PolynomialRingElement;
 use scalarff::FieldElement;
 
 use crate::compiler::CompilerState;
@@ -19,13 +20,19 @@ pub enum VarLocation {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Var<T: FieldElement> {
+pub struct Var<T: PolynomialRingElement>
+where
+    T::F: FieldElement,
+{
     pub index: Option<usize>,
     pub location: VarLocation,
     pub value: Matrix<T>,
 }
 
-pub struct VM<'a, T: FieldElement> {
+pub struct VM<'a, T: PolynomialRingElement>
+where
+    T::F: FieldElement,
+{
     // global counter for distinct variables
     // variable at index 0 is always 1
     pub var_index: usize,
@@ -39,16 +46,19 @@ pub struct VM<'a, T: FieldElement> {
     pub name: String,
 }
 
-impl<'a, T: FieldElement> VM<'a, T> {
+impl<'a, T: PolynomialRingElement> VM<'a, T>
+where
+    T::F: FieldElement,
+{
     pub fn new(compiler_state: &'a mut CompilerState<T>) -> Self {
         // add the field safety constraint
         // constrains -1*1 * -1*1 - 1 = 0
         // should fail in any field that is different than
         // the current one
         let constraints = vec![R1csConstraint::new(
-            vec![(T::zero() - T::one(), 0)],
-            vec![(T::zero() - T::one(), 0)],
-            vec![(T::one(), 0)],
+            vec![(T::F::zero() - T::F::one(), 0)],
+            vec![(T::F::zero() - T::F::one(), 0)],
+            vec![(T::F::one(), 0)],
             "field safety constraint",
         )];
         compiler_state.messages.push("".to_string());

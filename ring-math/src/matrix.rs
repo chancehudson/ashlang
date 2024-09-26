@@ -1,156 +1,268 @@
-use scalarff::FieldElement;
+//! A vector/matrix structure for doing arithmetic on
+//! sets of `PolynomialRingElements`. Matrices can be 1 dimensional
+//! for representing vectors.
+//!
+//! This matrix implementation is designed to represent matrices
+//! of variable dimension.
+//!
+use std::fmt::Display;
+use std::ops::Add;
+use std::ops::AddAssign;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::MulAssign;
+use std::ops::Neg;
+use std::ops::Sub;
+use std::ops::SubAssign;
+use std::str::FromStr;
 
-use super::vector::Vector;
+use super::PolynomialRingElement;
 
-/// A two dimensional matrix implementation
-#[derive(Clone, PartialEq)]
-pub struct Matrix2D<T: FieldElement> {
-    pub dimensions: (usize, usize), // (rows, cols)
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+pub struct Matrix<T: PolynomialRingElement> {
+    // scalars should be represented as dimensions: vec![1]
+    pub dimensions: Vec<usize>,
     pub values: Vec<T>,
 }
 
-impl<T: FieldElement> Matrix2D<T> {
-    /// Return an identity matrix of size `n`
-    pub fn identity(n: usize) -> Self {
-        let mut values: Vec<T> = Vec::new();
-        for x in 0..n {
-            let mut row = vec![T::zero(); n];
-            row[x] = T::one();
-            values.append(&mut row);
-        }
-        Matrix2D {
-            dimensions: (n, n),
+impl<T: PolynomialRingElement> Matrix<T> {
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    pub fn mul_scalar(&self, v: T) -> Self {
+        let values = self.values.iter().map(|x| x.clone() * v.clone()).collect();
+        Matrix {
+            dimensions: self.dimensions.clone(),
             values,
         }
     }
 
-    /// Return a zero matrix of the specified dimensions
-    pub fn zero(rows: usize, cols: usize) -> Self {
-        Matrix2D {
-            dimensions: (rows, cols),
-            values: vec![T::zero(); rows * cols],
+    pub fn invert(&self) -> Self {
+        let values = self.values.iter().map(|x| T::one() / x.clone()).collect();
+        Matrix {
+            dimensions: self.dimensions.clone(),
+            values,
         }
     }
 
-    /// Take the matrix and split it into 2 matrices vertically.
-    /// e.g. take the first m1_height rows and return them as a matrix,
-    /// and return the remaining rows as the m2 matrix.
-    pub fn split_vertical(&self, m1_height: usize, m2_height: usize) -> (Matrix2D<T>, Matrix2D<T>) {
-        assert_eq!(
-            self.dimensions.0,
-            m1_height + m2_height,
-            "matrix vertical split height mismatch"
-        );
-        let (_, cols) = self.dimensions;
-        let mid_offset = m1_height * cols;
+    /// Retrieve a scalar or sub-matrix from the matrix using
+    /// index notation. e.g. v[3][2]
+    pub fn retrieve_indices(&self, indices: &[usize]) -> (Self, usize) {
+        let mul_sum = |vec: &Vec<usize>, start: usize| -> usize {
+            let mut out = 1;
+            for v in &vec[start..] {
+                out *= v;
+            }
+            out
+        };
+        let mut offset = 0;
+        for x in 0..indices.len() {
+            // for each index we sum the deeper dimensions
+            // to determine how far to move in the array storage
+            if x == indices.len() - 1 && indices.len() == self.dimensions.len() {
+                offset += indices[x];
+            } else {
+                offset += indices[x] * mul_sum(&self.dimensions, x + 1);
+            }
+        }
+
+        let mut new_dimensions = vec![];
+        for x in indices.len()..self.dimensions.len() {
+            new_dimensions.push(self.dimensions[x]);
+        }
+        // add a dimension to mark as scalar
+        if new_dimensions.is_empty() {
+            new_dimensions.push(1);
+        }
+        let offset_end = if indices.len() == self.dimensions.len() {
+            offset + 1
+        } else {
+            offset + mul_sum(&self.dimensions, indices.len())
+        };
         (
-            Matrix2D {
-                dimensions: (m1_height, cols),
-                values: self.values[..mid_offset].to_vec(),
+            Self {
+                dimensions: new_dimensions,
+                values: self.values[offset..offset_end].to_vec(),
             },
-            Matrix2D {
-                dimensions: (m2_height, cols),
-                values: self.values[mid_offset..].to_vec(),
-            },
+            offset,
         )
     }
 
-    /// Compose the matrix self with another matrix vertically.
-    pub fn compose_vertical(&self, other: Self) -> Self {
-        assert_eq!(
-            self.dimensions.1, other.dimensions.1,
-            "horizontal size mismatch in vertical composition"
-        );
-        Self {
-            dimensions: (self.dimensions.0 + other.dimensions.0, self.dimensions.1),
-            values: self
-                .values
-                .iter()
-                .chain(other.values.iter())
-                .cloned()
-                .collect(),
-        }
+    pub fn _assert_internal_consistency(&self) {
+        assert_eq!(self.values.len(), self.dimensions.iter().product::<usize>());
     }
 
-    /// Compose the matrix self with another matrix horizontally.
-    pub fn compose_horizontal(&self, other: Self) -> Self {
-        let mut values = vec![];
-        let (m1_rows, m1_cols) = self.dimensions;
-        let (m2_rows, m2_cols) = other.dimensions;
-        assert_eq!(
-            m1_rows, m2_rows,
-            "vertical size mismatch in horizontal composition"
-        );
-        for i in 0..m1_rows {
-            values.append(&mut self.values[i * m1_cols..(i + 1) * m1_cols].to_vec());
-            values.append(&mut other.values[i * m2_cols..(i + 1) * m2_cols].to_vec());
+    pub fn assert_eq_shape(&self, m: &Matrix<T>) {
+        if self.dimensions.len() != m.dimensions.len() {
+            panic!("lhs and rhs dimensions are not equal: {:?} {:?}", self, m);
         }
-        Self {
-            dimensions: (self.dimensions.0, self.dimensions.1 + other.dimensions.1),
+        for x in 0..m.dimensions.len() {
+            if self.dimensions[x] != m.dimensions[x] {
+                panic!(
+                    "lhs and rhs inner dimensions are not equal: {:?} {:?}",
+                    self, m
+                );
+            }
+        }
+    }
+}
+
+impl<T: PolynomialRingElement> Add for Matrix<T> {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        self.assert_eq_shape(&other);
+        let values = self
+            .values
+            .iter()
+            .zip(other.values.iter())
+            .map(|(a, b)| a.clone() + b.clone())
+            .collect();
+        Matrix {
+            dimensions: self.dimensions,
             values,
         }
     }
+}
 
-    pub fn rand_uniform<R: rand::Rng>(rows: usize, columns: usize, rng: &mut R) -> Self {
-        Self {
-            dimensions: (rows, columns),
-            values: Vector::rand_uniform(rows * columns, rng).to_vec(),
+impl<T: PolynomialRingElement> AddAssign for Matrix<T> {
+    fn add_assign(&mut self, other: Self) {
+        self.assert_eq_shape(&other);
+        for i in 0..self.values.len() {
+            self.values[i] += other.values[i].clone();
         }
     }
 }
 
-impl<T: FieldElement> std::fmt::Display for Matrix2D<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let (rows, cols) = self.dimensions;
-        writeln!(f, "[")?;
-        for i in 0..rows {
-            write!(f, "  [ ")?;
-            for j in 0..cols {
-                write!(f, "{}, ", self.values[i * cols + j])?;
-            }
-            writeln!(f, "],")?;
-            writeln!(f, "]")?;
-        }
-        Ok(())
-    }
-}
+impl<T: PolynomialRingElement> Sub for Matrix<T> {
+    type Output = Self;
 
-impl<T: FieldElement> std::ops::Add for Matrix2D<T> {
-    type Output = Matrix2D<T>;
-
-    fn add(self, other: Matrix2D<T>) -> Matrix2D<T> {
-        assert_eq!(
-            self.dimensions, other.dimensions,
-            "matrix addition dimensions mismatch"
-        );
-        Matrix2D {
+    fn sub(self, other: Self) -> Self {
+        self.assert_eq_shape(&other);
+        let values = self
+            .values
+            .iter()
+            .zip(other.values.iter())
+            .map(|(a, b)| a.clone() - b.clone())
+            .collect();
+        Matrix {
             dimensions: self.dimensions,
-            values: self
-                .values
-                .iter()
-                .zip(other.values.iter())
-                .map(|(a, b)| a.clone() + b.clone())
-                .collect(),
+            values,
         }
     }
 }
 
-impl<T: FieldElement> std::ops::Mul<Vector<T>> for Matrix2D<T> {
-    type Output = Vector<T>;
-
-    fn mul(self, other: Vector<T>) -> Vector<T> {
-        let mut out = Vec::new();
-        let (m_rows, m_cols) = self.dimensions;
-        for i in 0..m_rows {
-            let row = self.values[i * m_cols..(i + 1) * m_cols].to_vec();
-
-            out.push(
-                // TODO: determine if summing the vector here is correct
-                (other.clone() * Vector::from_vec(row))
-                    .iter()
-                    .fold(T::zero(), |acc, v| acc + v.clone()),
-            );
+impl<T: PolynomialRingElement> SubAssign for Matrix<T> {
+    fn sub_assign(&mut self, other: Self) {
+        self.assert_eq_shape(&other);
+        for i in 0..self.values.len() {
+            self.values[i] -= other.values[i].clone();
         }
-        Vector::from_vec(out)
+    }
+}
+
+impl<T: PolynomialRingElement> Mul for Matrix<T> {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        self.assert_eq_shape(&other);
+        let values = self
+            .values
+            .iter()
+            .zip(other.values.iter())
+            .map(|(a, b)| a.clone() * b.clone())
+            .collect();
+        Matrix {
+            dimensions: self.dimensions,
+            values,
+        }
+    }
+}
+
+impl<T: PolynomialRingElement> MulAssign for Matrix<T> {
+    fn mul_assign(&mut self, other: Self) {
+        self.assert_eq_shape(&other);
+        for i in 0..self.values.len() {
+            self.values[i] *= other.values[i].clone();
+        }
+    }
+}
+
+impl<T: PolynomialRingElement> Div for Matrix<T> {
+    type Output = Self;
+
+    fn div(self, other: Self) -> Self {
+        self.assert_eq_shape(&other);
+        let values = self
+            .values
+            .iter()
+            .zip(other.values.iter())
+            .map(|(a, b)| a.clone() / b.clone())
+            .collect();
+        Matrix {
+            dimensions: self.dimensions,
+            values,
+        }
+    }
+}
+
+impl<T: PolynomialRingElement> Neg for Matrix<T> {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        let values = self.values.iter().map(|x| -x.clone()).collect();
+        Matrix {
+            dimensions: self.dimensions,
+            values,
+        }
+    }
+}
+
+impl<T: PolynomialRingElement> From<T> for Matrix<T> {
+    fn from(v: T) -> Self {
+        Matrix {
+            dimensions: vec![1],
+            values: vec![v],
+        }
+    }
+}
+
+impl<T: PolynomialRingElement> From<u64> for Matrix<T> {
+    fn from(v: u64) -> Self {
+        Matrix::from(T::from(v))
+    }
+}
+
+impl<T: PolynomialRingElement> FromStr for Matrix<T> {
+    type Err = T::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Matrix::from(T::from_str(s)?))
+    }
+}
+
+impl<T: PolynomialRingElement> Display for Matrix<T> {
+    // TODO: pretty print the matrix
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        let mut s = String::new();
+        s.push_str(&format!(
+            "dimensions: {}\n",
+            self.dimensions
+                .clone()
+                .into_iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>()
+                .join("x")
+        ));
+        for i in 0..self.values.len() {
+            s.push_str(&format!("{}, ", self.values[i]));
+        }
+        write!(f, "{}", s)
     }
 }

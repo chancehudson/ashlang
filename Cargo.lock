@@ -247,6 +247,7 @@ dependencies = [
  "merlin",
  "pest",
  "pest_derive",
+ "ring-math",
  "scalarff 0.3.2",
  "spartan",
  "triton-vm",

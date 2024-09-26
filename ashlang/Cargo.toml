@@ -16,6 +16,9 @@ spartan-prover = ["curve25519-dalek", "merlin", "spartan"]
 
 [dependencies]
 
+# local
+ring-math = { path = "../ring-math" }
+
 # misc
 anyhow = "1.0.86"
 camino = "1.1.7"

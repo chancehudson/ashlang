@@ -20,8 +20,9 @@ use super::polynomial::Polynomial;
 /// where T is a FieldElement trait
 /// and modulus is a function implemented by the
 /// struct
-pub trait PolynomialRingElement<T: FieldElement>:
-    Add<Output = Self>
+pub trait PolynomialRingElement:
+    FieldElement
+    + Add<Output = Self>
     + AddAssign
     + Div<Output = Self>
     + Mul<Output = Self>
@@ -37,6 +38,11 @@ pub trait PolynomialRingElement<T: FieldElement>:
     + From<u64>
     + Display
 {
+    type F: FieldElement;
+
+    // fn zero() -> Self;
+    // fn one() -> Self;
+
     /// Modulus used in remainder division to form
     /// the polynomial ring.
     ///
@@ -44,11 +50,11 @@ pub trait PolynomialRingElement<T: FieldElement>:
     /// in a way similar to scalar fields.
     ///
     /// See the division implementation for more info.
-    fn modulus() -> Polynomial<T>;
+    fn modulus() -> Polynomial<Self::F>;
 
     /// Return the Polynomial representation of the current value
     /// Used to automatically implement norms and other functions.
-    fn polynomial(&self) -> &Polynomial<T>;
+    fn polynomial(&self) -> &Polynomial<Self::F>;
 
     /// Calculate the l1 norm for this polynomial. That is
     /// the summation of all coefficients
@@ -57,7 +63,7 @@ pub trait PolynomialRingElement<T: FieldElement>:
             .polynomial()
             .coefficients
             .iter()
-            .fold(T::zero(), |acc, x| acc + x.clone())
+            .fold(Self::F::zero(), |acc, x| acc + x.clone())
             .to_biguint()
             .to_u64_digits();
         if digits.len() > 1 {
@@ -79,7 +85,7 @@ pub trait PolynomialRingElement<T: FieldElement>:
             .polynomial()
             .coefficients
             .iter()
-            .fold(T::zero(), |acc, x| acc + (x.clone() * x.clone()));
+            .fold(Self::F::zero(), |acc, x| acc + (x.clone() * x.clone()));
         let digits = v.to_biguint().sqrt().to_u64_digits();
         if digits.len() > 1 {
             panic!("Norm l2 is not a single u64 digit");
@@ -93,7 +99,7 @@ pub trait PolynomialRingElement<T: FieldElement>:
     /// Calculate the l-infinity norm for this polynomial. That is
     /// the largest coefficient
     fn norm_max(&self) -> u64 {
-        let mut max = T::zero().to_biguint();
+        let mut max = Self::F::zero().to_biguint();
         for i in &self.polynomial().coefficients {
             if i.to_biguint() > max {
                 max = i.to_biguint();
@@ -112,13 +118,23 @@ pub trait PolynomialRingElement<T: FieldElement>:
 
 #[macro_export]
 macro_rules! polynomial_ring {
-    ( $name: ident, $modulus: expr, $name_str: expr ) => {
-        type T = FoiFieldElement;
+    ( $name: ident, $field_element: ident, $modulus: expr, $name_str: expr ) => {
+        type T = $field_element;
 
         #[derive(Clone, Debug, PartialEq, Eq, std::hash::Hash)]
         pub struct $name(Polynomial<T>);
 
-        impl PolynomialRingElement<T> for $name {
+        impl PolynomialRingElement for $name {
+            type F = T;
+
+            // fn zero() -> Self {
+            //     $name(Polynomial::new(vec![T::zero()]))
+            // }
+
+            // fn one() -> Self {
+            //     $name(Polynomial::new(vec![T::one()]))
+            // }
+
             fn modulus() -> Polynomial<T> {
                 $modulus
             }
@@ -302,7 +318,8 @@ mod test {
 
     polynomial_ring!(
         Poly64,
-        Polynomial::<FoiFieldElement>::new(vec![FoiFieldElement::one(), FoiFieldElement::one()]),
+        FoiFieldElement,
+        Polynomial::new(vec![FoiFieldElement::one(), FoiFieldElement::one()]),
         "Poly64"
     );
 
