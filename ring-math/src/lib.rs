@@ -1,5 +1,4 @@
-mod matrix;
-mod norms;
-mod polynomial;
-mod ring_polynomial;
-mod vector;
+pub mod matrix;
+pub mod polynomial;
+pub mod polynomial_ring;
+pub mod vector;

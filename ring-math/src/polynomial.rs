@@ -12,6 +12,10 @@ pub struct Polynomial<T: FieldElement> {
 }
 
 impl<T: FieldElement> Polynomial<T> {
+    pub fn new(coefficients: Vec<T>) -> Self {
+        Self { coefficients }
+    }
+
     /// Return the zero polynomial
     pub fn zero() -> Self {
         Self {

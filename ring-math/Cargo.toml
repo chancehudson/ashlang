@@ -6,4 +6,5 @@ edition = "2021"
 [lib]
 
 [dependencies]
-scalarff = "0.4.3"
+rand = "0.8.5"
+scalarff = { version = "0.4.3", features = ["oxfoi", "alt_bn128", "curve25519", "random"] }
