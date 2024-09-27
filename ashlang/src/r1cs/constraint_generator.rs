@@ -57,7 +57,7 @@ pub fn generate_constraints_poly<F: FieldElement>(
                 constraints.push(R1csConstraint::new(
                     vec![(F::one(), lhs_index + i), (F::one(), rhs_index + i)],
                     vec![(F::one(), 0)],
-                    vec![(c, 0)],
+                    vec![(F::one(), var_index + new_var_count)],
                     &comment,
                 ));
                 constraints.push(R1csConstraint::symbolic(
@@ -74,7 +74,62 @@ pub fn generate_constraints_poly<F: FieldElement>(
             panic!("subtraction is not implemented")
         }
         NumOp::Mul => {
-            panic!("subtraction is not implemented")
+            // we'll do this in two steps
+            // 1. multiply all coefficients and store in variables
+            // 2. combine the multiplied variables into a single polynomial
+
+            let coefficient_count = usize::max(lhs.degree(), rhs.degree()) + 1;
+            let out_coef_count = lhs.degree() + rhs.degree() + 1;
+
+            // we need to store the resulting variable at the begining of the var_index
+            new_var_count += out_coef_count;
+
+            // a vector of the variables that will be combined using addition to form
+            // each final coefficient
+            let mut coef_vars = vec![vec![]; out_coef_count];
+
+            for i in 0..coefficient_count {
+                for j in 0..coefficient_count {
+                    constraints.push(R1csConstraint::new(
+                        vec![(F::one(), lhs_index + i)],
+                        vec![(F::one(), rhs_index + j)],
+                        vec![(F::one(), var_index + new_var_count)],
+                        "saf",
+                    ));
+                    constraints.push(R1csConstraint::symbolic(
+                        var_index + new_var_count,
+                        vec![(F::one(), lhs_index + i)],
+                        vec![(F::one(), rhs_index + j)],
+                        SymbolicOp::Mul,
+                        "sahfjkasf".to_string(),
+                    ));
+                    coef_vars[i + j].push(var_index + new_var_count);
+                    new_var_count += 1;
+                }
+            }
+
+            for i in 0..out_coef_count {
+                // TODO: add symbolic constraint
+                constraints.push(R1csConstraint::new(
+                    coef_vars[i]
+                        .iter()
+                        .map(|v| (F::one(), *v))
+                        .collect::<Vec<_>>(),
+                    vec![(F::one(), 0)],
+                    vec![(F::one(), var_index + i)],
+                    "asf",
+                ));
+                constraints.push(R1csConstraint::symbolic(
+                    var_index + i,
+                    coef_vars[i]
+                        .iter()
+                        .map(|v| (F::one(), *v))
+                        .collect::<Vec<_>>(),
+                    vec![(F::one(), 0)],
+                    SymbolicOp::Mul,
+                    "sahfjkasf".to_string(),
+                ));
+            }
         }
         NumOp::Inv => {
             panic!("inversion is not implemented")

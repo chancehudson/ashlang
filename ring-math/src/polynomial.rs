@@ -199,7 +199,7 @@ impl<T: FieldElement> std::ops::Mul for Polynomial<T> {
     fn mul(self, other: Self) -> Self {
         let mut coefficients = Vec::new();
         coefficients.resize(
-            usize::max(self.coefficients.len(), other.coefficients.len()),
+            self.coefficients.len() + other.coefficients.len(),
             T::zero(),
         );
         for i in 0..other.coefficients.len() {
