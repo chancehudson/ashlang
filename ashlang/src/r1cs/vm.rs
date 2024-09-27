@@ -243,30 +243,35 @@ where
     /// into a signal or set of signals
     fn static_to_constraint(&mut self, matrix: &Matrix<T>) -> Result<Var<T>> {
         let index = self.var_index;
+        let mut new_var_count = 0;
         for i in 0..matrix.len() {
-            // constrain each entry in the vector literal
+            // constrain each polynomial in the vector literal
             // (v_i*one * 1*one) - v*one = 0
-            self.constraints.push(R1csConstraint::new(
-                vec![(T::F::one(), self.var_index + i)],
-                vec![(T::F::one(), 0)],
-                vec![(matrix.values[i].to_scalar()?, 0)],
-                &format!(
-                    "scalar literal ({}) to signal index ({}) (member of vector)",
-                    matrix.values[i], i,
-                ),
-            ));
-            self.constraints.push(R1csConstraint::symbolic(
-                self.var_index + i,
-                vec![(T::F::one(), 0)],
-                vec![(matrix.values[i].to_scalar()?, 0)],
-                SymbolicOp::Mul,
-                format!(
-                    "scalar literal ({}) to signal index {} (member of vector)",
-                    matrix.values[i], i,
-                ),
-            ));
+            let poly = matrix.values[i].polynomial();
+            for j in 0..(poly.degree() + 1) {
+                self.constraints.push(R1csConstraint::new(
+                    vec![(T::F::one(), self.var_index + new_var_count)],
+                    vec![(T::F::one(), 0)],
+                    vec![(matrix.values[i].polynomial().coefficients[j].clone(), 0)],
+                    &format!(
+                        "scalar literal ({}) to signal index ({}) (member of vector)",
+                        matrix.values[i], i,
+                    ),
+                ));
+                self.constraints.push(R1csConstraint::symbolic(
+                    self.var_index + new_var_count,
+                    vec![(T::F::one(), 0)],
+                    vec![(matrix.values[i].polynomial().coefficients[j].clone(), 0)],
+                    SymbolicOp::Mul,
+                    format!(
+                        "scalar literal ({}) to signal index {} (member of vector)",
+                        matrix.values[i], i,
+                    ),
+                ));
+                new_var_count += 1;
+            }
         }
-        self.var_index += matrix.len();
+        self.var_index += new_var_count;
         Ok(Var {
             index: Some(index),
             location: VarLocation::Constraint,

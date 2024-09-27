@@ -171,15 +171,6 @@ impl<T: FieldElement> R1csConstraint<T> {
         }
     }
 
-    /// generate a set of constraints by multiplying two polynomials
-    /// will create
-    pub fn constrain_polynomial_multiplication(
-        p1: &Polynomial<T>,
-        p2: &Polynomial<T>,
-    ) -> Vec<Self> {
-        vec![]
-    }
-
     /// build a symbolic constraint used to solve the witness
     /// symbolic constraints are of the form `out_i = a (op) b`
     /// where operation may be any possible operation
