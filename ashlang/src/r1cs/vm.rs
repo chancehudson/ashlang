@@ -716,162 +716,44 @@ where
     }
 
     fn eval_numop_signals(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Result<Var<T>> {
-        // take a lhs and rhs of variable size and apply
-        // an operation to each element
-        Ok(match op {
-            NumOp::Add => {
-                let new_var = Var {
-                    index: Some(self.var_index),
-                    location: VarLocation::Constraint,
-                    value: lv.value.clone() + rv.value.clone(),
-                };
-                self.var_index += new_var.value.len();
-                for x in 0..new_var.value.len() {
-                    let lvi = lv.index.unwrap() + x;
-                    let rvi = rv.index.unwrap() + x;
-                    let ovi = new_var.index.unwrap() + x;
-                    // (1*lv + 1*rv) * (1*1) - (1*new_var) = 0
-                    // lv + rv - new_var = 0
-                    self.constraints.append(&mut vec![
-                        R1csConstraint::new(
-                            vec![(T::F::one(), lvi), (T::F::one(), rvi)],
-                            vec![(T::F::one(), 0)],
-                            vec![(T::F::one(), ovi)],
-                            &format!("addition between {lvi} and {rvi} into {ovi}"),
-                        ),
-                        R1csConstraint::symbolic(
-                            ovi,
-                            vec![(T::F::one(), lvi), (T::F::one(), rvi)],
-                            vec![(T::F::one(), 0)],
-                            SymbolicOp::Mul,
-                            self.compiler_state.messages[0].clone(),
-                        ),
-                    ]);
-                }
-                new_var
-            }
-            NumOp::Mul => {
-                let new_var = Var {
-                    index: Some(self.var_index),
-                    location: VarLocation::Constraint,
-                    value: lv.value.clone() * rv.value.clone(),
-                };
-                self.var_index += new_var.value.len();
-                for x in 0..new_var.value.len() {
-                    let lvi = lv.index.unwrap() + x;
-                    let rvi = rv.index.unwrap() + x;
-                    let ovi = new_var.index.unwrap() + x;
-                    // (1*lv + 1*rv) * (1*1) - (1*new_var) = 0
-                    // lv + rv - new_var = 0
-                    self.constraints.append(&mut vec![
-                        R1csConstraint::new(
-                            vec![(T::F::one(), lvi)],
-                            vec![(T::F::one(), rvi)],
-                            vec![(T::F::one(), ovi)],
-                            &format!("multiplication between {lvi} and {rvi} into {ovi}"),
-                        ),
-                        R1csConstraint::symbolic(
-                            ovi,
-                            vec![(T::F::one(), lvi)],
-                            vec![(T::F::one(), rvi)],
-                            SymbolicOp::Mul,
-                            self.compiler_state.messages[0].clone(),
-                        ),
-                    ]);
-                }
-                new_var
-            }
-            NumOp::Sub => {
-                let new_var = Var {
-                    index: Some(self.var_index),
-                    location: VarLocation::Constraint,
-                    value: lv.value.clone() * rv.value.mul_scalar(T::zero() - T::one()),
-                };
-                self.var_index += new_var.value.len();
-                for x in 0..new_var.value.len() {
-                    let lvi = lv.index.unwrap() + x;
-                    let rvi = rv.index.unwrap() + x;
-                    let ovi = new_var.index.unwrap() + x;
-                    // (1*lv + -1*rv) * (1*1) - (1*new_var) = 0
-                    // lv + -1*rv - new_var = 0
-                    self.constraints.append(&mut vec![
-                        R1csConstraint::new(
-                            vec![(T::F::one(), lvi), (-T::F::one(), rvi)],
-                            vec![(T::F::one(), 0)],
-                            vec![(T::F::one(), ovi)],
-                            &format!("subtraction between {lvi} and {rvi} into {ovi}"),
-                        ),
-                        R1csConstraint::symbolic(
-                            ovi,
-                            vec![(T::F::one(), lvi), (-T::F::one(), rvi)],
-                            vec![(T::F::one(), 0)],
-                            SymbolicOp::Mul,
-                            self.compiler_state.messages[0].clone(),
-                        ),
-                    ]);
-                }
-                new_var
-            }
+        let new_var = match op {
+            NumOp::Add => Var {
+                index: Some(self.var_index),
+                location: VarLocation::Constraint,
+                value: lv.value.clone() + rv.value.clone(),
+            },
+            NumOp::Mul => Var {
+                index: Some(self.var_index),
+                location: VarLocation::Constraint,
+                value: lv.value.clone() * rv.value.clone(),
+            },
+            NumOp::Sub => Var {
+                index: Some(self.var_index),
+                location: VarLocation::Constraint,
+                value: lv.value.clone() * rv.value.mul_scalar(T::zero() - T::one()),
+            },
             NumOp::Inv => {
                 let inv_var = Var {
                     index: Some(self.var_index),
                     location: VarLocation::Constraint,
                     value: rv.value.invert(),
                 };
-                self.var_index += inv_var.value.len();
-                for x in 0..inv_var.value.len() {
-                    let rvi = rv.index.unwrap() + x;
-                    let ovi = inv_var.index.unwrap() + x;
-                    // first: constrain rhs_inv
-                    // (1*rhs) * (1*rhs_inv) - (1*1) = 0
-                    // rhs * rhs_inv - 1 = 0
-                    self.constraints.append(&mut vec![
-                        R1csConstraint::new(
-                            vec![(T::F::one(), rvi)],
-                            vec![(T::F::one(), ovi)],
-                            vec![(T::F::one(), 0)],
-                            &format!("inversion of {rvi} into {ovi} (1/2)"),
-                        ),
-                        R1csConstraint::symbolic(
-                            ovi,
-                            vec![(T::F::one(), 0)],
-                            vec![(T::F::one(), rvi)],
-                            SymbolicOp::Inv,
-                            self.compiler_state.messages[0].clone(),
-                        ),
-                    ]);
-                }
                 // then multiply rv_inv by the lhs
                 let new_var = Var {
                     index: Some(self.var_index),
                     location: VarLocation::Constraint,
                     value: lv.value.clone() * inv_var.value.clone(),
                 };
-                self.var_index += new_var.value.len();
-                for x in 0..inv_var.value.len() {
-                    let lvi = lv.index.unwrap() + x;
-                    let rvi = inv_var.index.unwrap() + x;
-                    let ovi = new_var.index.unwrap() + x;
-                    // (1*lv) * (1*rv) - (1*new_var) = 0
-                    // lv * rv - new_var = 0
-                    self.constraints.append(&mut vec![
-                        R1csConstraint::new(
-                            vec![(T::F::one(), lvi)],
-                            vec![(T::F::one(), rvi)],
-                            vec![(T::F::one(), ovi)],
-                            &format!("multiplication of {lvi} and {rvi} into {ovi} (2/2)"),
-                        ),
-                        R1csConstraint::symbolic(
-                            ovi,
-                            vec![(T::F::one(), lvi)],
-                            vec![(T::F::one(), rvi)],
-                            SymbolicOp::Mul,
-                            self.compiler_state.messages[0].clone(),
-                        ),
-                    ]);
-                }
                 new_var
             }
-        })
+        };
+
+        // take a lhs and rhs of variable size and apply
+        // an operation to each element
+        let (mut constraints, new_var_count) =
+            super::constraint_generator::generate_constraints(lv, rv, op, self.var_index);
+        self.var_index += new_var_count;
+        self.constraints.append(&mut constraints);
+        Ok(new_var)
     }
 }

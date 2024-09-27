@@ -51,6 +51,15 @@ impl<T: PolynomialRingElement> Matrix<T> {
         }
     }
 
+    /// The number of coefficients in all polynomials in the matrix
+    pub fn scalar_len(&self) -> usize {
+        let mut len = 0;
+        for v in &(self.values) {
+            len += v.polynomial().degree() + 1;
+        }
+        len
+    }
+
     /// Retrieve a scalar or sub-matrix from the matrix using
     /// index notation. e.g. v[3][2]
     pub fn retrieve_indices(&self, indices: &[usize]) -> (Self, usize) {

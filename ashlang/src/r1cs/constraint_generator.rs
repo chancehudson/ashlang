@@ -11,7 +11,7 @@ use crate::r1cs::constraint::SymbolicOp;
 pub fn generate_constraints<T: PolynomialRingElement>(
     lhs: &Var<T>,
     rhs: &Var<T>,
-    operation: NumOp,
+    operation: &NumOp,
     var_index: usize,
 ) -> (Vec<R1csConstraint<T::F>>, usize) {
     let mut constraints = vec![];
@@ -24,7 +24,7 @@ pub fn generate_constraints<T: PolynomialRingElement>(
             lhs.index.unwrap() + lhs_var_offset,
             rhs.value.values[i].polynomial(),
             rhs.index.unwrap() + rhs_var_offset,
-            &operation,
+            operation,
             var_index + new_var_count,
         );
         constraints.append(&mut new_constraints);
@@ -49,7 +49,7 @@ pub fn generate_constraints_poly<F: FieldElement>(
     let mut new_var_count = 0;
     match operation {
         NumOp::Add => {
-            for i in 0..usize::max(lhs.coefficients.len(), rhs.coefficients.len()) {
+            for i in 0..(usize::max(lhs.degree(), rhs.degree()) + 1) {
                 let a = lhs.coefficients.get(i).unwrap_or(&F::zero()).clone();
                 let b = rhs.coefficients.get(i).unwrap_or(&F::zero()).clone();
                 let c = a.clone() + b.clone();
