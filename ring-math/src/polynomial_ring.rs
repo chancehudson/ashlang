@@ -53,6 +53,9 @@ pub trait PolynomialRingElement:
     /// Used to automatically implement norms and other functions.
     fn polynomial(&self) -> &Polynomial<Self::F>;
 
+    /// Return a mutable reference to the underlying polynomial
+    fn polynomial_mut(&mut self) -> &mut Polynomial<Self::F>;
+
     /// Attempt to get a scalar representation of the polynomial.
     /// If the polynomial degree is > 0 this method will error.
     fn to_scalar(&self) -> anyhow::Result<Self::F> {
@@ -138,6 +141,10 @@ macro_rules! polynomial_ring {
 
             fn polynomial(&self) -> &Polynomial<$field_element> {
                 &self.0
+            }
+
+            fn polynomial_mut(&mut self) -> &mut Polynomial<$field_element> {
+                &mut self.0
             }
         }
 

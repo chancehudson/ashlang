@@ -277,6 +277,9 @@ impl<'a, T: PolynomialRingElement> VM<'a, T> {
                     },
                 );
             }
+            Expr::PolyTerm(degree) => {
+                return log::error!("polynomials not supported in tasm statics");
+            }
             Expr::Val(ref_name, indices) => {
                 if !indices.is_empty() {
                     return log::error!("static var index assignment not supported");
@@ -986,6 +989,9 @@ impl<'a, T: PolynomialRingElement> VM<'a, T> {
                         }
                     }
                 }
+            }
+            Expr::PolyTerm(degree) => {
+                log::error!("polynomials not supported in tasm")
             }
             Expr::Val(name, indices) => {
                 // if the val is a static we push to stack

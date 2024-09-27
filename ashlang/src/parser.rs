@@ -38,7 +38,7 @@ pub enum Expr {
     VecVec(Vec<Expr>),
     VecLit(Vec<String>),
     Lit(String),
-    // PolyTerm(usize), // polynomial literal term, usize represents the degree
+    PolyTerm(usize), // polynomial literal term, usize represents the degree
     Val(String, Vec<Expr>),
     FnCall(String, Vec<Expr>),
     NumOp {
@@ -295,15 +295,15 @@ impl AshParser {
 
     fn build_expr_from_pair(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<Expr> {
         match pair.as_rule() {
-            // Rule::poly_term => {
-            //     let mut pair = pair.into_inner();
-            //     let degree = pair.next();
-            //     if degree.is_none() {
-            //         anyhow::bail!("degree token does not exist in poly_term");
-            //     }
-            //     let degree = degree.unwrap().as_str().parse::<usize>()?;
-            //     Ok(Expr::PolyTerm(degree))
-            // }
+            Rule::poly_term => {
+                let mut pair = pair.into_inner();
+                let degree = pair.next();
+                if degree.is_none() {
+                    anyhow::bail!("degree token does not exist in poly_term");
+                }
+                let degree = degree.unwrap().as_str().parse::<usize>()?;
+                Ok(Expr::PolyTerm(degree))
+            }
             Rule::var_indexed => {
                 let mut pair = pair.into_inner();
                 let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
@@ -350,7 +350,8 @@ impl AshParser {
                 let mut pair = pair.into_inner();
                 let n = AshParser::next_or_error(&mut pair)?;
                 match n.as_rule() {
-                    Rule::function_call => Ok(self.build_expr_from_pair(n)?),
+                    Rule::poly_term => self.build_expr_from_pair(n),
+                    Rule::function_call => self.build_expr_from_pair(n),
                     Rule::varname => Ok(Expr::Val(n.as_str().to_string(), vec![])),
                     Rule::var_indexed => {
                         let mut pair = n.into_inner();

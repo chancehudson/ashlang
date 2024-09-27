@@ -372,6 +372,15 @@ where
                     })
                 }
             }
+            Expr::PolyTerm(degree) => {
+                let mut val = T::zero();
+                val.polynomial_mut().term(&T::F::one(), *degree);
+                Ok(Var {
+                    index: None,
+                    location: VarLocation::Static,
+                    value: Matrix::from(val),
+                })
+            }
             Expr::Val(name, indices) => {
                 let mut new_indices = vec![];
                 for index_expr in indices {

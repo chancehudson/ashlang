@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 
 use anyhow::Result;
+use ring_math::Polynomial;
 use scalarff::FieldElement;
 
 // a b and c represent values in
@@ -168,6 +169,15 @@ impl<T: FieldElement> R1csConstraint<T> {
             symbolic: false,
             symbolic_op: None,
         }
+    }
+
+    /// generate a set of constraints by multiplying two polynomials
+    /// will create
+    pub fn constrain_polynomial_multiplication(
+        p1: &Polynomial<T>,
+        p2: &Polynomial<T>,
+    ) -> Vec<Self> {
+        vec![]
     }
 
     /// build a symbolic constraint used to solve the witness
