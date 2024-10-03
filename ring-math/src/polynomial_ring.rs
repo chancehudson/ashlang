@@ -14,6 +14,8 @@ use std::str::FromStr;
 use scalarff::FieldElement;
 
 use super::polynomial::Polynomial;
+use super::Matrix2D;
+use super::Vector;
 
 /// A trait representing a polynomial ring
 /// defined as `T[X]/<Self::modulus()>`
@@ -119,6 +121,51 @@ pub trait PolynomialRingElement:
             digits[0]
         } else {
             0
+        }
+    }
+
+    /// Returns a coefficient vector of length equal
+    /// to the ring modulus degree.
+    fn coef(&self) -> Vector<Self::F> {
+        let modulus = Self::modulus();
+        let target_degree = modulus.degree();
+        let poly_coefs = self.polynomial().coef_vec().to_vec();
+        let poly_coefs_len = poly_coefs.len();
+        Vector::from_vec(
+            [
+                poly_coefs,
+                vec![Self::F::zero(); target_degree - poly_coefs_len],
+            ]
+            .concat(),
+        )
+    }
+
+    /// Create a rotated matrix of polynomial coefficients
+    ///
+    /// from LatticeFold page 9
+    /// https://eprint.iacr.org/2024/257.pdf
+    fn rot(&self) -> Matrix2D<Self::F> {
+        let modulus = Self::modulus();
+        let degree = modulus.degree();
+        let mut values = Vec::new();
+        // TODO: check if this logic is correct
+        // technically in each row we're multiplying by X
+        // and then reducing by the modulus. In practice this
+        // results in coefficients being rotated and inverted.
+        //
+        // Test in with various coefficients and moduluses or
+        // mathematically verify
+        for i in 0..degree {
+            let mut coefs = self.coef().to_vec();
+            coefs.rotate_right(i);
+            for j in 0..i {
+                coefs[j] = -coefs[j].clone();
+            }
+            values.append(&mut coefs);
+        }
+        Matrix2D {
+            dimensions: (degree, degree),
+            values,
         }
     }
 }
@@ -333,6 +380,37 @@ mod test {
                 assert_eq!(z_poly.polynomial().degree(), 0);
                 assert_eq!(z_poly.polynomial().coefficients[0], z_scalar);
             }
+        }
+    }
+
+    #[test]
+    fn poly_coefs() {
+        let poly = Poly64::one();
+        // the coefficient vector should always be equal in length
+        // to the degree of the polynomial ring modulus
+        let c = poly.coef();
+        assert_eq!(c.len(), Poly64::modulus().degree());
+    }
+
+    #[test]
+    fn poly_rot() {
+        // Testing the relationship as defined in the LatticeFold paper
+        // coef(a * b) = rot(a) * coef(b)
+        // we end up doing multiplication without a division
+        // reduction step (still O(n^2))
+        //
+        // sample two random polynomials
+        let a = Poly64::sample_rand(&mut rand::thread_rng());
+        let b = Poly64::sample_rand(&mut rand::thread_rng());
+        // create a rotated matrix of polynomial coefficients
+        let rot_mat = a.rot();
+        let b_coef = b.coef();
+
+        // check the above
+        let expected_coef = (a * b).coef();
+        let actual_coef = rot_mat * b_coef.clone();
+        for i in 0..b_coef.len() {
+            assert_eq!(expected_coef[i], actual_coef[i]);
         }
     }
 }

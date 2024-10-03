@@ -2,6 +2,8 @@ use std::fmt::Debug;
 
 use scalarff::FieldElement;
 
+use crate::Vector;
+
 /// A univariate polynomial with coefficients in a field
 ///
 /// The base field may be finite or infinite depending
@@ -51,6 +53,18 @@ impl<T: FieldElement> Polynomial<T> {
         for i in 0..self.coefficients.len() {
             self.coefficients[i] *= v.clone();
         }
+    }
+
+    /// Return a coefficient vector with trailing zero
+    /// coefficients removed.
+    ///
+    /// out.len() == self.degree() + 1
+    pub fn coef_vec(&self) -> Vector<T> {
+        let mut out = Vector::new();
+        for i in 0..(self.degree() + 1) {
+            out.push(self.coefficients[i].clone());
+        }
+        out
     }
 
     /// Add a term to the polynomial
