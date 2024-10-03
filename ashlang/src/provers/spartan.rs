@@ -1,3 +1,4 @@
+use ring_math::Polynomial;
 use scalarff::Curve25519FieldElement;
 use scalarff::FieldElement;
 extern crate libspartan;
@@ -19,6 +20,7 @@ use crate::log;
 use crate::provers::AshlangProver;
 use crate::r1cs::constraint::R1csConstraint;
 use crate::r1cs::parser::R1csParser;
+use crate::rings::Curve25519PolynomialRing;
 
 pub type SpartanConfig = (
     usize,
@@ -70,7 +72,7 @@ impl AshlangProver<SpartanProof> for SpartanProver {
             );
         }
 
-        let mut compiler: Compiler<Curve25519FieldElement> = Compiler::new(&config)?;
+        let mut compiler: Compiler<Curve25519PolynomialRing> = Compiler::new(&config)?;
         let r1cs = compiler.compile(&config.entry_fn)?;
 
         // produce public parameters
@@ -137,7 +139,13 @@ impl AshlangProver<SpartanProof> for SpartanProver {
 /// - rearrange the R1CS variables such that the `one` variable and all inputs are at the end
 /// - prepare a SpartanConfig structure to be used with `ashlang_spartan::prove`
 pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result<SpartanConfig> {
-    let witness = crate::r1cs::witness::build::<Curve25519FieldElement>(r1cs, inputs)?;
+    let witness = crate::r1cs::witness::build::<Curve25519PolynomialRing>(
+        r1cs,
+        inputs
+            .iter()
+            .map(|v| Curve25519PolynomialRing(Polynomial::new(vec![*v])))
+            .collect(),
+    )?;
     let mut witness = witness.variables;
 
     // put the one variable at the end of the witness vector
@@ -149,7 +157,7 @@ pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result
 
     // filter out the symbolic constraints
     let constraints = {
-        let r1cs_parser: R1csParser<Curve25519FieldElement> = R1csParser::new(r1cs)?;
+        let r1cs_parser: R1csParser<Curve25519PolynomialRing> = R1csParser::new(r1cs)?;
         r1cs_parser
             .constraints
             .into_iter()

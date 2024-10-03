@@ -2,6 +2,8 @@
 
 set -e
 
+cd $(dirname "$0")/./ashlang
+
 for entry in test-vectors/*
 do
   if echo $entry | grep "_test.ash" | grep -v "r1cs"

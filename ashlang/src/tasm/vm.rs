@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use anyhow::Result;
-use scalarff::FieldElement;
+use ring_math::PolynomialRingElement;
 
 use crate::compiler::CompilerState;
 use crate::log;
@@ -104,7 +104,7 @@ static RETURN_VAR: &str = "_____return_____";
  *
  * Automatically move vars between memory and stack
  */
-pub struct VM<'a, T: FieldElement> {
+pub struct VM<'a, T: PolynomialRingElement> {
     // represents the contents of the stack
     pub stack: Vec<String>,
 
@@ -136,7 +136,7 @@ pub struct VM<'a, T: FieldElement> {
     pub compiler_state: &'a mut CompilerState<T>,
 }
 
-impl<'a, T: FieldElement> VM<'a, T> {
+impl<'a, T: PolynomialRingElement> VM<'a, T> {
     pub fn new(compiler_state: &'a mut CompilerState<T>) -> Self {
         let memory_start = compiler_state.memory_offset;
         compiler_state.memory_offset += 2_usize.pow(32);
@@ -1495,6 +1495,7 @@ impl<'a, T: FieldElement> VM<'a, T> {
                     T::from(v1.value.as_ref().unwrap()[x]),
                     T::from(v2.value.as_ref().unwrap()[x]),
                 );
+                println!("fuckmylife: {}", out_v);
                 let out_v = out_v.to_string().parse::<u64>().unwrap();
                 out.value.as_mut().unwrap().push(out_v);
             }

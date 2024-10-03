@@ -72,7 +72,7 @@ jobs:
           command: cargo build
       - run:
           name: Run r1cs readme test
-          command: cargo run --release -- r1cs_readme -t r1cs -i ./test-vectors -i stdlib -v -f foi
+          command: cargo run --release -- r1cs_readme -t r1cs -i ./ashlang/test-vectors -i ./ashlang/stdlib -v -f foi
   compile-r1cs:
     machine:
       image: ubuntu-2204:current
@@ -90,13 +90,13 @@ jobs:
           command: cargo build --release
       - run:
           name: Run r1cs test
-          command: cargo run --release -- r1cs_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >> -s 55
+          command: cargo run --release -- r1cs_test -t r1cs -i ./ashlang/test-vectors -i ./ashlang/stdlib -v -f << parameters.field >> -s 55
       - run:
           name: Run r1cs loop test
-          command: cargo run --release -- loop_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
+          command: cargo run --release -- loop_test -t r1cs -i ./ashlang/test-vectors -i ./ashlang/stdlib -v -f << parameters.field >>
       - run:
           name: Run r1cs matrix math test
-          command: cargo run --release -- mat_math_test -t r1cs -i ./test-vectors -i stdlib -v -f << parameters.field >>
+          command: cargo run --release -- mat_math_test -t r1cs -i ./ashlang/test-vectors -i ./ashlang/stdlib -v -f << parameters.field >>
   compile-tasm:
     machine:
       image: ubuntu-2204:current

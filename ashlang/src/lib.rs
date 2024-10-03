@@ -4,6 +4,7 @@ pub mod log;
 pub mod parser;
 mod provers;
 pub mod r1cs;
+pub mod rings;
 pub mod tasm;
 
 pub use cli::Config;
