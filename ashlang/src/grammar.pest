@@ -36,9 +36,6 @@ block     = { "{" ~ "\n"* ~ ((stmt ~ "\n") | "\n")* ~ "\n"* ~ "}" }
 
 vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec | literal_dec))* ~ "\n"* ~ "]" }
 
-// TODO: support variable power access in polynomial literals?
-// poly_term = { "<" ~ literal_dec ~ ">" }
-
 // this let_r match is needed to
 // determine if a variable is being
 // declared for the first time
