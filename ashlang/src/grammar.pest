@@ -36,6 +36,9 @@ block     = { "{" ~ "\n"* ~ ((stmt ~ "\n") | "\n")* ~ "\n"* ~ "}" }
 
 vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec | literal_dec))* ~ "\n"* ~ "]" }
 
+// TODO: support variable power access in polynomial literals?
+poly_term = { "<" ~ literal_dec ~ ">" }
+
 // this let_r match is needed to
 // determine if a variable is being
 // declared for the first time
@@ -48,7 +51,7 @@ var_index_assign = { var_indexed ~ "=" ~ expr }
 var         = { let_r? ~ varname }
 var_indexed = { varname ~ ("[" ~ expr ~ "]")+ }
 
-atom = { literal_dec | var_indexed | function_call | varname }
+atom = { literal_dec | var_indexed | function_call | varname | poly_term }
 
 literal_dec = @{ ASCII_DIGIT+ }
 

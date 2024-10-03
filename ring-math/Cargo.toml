@@ -1,0 +1,11 @@
+[package]
+name = "ring-math"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+anyhow = "1.0.89"
+rand = "0.8.5"
+scalarff = { version = "0.4.3", features = ["oxfoi", "alt_bn128", "curve25519", "random"] }

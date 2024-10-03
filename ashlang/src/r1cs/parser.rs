@@ -8,14 +8,15 @@ use anyhow::anyhow;
 use anyhow::Result;
 use pest::Parser;
 use pest_derive::Parser;
+use ring_math::PolynomialRingElement;
 use scalarff::FieldElement;
 
 #[derive(Parser)]
 #[grammar = "r1cs/r1cs_grammar.pest"] // relative to project `src`
 pub struct R1csPestParser;
 
-pub struct R1csParser<T: FieldElement> {
-    pub constraints: Vec<R1csConstraint<T>>,
+pub struct R1csParser<T: PolynomialRingElement> {
+    pub constraints: Vec<R1csConstraint<T::F>>,
     pub arg_name_index: HashMap<String, usize>,
     pub arg_names: Vec<String>,
     pub return_name_index: HashMap<String, usize>,
@@ -23,7 +24,7 @@ pub struct R1csParser<T: FieldElement> {
     pub is_function: bool,
 }
 
-impl<T: FieldElement> R1csParser<T> {
+impl<T: PolynomialRingElement> R1csParser<T> {
     pub fn new(source: &str) -> Result<Self> {
         let mut out = R1csParser {
             constraints: Vec::new(),
@@ -140,7 +141,7 @@ impl<T: FieldElement> R1csParser<T> {
         Ok(out)
     }
 
-    pub fn parse_inner(&mut self, p: pest::iterators::Pair<Rule>) -> Result<Vec<(T, usize)>> {
+    pub fn parse_inner(&mut self, p: pest::iterators::Pair<Rule>) -> Result<Vec<(T::F, usize)>> {
         let mut pair = p.into_inner();
         let mut out_terms = Vec::new();
         while let Some(v) = pair.next() {
@@ -156,15 +157,15 @@ impl<T: FieldElement> R1csParser<T> {
                 }
                 if let Some(v) = self.arg_name_index.get(var_index) {
                     // if signal is a variable
-                    out_terms.push((T::deserialize(coef), *v));
+                    out_terms.push((T::F::deserialize(coef), *v));
                 } else if let Some(v) = self.return_name_index.get(var_index) {
-                    out_terms.push((T::deserialize(coef), *v));
+                    out_terms.push((T::F::deserialize(coef), *v));
                 } else {
                     // if coef is a literal
-                    out_terms.push((T::deserialize(coef), string_to_index(var_index)));
+                    out_terms.push((T::F::deserialize(coef), string_to_index(var_index)));
                 }
             } else {
-                out_terms.push((T::deserialize(coef), string_to_index(var_index)));
+                out_terms.push((T::F::deserialize(coef), string_to_index(var_index)));
             }
         }
         Ok(out_terms)
@@ -174,7 +175,7 @@ impl<T: FieldElement> R1csParser<T> {
         &self,
         index_start: usize,
         mut args: Vec<usize>,
-    ) -> Result<Vec<R1csConstraint<T>>> {
+    ) -> Result<Vec<R1csConstraint<T::F>>> {
         // map local signal indices to caller indices
         let mut signal_map: HashMap<usize, usize> = HashMap::new();
         // push the 1 signal to the front of the arg list

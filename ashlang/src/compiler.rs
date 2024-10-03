@@ -3,7 +3,7 @@ use std::fs;
 
 use anyhow::Result;
 use camino::Utf8PathBuf;
-use scalarff::FieldElement;
+use ring_math::PolynomialRingElement;
 
 use crate::cli::Config;
 use crate::log;
@@ -16,7 +16,7 @@ use crate::tasm::vm::FnCall;
 
 // things that both Compiler and VM
 // need to modify
-pub struct CompilerState<T: FieldElement> {
+pub struct CompilerState<T: PolynomialRingElement> {
     // each function gets it's own memory space
     // track where in the memory we're at
     pub memory_offset: usize,
@@ -33,13 +33,13 @@ pub struct CompilerState<T: FieldElement> {
     pub messages: Vec<String>,
 }
 
-impl<T: FieldElement> Default for CompilerState<T> {
+impl<T: PolynomialRingElement> Default for CompilerState<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: FieldElement> CompilerState<T> {
+impl<T: PolynomialRingElement> CompilerState<T> {
     pub fn new() -> Self {
         CompilerState {
             memory_offset: 0,
@@ -58,7 +58,7 @@ impl<T: FieldElement> CompilerState<T> {
     }
 }
 
-pub struct Compiler<T: FieldElement> {
+pub struct Compiler<T: PolynomialRingElement> {
     pub print_asm: bool,
     state: CompilerState<T>,
     extensions: Vec<String>,
@@ -74,7 +74,7 @@ pub struct Compiler<T: FieldElement> {
  * Compiler is responsible for structuring each function asm into
  * a full output file.
  */
-impl<T: FieldElement> Compiler<T> {
+impl<T: PolynomialRingElement> Compiler<T> {
     pub fn new(config: &Config) -> Result<Self> {
         let mut compiler = Compiler {
             print_asm: false,
@@ -268,14 +268,14 @@ Path 2: {:?}",
                 let mut vm: VM<T> = VM::new(&mut self.state);
                 // build constraints from the AST
                 vm.eval_ast(parser.ast)?;
-                let mut final_constraints: Vec<R1csConstraint<T>> = Vec::new();
+                let mut final_constraints: Vec<R1csConstraint<T::F>> = Vec::new();
                 final_constraints.append(
                     &mut vm
                         .constraints
                         .iter()
                         .filter(|v| v.symbolic)
                         .cloned()
-                        .collect::<Vec<R1csConstraint<T>>>()
+                        .collect::<Vec<R1csConstraint<T::F>>>()
                         .to_vec(),
                 );
                 final_constraints.append(
@@ -284,7 +284,7 @@ Path 2: {:?}",
                         .iter()
                         .filter(|v| !v.symbolic)
                         .cloned()
-                        .collect::<Vec<R1csConstraint<T>>>()
+                        .collect::<Vec<R1csConstraint<T::F>>>()
                         .to_vec(),
                 );
                 if self.print_asm {

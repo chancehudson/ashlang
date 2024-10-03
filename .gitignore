@@ -3,3 +3,5 @@ poseidon-comments.ash
 *.swp
 *.tmp
 .DS_Store
+*/target
+profile.json

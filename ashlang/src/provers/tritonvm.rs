@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use anyhow::Result;
-use scalarff::foi::FoiFieldElement;
 use triton_vm::prelude::BFieldElement;
 use triton_vm::program::NonDeterminism;
 use triton_vm::program::PublicInput;
@@ -13,6 +12,7 @@ use super::ashlang_prover::AshlangProver;
 use crate::cli::Config;
 use crate::compiler::Compiler;
 use crate::log;
+use crate::rings::OxfoiPolynomialRing;
 
 pub struct TritonVMProver {}
 
@@ -28,7 +28,7 @@ impl AshlangProver<(Stark, Claim, Proof)> for TritonVMProver {
         // adjust the extension priorities on the config for TritonVM
         config.extension_priorities.push("tasm".to_string());
         // get a compiler instance in the oxfoi field
-        let mut compiler: Compiler<FoiFieldElement> = Compiler::new(&config)?;
+        let mut compiler: Compiler<OxfoiPolynomialRing> = Compiler::new(&config)?;
 
         // compile as needed
         //

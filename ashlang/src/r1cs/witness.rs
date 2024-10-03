@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
+use ring_math::PolynomialRingElement;
 use scalarff::FieldElement;
 
 use crate::r1cs::parser::R1csParser;
@@ -15,10 +16,10 @@ pub struct Witness<T: FieldElement> {
     pub variables: Vec<T>,
 }
 
-pub fn verify<T: FieldElement>(r1cs: &str, witness: Witness<T>) -> Result<Vec<T>> {
+pub fn verify<T: PolynomialRingElement>(r1cs: &str, witness: Witness<T::F>) -> Result<Vec<T::F>> {
     // confirm that the witness is correct
     let r1cs: R1csParser<T> = R1csParser::new(r1cs)?;
-    let mut vars: HashMap<usize, T> = HashMap::new();
+    let mut vars: HashMap<usize, T::F> = HashMap::new();
     for (i, v) in witness.variables.iter().enumerate() {
         vars.insert(i, v.clone());
     }
@@ -27,15 +28,15 @@ pub fn verify<T: FieldElement>(r1cs: &str, witness: Witness<T>) -> Result<Vec<T>
         if c.symbolic {
             continue;
         }
-        let mut a_lc = T::zero();
+        let mut a_lc = T::F::zero();
         for (coef, index) in &c.a {
             a_lc += coef.clone() * vars.get(index).unwrap().clone();
         }
-        let mut b_lc = T::zero();
+        let mut b_lc = T::F::zero();
         for (coef, index) in &c.b {
             b_lc += coef.clone() * vars.get(index).unwrap().clone();
         }
-        let mut c_lc = T::zero();
+        let mut c_lc = T::F::zero();
         for (coef, index) in &c.c {
             c_lc += coef.clone() * vars.get(index).unwrap().clone();
         }
@@ -52,12 +53,12 @@ pub fn verify<T: FieldElement>(r1cs: &str, witness: Witness<T>) -> Result<Vec<T>
 
 // Attempt to validate the constraints
 // in an r1cs
-pub fn build<T: FieldElement>(r1cs: &str, inputs: Vec<T>) -> Result<Witness<T>> {
+pub fn build<T: PolynomialRingElement>(r1cs: &str, inputs: Vec<T>) -> Result<Witness<T::F>> {
     let r1cs: R1csParser<T> = R1csParser::new(r1cs)?;
-    let mut vars: HashMap<usize, T> = HashMap::new();
+    let mut vars: HashMap<usize, T::F> = HashMap::new();
     let mut outputs = vec![];
     let mut input_counter = 0_usize;
-    vars.insert(0, T::one());
+    vars.insert(0, T::F::one());
     // build the witness
     for c in &r1cs.constraints {
         if !c.symbolic {
@@ -72,7 +73,7 @@ pub fn build<T: FieldElement>(r1cs: &str, inputs: Vec<T>) -> Result<Witness<T>> 
                         "the number of inputs must match the number of input constraints"
                     );
                 }
-                vars.insert(c.out_i.unwrap(), inputs[input_counter].clone());
+                vars.insert(c.out_i.unwrap(), inputs[input_counter].to_scalar()?);
                 input_counter += 1;
             }
             SymbolicOp::PublicInput => {
@@ -84,7 +85,7 @@ pub fn build<T: FieldElement>(r1cs: &str, inputs: Vec<T>) -> Result<Witness<T>> 
                     );
                 }
                 outputs.push(c.out_i.unwrap());
-                vars.insert(c.out_i.unwrap(), inputs[input_counter].clone());
+                vars.insert(c.out_i.unwrap(), inputs[input_counter].to_scalar()?);
                 input_counter += 1;
             }
             SymbolicOp::Output => {
