@@ -10,6 +10,15 @@ pub struct Matrix2D<T: FieldElement> {
 }
 
 impl<T: FieldElement> Matrix2D<T> {
+    /// Create a new 2 dimensional matrix of specified
+    /// rows and columns
+    pub fn new(rows: usize, columns: usize) -> Self {
+        Self {
+            dimensions: (rows, columns),
+            values: vec![T::zero(); rows * columns],
+        }
+    }
+
     /// Return an identity matrix of size `n`
     pub fn identity(n: usize) -> Self {
         let mut values: Vec<T> = Vec::new();
@@ -30,6 +39,21 @@ impl<T: FieldElement> Matrix2D<T> {
             dimensions: (rows, cols),
             values: vec![T::zero(); rows * cols],
         }
+    }
+
+    /// Retrieve a column by index. Panics if the index is greater than
+    /// or equal to the number of columns.
+    pub fn column(&self, index: usize) -> Vector<T> {
+        if index >= self.dimensions.1 {
+            panic!("attempt to retrieve column outside of matrix dimensions. Requested column {index}, number of columns {}", self.dimensions.1);
+        }
+        let mut out = Vec::new();
+        let (m_rows, m_cols) = self.dimensions;
+        for i in 0..m_rows {
+            let column_element = &self.values[i * m_cols + index];
+            out.push(column_element.clone());
+        }
+        Vector::from_vec(out)
     }
 
     /// Take the matrix and split it into 2 matrices vertically.
@@ -138,15 +162,16 @@ impl<T: FieldElement> std::ops::Add for Matrix2D<T> {
 impl<T: FieldElement> std::ops::Mul<Vector<T>> for Matrix2D<T> {
     type Output = Vector<T>;
 
+    /// We'll assume any provided vector is a column vector and
+    /// multiply column-wise by the matrix.
     fn mul(self, other: Vector<T>) -> Vector<T> {
         let mut out = Vec::new();
-        let (m_rows, m_cols) = self.dimensions;
-        for i in 0..m_rows {
-            let row = self.values[i * m_cols..(i + 1) * m_cols].to_vec();
+        let (_, m_cols) = self.dimensions;
+        for i in 0..m_cols {
+            let col = self.column(i);
 
             out.push(
-                // TODO: determine if summing the vector here is correct
-                (other.clone() * Vector::from_vec(row))
+                (other.clone() * col)
                     .iter()
                     .fold(T::zero(), |acc, v| acc + v.clone()),
             );
