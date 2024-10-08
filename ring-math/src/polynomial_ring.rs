@@ -38,6 +38,7 @@ pub trait PolynomialRingElement:
     + Hash
     + Debug
     + From<u64>
+    + From<Polynomial<Self::F>>
     + Display
 {
     type F: FieldElement;
@@ -147,7 +148,7 @@ pub trait PolynomialRingElement:
     fn rot(&self) -> Matrix2D<Self::F> {
         let modulus = Self::modulus();
         let degree = modulus.degree();
-        let mut values = Vec::new();
+        let mut values = vec![Self::F::zero(); degree * degree];
         // TODO: check if this logic is correct
         // technically in each row we're multiplying by X
         // and then reducing by the modulus. In practice this
@@ -161,7 +162,9 @@ pub trait PolynomialRingElement:
             for j in 0..i {
                 coefs[j] = -coefs[j].clone();
             }
-            values.append(&mut coefs);
+            for j in 0..degree {
+                values[j * degree + i] = coefs[j].clone();
+            }
         }
         Matrix2D {
             dimensions: (degree, degree),
@@ -278,7 +281,7 @@ macro_rules! polynomial_ring {
         impl std::str::FromStr for $name {
             type Err = ();
 
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
+            fn from_str(_s: &str) -> Result<Self, Self::Err> {
                 Err(())
             }
         }
@@ -365,7 +368,7 @@ mod test {
         FoiFieldElement,
         {
             let mut p = Polynomial::new(vec![FoiFieldElement::one()]);
-            p.term(&FoiFieldElement::one(), 64);
+            p.term(&FoiFieldElement::one(), 3);
             p
         },
         "Poly64"
@@ -405,11 +408,16 @@ mod test {
         // create a rotated matrix of polynomial coefficients
         let rot_mat = a.rot();
         let b_coef = b.coef();
+        println!("{a}");
+        println!("{rot_mat}");
+        println!("{b}");
+        println!("{b_coef}");
 
         // check the above
         let expected_coef = (a * b).coef();
         let actual_coef = rot_mat * b_coef.clone();
         for i in 0..b_coef.len() {
+            println!("{i}");
             assert_eq!(expected_coef[i], actual_coef[i]);
         }
     }

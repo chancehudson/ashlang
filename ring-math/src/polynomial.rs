@@ -141,23 +141,27 @@ impl<T: FieldElement> Polynomial<T> {
 impl<T: FieldElement> std::fmt::Display for Polynomial<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.is_zero() {
-            write!(f, "0")
+            write!(f, "(0)")
         } else {
             write!(
                 f,
-                "{}",
+                "({})",
                 self.coefficients
                     .iter()
                     .enumerate()
                     .map(|(i, v)| {
+                        if *v == T::zero() {
+                            return "".to_string();
+                        }
                         if i > 0 {
                             format!("{}x^{i}", v.serialize())
                         } else {
                             v.serialize().to_string()
                         }
                     })
+                    .filter(|x| x.len() > 0)
                     .collect::<Vec<_>>()
-                    .join(",")
+                    .join(" + ")
             )
         }
     }
@@ -211,17 +215,15 @@ impl<T: FieldElement> std::ops::Mul for Polynomial<T> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
-        let mut coefficients = Vec::new();
-        coefficients.resize(
-            usize::max(self.coefficients.len(), other.coefficients.len()),
-            T::zero(),
-        );
+        let mut coefficients =
+            vec![T::zero(); 2 * usize::max(self.coefficients.len(), other.coefficients.len())];
         for i in 0..other.coefficients.len() {
             for j in 0..self.coefficients.len() {
                 // combine the exponents
                 let e = j + i;
                 // combine with existing coefficients
-                coefficients[e] += self.coefficients[j].clone() * other.coefficients[i].clone();
+                coefficients[e] += self.coefficients.get(j).unwrap_or(&T::zero()).clone()
+                    * other.coefficients.get(i).unwrap_or(&T::zero()).clone()
             }
         }
         Polynomial { coefficients }
