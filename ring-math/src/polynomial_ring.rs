@@ -368,7 +368,7 @@ mod test {
         FoiFieldElement,
         {
             let mut p = Polynomial::new(vec![FoiFieldElement::one()]);
-            p.term(&FoiFieldElement::one(), 3);
+            p.term(&FoiFieldElement::one(), 64);
             p
         },
         "Poly64"
@@ -408,16 +408,11 @@ mod test {
         // create a rotated matrix of polynomial coefficients
         let rot_mat = a.rot();
         let b_coef = b.coef();
-        println!("{a}");
-        println!("{rot_mat}");
-        println!("{b}");
-        println!("{b_coef}");
 
         // check the above
         let expected_coef = (a * b).coef();
         let actual_coef = rot_mat * b_coef.clone();
         for i in 0..b_coef.len() {
-            println!("{i}");
             assert_eq!(expected_coef[i], actual_coef[i]);
         }
     }
