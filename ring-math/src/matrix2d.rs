@@ -159,19 +159,34 @@ impl<T: FieldElement> std::ops::Add for Matrix2D<T> {
     }
 }
 
-impl<T: FieldElement> std::ops::Mul<Vector<T>> for Matrix2D<T> {
-    type Output = Vector<T>;
+impl<T: FieldElement> std::ops::Mul<T> for Matrix2D<T> {
+    type Output = Matrix2D<T>;
 
     /// We'll assume any provided vector is a column vector and
     /// multiply column-wise by the matrix.
+    fn mul(self, other: T) -> Matrix2D<T> {
+        Matrix2D {
+            dimensions: self.dimensions,
+            values: self
+                .values
+                .iter()
+                .map(|v| v.clone() * other.clone())
+                .collect(),
+        }
+    }
+}
+
+impl<T: FieldElement> std::ops::Mul<Vector<T>> for Matrix2D<T> {
+    type Output = Vector<T>;
+
     fn mul(self, other: Vector<T>) -> Vector<T> {
         let mut out = Vec::new();
-        let (_, m_cols) = self.dimensions;
-        for i in 0..m_cols {
-            let col = self.column(i);
+        let (m_rows, m_cols) = self.dimensions;
+        for i in 0..m_rows {
+            let row = self.values[i * m_cols..(i + 1) * m_cols].to_vec();
 
             out.push(
-                (other.clone() * col)
+                (other.clone() * Vector::from_vec(row))
                     .iter()
                     .fold(T::zero(), |acc, v| acc + v.clone()),
             );

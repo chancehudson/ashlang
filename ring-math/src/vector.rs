@@ -22,17 +22,6 @@ impl<T: FieldElement> Vector<T> {
         Self((0..len).map(|_| T::sample_rand(rng)).collect())
     }
 
-    /// Generate a random vector using a gaussian distribution around the zero point
-    /// define a l_infinite norm and l_1 norm for the resulting polynomial
-    pub fn rand_gaussian<R: rand::Rng>(len: usize, l_inf: usize, l_1: usize, rng: &mut R) -> Self {
-        // l_inf = max coefficient
-        // l_1 = max sum of coefficients
-
-        // rng.gen_range(0..=l_inf)
-        // Self((0..len).map(|_| T::sample_rand(rng)).collect())
-        panic!();
-    }
-
     pub fn from_vec(v: Vec<T>) -> Self {
         Vector(v)
     }
@@ -63,6 +52,15 @@ impl<T: FieldElement> Vector<T> {
 
     pub fn iter_mut(&mut self) -> std::slice::IterMut<T> {
         self.0.iter_mut()
+    }
+}
+
+impl<T: FieldElement> std::fmt::Display for Vector<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        for v in &self.0 {
+            write!(f, "{}, ", v)?;
+        }
+        Ok(())
     }
 }
 

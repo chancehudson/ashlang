@@ -38,6 +38,7 @@ pub trait PolynomialRingElement:
     + Hash
     + Debug
     + From<u64>
+    + From<Polynomial<Self::F>>
     + Display
 {
     type F: FieldElement;
@@ -147,7 +148,7 @@ pub trait PolynomialRingElement:
     fn rot(&self) -> Matrix2D<Self::F> {
         let modulus = Self::modulus();
         let degree = modulus.degree();
-        let mut values = Vec::new();
+        let mut values = vec![Self::F::zero(); degree * degree];
         // TODO: check if this logic is correct
         // technically in each row we're multiplying by X
         // and then reducing by the modulus. In practice this
@@ -161,7 +162,9 @@ pub trait PolynomialRingElement:
             for j in 0..i {
                 coefs[j] = -coefs[j].clone();
             }
-            values.append(&mut coefs);
+            for j in 0..degree {
+                values[j * degree + i] = coefs[j].clone();
+            }
         }
         Matrix2D {
             dimensions: (degree, degree),
@@ -278,7 +281,7 @@ macro_rules! polynomial_ring {
         impl std::str::FromStr for $name {
             type Err = ();
 
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
+            fn from_str(_s: &str) -> Result<Self, Self::Err> {
                 Err(())
             }
         }

@@ -150,14 +150,18 @@ impl<T: FieldElement> std::fmt::Display for Polynomial<T> {
                     .iter()
                     .enumerate()
                     .map(|(i, v)| {
+                        if *v == T::zero() && i > 0 {
+                            return "".to_string();
+                        }
                         if i > 0 {
                             format!("{}x^{i}", v.serialize())
                         } else {
                             v.serialize().to_string()
                         }
                     })
+                    .filter(|x| x.len() > 0)
                     .collect::<Vec<_>>()
-                    .join(",")
+                    .join(" + ")
             )
         }
     }
@@ -211,11 +215,7 @@ impl<T: FieldElement> std::ops::Mul for Polynomial<T> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
-        let mut coefficients = Vec::new();
-        coefficients.resize(
-            usize::max(self.coefficients.len(), other.coefficients.len()),
-            T::zero(),
-        );
+        let mut coefficients = vec![T::zero(); self.coefficients.len() + other.coefficients.len()];
         for i in 0..other.coefficients.len() {
             for j in 0..self.coefficients.len() {
                 // combine the exponents
@@ -224,7 +224,19 @@ impl<T: FieldElement> std::ops::Mul for Polynomial<T> {
                 coefficients[e] += self.coefficients[j].clone() * other.coefficients[i].clone();
             }
         }
-        Polynomial { coefficients }
+        // TODO: remove this trimming, it's only necessary
+        // because of hacky compatiblity between ashlang serialization
+        // and PolynomialRingElement serialization
+        let mut max = coefficients.len();
+        for i in (0..coefficients.len()).rev() {
+            if coefficients[i] != T::zero() {
+                break;
+            }
+            max = i;
+        }
+        Polynomial {
+            coefficients: coefficients[0..max].to_vec(),
+        }
     }
 }
 
