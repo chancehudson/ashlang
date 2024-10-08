@@ -215,18 +215,28 @@ impl<T: FieldElement> std::ops::Mul for Polynomial<T> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
-        let mut coefficients =
-            vec![T::zero(); 2 * usize::max(self.coefficients.len(), other.coefficients.len())];
+        let mut coefficients = vec![T::zero(); self.coefficients.len() + other.coefficients.len()];
         for i in 0..other.coefficients.len() {
             for j in 0..self.coefficients.len() {
                 // combine the exponents
                 let e = j + i;
                 // combine with existing coefficients
-                coefficients[e] += self.coefficients.get(j).unwrap_or(&T::zero()).clone()
-                    * other.coefficients.get(i).unwrap_or(&T::zero()).clone()
+                coefficients[e] += self.coefficients[j].clone() * other.coefficients[i].clone();
             }
         }
-        Polynomial { coefficients }
+        // TODO: remove this trimming, it's only necessary
+        // because of hacky compatiblity between ashlang serialization
+        // and PolynomialRingElement serialization
+        let mut max = coefficients.len();
+        for i in (0..coefficients.len()).rev() {
+            if coefficients[i] != T::zero() {
+                break;
+            }
+            max = i;
+        }
+        Polynomial {
+            coefficients: coefficients[0..max].to_vec(),
+        }
     }
 }
 
