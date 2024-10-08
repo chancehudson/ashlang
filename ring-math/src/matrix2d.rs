@@ -186,7 +186,6 @@ impl<T: FieldElement> std::ops::Mul<Vector<T>> for Matrix2D<T> {
             let row = self.values[i * m_cols..(i + 1) * m_cols].to_vec();
 
             out.push(
-                // TODO: determine if summing the vector here is correct
                 (other.clone() * Vector::from_vec(row))
                     .iter()
                     .fold(T::zero(), |acc, v| acc + v.clone()),
