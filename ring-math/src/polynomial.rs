@@ -150,7 +150,7 @@ impl<T: FieldElement> std::fmt::Display for Polynomial<T> {
                     .iter()
                     .enumerate()
                     .map(|(i, v)| {
-                        if *v == T::zero() {
+                        if *v == T::zero() && i > 0 {
                             return "".to_string();
                         }
                         if i > 0 {
