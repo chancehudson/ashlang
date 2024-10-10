@@ -56,6 +56,16 @@ impl<T: FieldElement> Matrix2D<T> {
         Vector::from_vec(out)
     }
 
+    /// Retrieve a row by index. Panics if the index is greater than
+    /// or equal to the number of rows.
+    pub fn row(&self, index: usize) -> Vector<T> {
+        let (rows, cols) = self.dimensions;
+        if index >= rows {
+            panic!("attempt to retrieve a row outside of matrix dimensions. Requested row {index}, number of rows {rows}");
+        }
+        Vector::from_vec(self.values[index * cols..(index + 1) * cols].to_vec())
+    }
+
     /// Take the matrix and split it into 2 matrices vertically.
     /// e.g. take the first m1_height rows and return them as a matrix,
     /// and return the remaining rows as the m2 matrix.
