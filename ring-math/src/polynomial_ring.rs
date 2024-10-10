@@ -21,7 +21,7 @@ use super::Vector;
 /// defined as `T[X]/<Self::modulus()>`
 /// where T is a FieldElement trait
 /// and modulus is a function implemented by the
-/// struct
+/// struct implementing PolynomialRingElement
 pub trait PolynomialRingElement:
     FieldElement
     + Add<Output = Self>
@@ -173,6 +173,21 @@ pub trait PolynomialRingElement:
     }
 }
 
+/// Use this to build a concrete instance of a polynomial ring.
+///
+/// e.g.
+/// ```
+/// polynomial_ring!(
+/// Poly64,
+/// FoiFieldElement,
+/// {
+///     let mut p = Polynomial::new(vec![FoiFieldElement::one()]);
+///     p.term(&FoiFieldElement::one(), 64);
+///     p
+/// },
+/// "Poly64"
+/// );
+/// ```
 #[macro_export]
 macro_rules! polynomial_ring {
     ( $name: ident, $field_element: ident, $modulus: expr, $name_str: expr ) => {
