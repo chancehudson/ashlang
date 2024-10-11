@@ -14,6 +14,7 @@ use crate::compiler::Compiler;
 use crate::log;
 use crate::rings::OxfoiPolynomialRing;
 
+/// Bindings for executing ashlang programs in the [tritonVM/triton-vm](https://github.com/TritonVM/triton-vm/) prover.
 pub struct TritonVMProver {}
 
 impl AshlangProver<(Stark, Claim, Proof)> for TritonVMProver {

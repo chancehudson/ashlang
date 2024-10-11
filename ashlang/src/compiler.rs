@@ -58,6 +58,9 @@ impl<T: PolynomialRingElement> CompilerState<T> {
     }
 }
 
+/// The Compiler struct handles reading filepaths,
+/// parsing files, recursively loading dependencies,
+/// and then combining functions to form the final asm/ar1cs.
 pub struct Compiler<T: PolynomialRingElement> {
     pub print_asm: bool,
     state: CompilerState<T>,
@@ -65,11 +68,6 @@ pub struct Compiler<T: PolynomialRingElement> {
     target: String,
 }
 
-/// The Compiler struct handles reading filepaths,
-/// parsing files, recursively loading dependencies,
-/// and then combining functions to form the final asm/r1cs.
-///
-/// Compiler uses VM instances to compile individual functions.
 impl<T: PolynomialRingElement> Compiler<T> {
     pub fn new(config: &Config) -> Result<Self> {
         let mut compiler = Compiler {

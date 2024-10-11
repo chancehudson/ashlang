@@ -6,6 +6,7 @@ use clap::Command;
 
 use crate::log;
 
+/// Compiler configuration. Contains all fields necessary to compile an ashlang program.
 #[derive(Clone, Debug)]
 pub struct Config {
     pub include_paths: Vec<Utf8PathBuf>,

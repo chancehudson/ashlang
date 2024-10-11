@@ -39,10 +39,14 @@
 mod cli;
 pub mod compiler;
 pub mod log;
+/// Ashlang source code parser.
 pub mod parser;
 mod provers;
+/// Core logic for the r1cs target.
 pub mod r1cs;
+/// Concrete ring instances used by ashlang compile targets.
 pub mod rings;
+/// Core logic for the tasm target.
 pub mod tasm;
 
 pub use cli::Config;

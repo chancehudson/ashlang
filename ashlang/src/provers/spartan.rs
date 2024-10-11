@@ -58,6 +58,7 @@ fn to_32(v: Vec<u8>) -> [u8; 32] {
     out
 }
 
+/// Bindings for executing ashlang programs in the [microsoft/spartan](https://github.com/microsoft/Spartan) prover.
 pub struct SpartanProver {}
 
 impl AshlangProver<SpartanProof> for SpartanProver {

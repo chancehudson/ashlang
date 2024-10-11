@@ -1,12 +1,13 @@
 [package]
 name = "ashlang"
-version = "0.0.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["Chance Hudson <PSE>"]
 description = "A language for zero knowledge proofs"
 homepage = "https://github.com/chancehudson/ashlang"
 repository = "https://github.com/chancehudson/ashlang"
 license = "MIT OR Apache-2.0"
+readme = "../README.md"
 
 [lib]
 
