@@ -4,12 +4,14 @@ use std::fmt::Display;
 use anyhow::Result;
 use scalarff::FieldElement;
 
-// a b and c represent values in
-// a constraint a * b - c = 0
-// each factor specifies an array
-// of coefficient, index pairs
-// indices may be specified multiple times
-// and will be summed
+/// A single r1cs constraints.
+///
+/// a b and c represent values in
+/// a constraint a * b - c = 0
+/// each factor specifies an array
+/// of coefficient, index pairs
+/// indices may be specified multiple times
+/// and will be summed
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct R1csConstraint<T: FieldElement> {
     // (coefficient, var_index)
@@ -22,6 +24,12 @@ pub struct R1csConstraint<T: FieldElement> {
     pub symbolic_op: Option<SymbolicOp>,
 }
 
+/// A mathematical operation that will be used during witness
+/// calculation, but not at proving time.
+///
+/// These operations can be arbitrarily complex and
+/// are not bound by ability to be expressed as r1cs
+/// constraints.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum SymbolicOp {
     Inv,

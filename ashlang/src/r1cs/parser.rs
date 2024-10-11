@@ -15,6 +15,8 @@ use scalarff::FieldElement;
 #[grammar = "r1cs/r1cs_grammar.pest"] // relative to project `src`
 pub struct R1csPestParser;
 
+/// A parser for [ar1cs](https://github.com/chancehudson/ashlang/tree/main/ashlang/src/r1cs#r1cs-compile-target)
+/// source files.
 pub struct R1csParser<T: PolynomialRingElement> {
     pub constraints: Vec<R1csConstraint<T::F>>,
     pub arg_name_index: HashMap<String, usize>,

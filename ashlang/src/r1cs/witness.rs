@@ -9,13 +9,16 @@ use crate::r1cs::parser::R1csParser;
 use super::constraint::SymbolicOp;
 
 /// A structure representing a witness computation
-/// outputs represents a list of indices of the variables that should be publicly revealed
-/// variables represents the values of the variables in the computation
+///
+/// `outputs`: a list of indices of variables that should be publicly revealed
+/// `variables`: values of the variables in the computation
 pub struct Witness<T: FieldElement> {
     pub outputs: Vec<usize>,
     pub variables: Vec<T>,
 }
 
+/// Verify that a witness satisfies the constraints of an ar1cs source string.
+/// This function handles parsing the ar1cs source string.
 pub fn verify<T: PolynomialRingElement>(r1cs: &str, witness: Witness<T::F>) -> Result<Vec<T::F>> {
     // confirm that the witness is correct
     let r1cs: R1csParser<T> = R1csParser::new(r1cs)?;
@@ -51,8 +54,7 @@ pub fn verify<T: PolynomialRingElement>(r1cs: &str, witness: Witness<T::F>) -> R
         .collect::<Vec<_>>())
 }
 
-// Attempt to validate the constraints
-// in an r1cs
+/// Take an ar1cs source file and a set of inputs and build a witness.
 pub fn build<T: PolynomialRingElement>(r1cs: &str, inputs: Vec<T>) -> Result<Witness<T::F>> {
     let r1cs: R1csParser<T> = R1csParser::new(r1cs)?;
     let mut vars: HashMap<usize, T::F> = HashMap::new();

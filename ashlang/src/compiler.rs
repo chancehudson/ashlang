@@ -65,15 +65,11 @@ pub struct Compiler<T: PolynomialRingElement> {
     target: String,
 }
 
-/**
- * The Compiler struct handles reading filepaths,
- * parsing files, recursively loading dependencies,
- * and then combining functions to form the final asm.
- *
- * Compiler uses many VM instances to compile individual functions.
- * Compiler is responsible for structuring each function asm into
- * a full output file.
- */
+/// The Compiler struct handles reading filepaths,
+/// parsing files, recursively loading dependencies,
+/// and then combining functions to form the final asm/r1cs.
+///
+/// Compiler uses VM instances to compile individual functions.
 impl<T: PolynomialRingElement> Compiler<T> {
     pub fn new(config: &Config) -> Result<Self> {
         let mut compiler = Compiler {

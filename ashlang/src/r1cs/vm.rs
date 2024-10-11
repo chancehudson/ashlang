@@ -29,6 +29,9 @@ where
     pub value: Matrix<T>,
 }
 
+/// Instance of an r1cs VM. This struct is responsible for
+/// taking an AST and a compiler instance and outputing
+/// a set of r1cs constraints.
 pub struct VM<'a, T: PolynomialRingElement>
 where
     T::F: FieldElement,

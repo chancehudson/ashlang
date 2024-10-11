@@ -236,7 +236,7 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "ashlang"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "camino",
@@ -247,7 +247,7 @@ dependencies = [
  "merlin",
  "pest",
  "pest_derive",
- "ring-math",
+ "ring-math 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "scalarff",
  "spartan",
  "triton-vm",
@@ -1421,6 +1421,17 @@ checksum = "7a66a03ae7c801facd77a29370b4faec201768915ac14a721ba36f20bc9c209b"
 [[package]]
 name = "ring-math"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rand 0.8.5",
+ "scalarff",
+]
+
+[[package]]
+name = "ring-math"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a714f2e4c98b496b65ff9de23fdc2e132195a7eb66b8c7633e89248bd61de1b5"
 dependencies = [
  "anyhow",
  "rand 0.8.5",

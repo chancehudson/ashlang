@@ -1,3 +1,5 @@
+//! This module contains bindings to various prover implementations.
+//!
 mod ashlang_prover;
 #[cfg(feature = "spartan-prover")]
 mod spartan;

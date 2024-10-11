@@ -14,6 +14,8 @@ use self::AstNode::*;
 use crate::log;
 use log::error;
 
+/// A top level AST node. Each of these generally corresponds to
+/// a single line of source code.
 #[derive(Debug, Clone)]
 pub enum AstNode {
     // a variable argument to a function call
@@ -33,6 +35,8 @@ pub enum AstNode {
     AssignVec(String, Vec<Expr>, Expr),
 }
 
+/// An expression in the AST. Many expressions may appear on a single
+/// line.
 #[derive(Debug, Clone)]
 pub enum Expr {
     VecVec(Vec<Expr>),
@@ -52,6 +56,7 @@ pub enum Expr {
     },
 }
 
+/// Operations that output a boolean result.
 #[derive(Debug, Clone)]
 pub enum BoolOp {
     Equal,
@@ -60,6 +65,7 @@ pub enum BoolOp {
     LessThan,
 }
 
+/// Operations that output a numerical result.
 #[derive(Debug, Clone)]
 pub enum NumOp {
     Add,
@@ -72,12 +78,16 @@ pub enum NumOp {
 #[grammar = "grammar.pest"] // relative to project `src`
 pub struct AshPestParser;
 
+/// Parses an ashlang source file into an AST and
+/// map of function names called by the source file.
 pub struct AshParser {
     pub ast: Vec<AstNode>,
     pub fn_names: HashMap<String, u64>,
 }
 
 impl AshParser {
+    /// Take a source file and a function name and output
+    /// an instance of the parser.
     pub fn parse(source: &str, name: &str) -> Result<Self> {
         // append a new line to all source strings because
         // they aren't necessarily unix compatible files
