@@ -18,8 +18,25 @@ impl<T: FieldElement> Vector<T> {
         Self(vec![T::zero(); len])
     }
 
-    pub fn rand_uniform<R: rand::Rng>(len: usize, rng: &mut R) -> Self {
-        Self((0..len).map(|_| T::sample_rand(rng)).collect())
+    /// Compute the inner product (dot product) of two vectors.
+    /// Vectors are multiplied element-wise and then summed.
+    pub fn dot_product(&self, other: Vector<T>) -> T {
+        let mut out = T::zero();
+        for (a, b) in std::iter::zip(self.iter(), other.iter()) {
+            out += a.clone() * b.clone();
+        }
+        out
+    }
+
+    /// Sum the elements of the array and return the result.
+    pub fn sum(&self) -> T {
+        self.0.iter().fold(T::zero(), |acc, x| acc + x.clone())
+    }
+
+    /// Sample a uniform random vector of the specified dimension
+    /// from the underlying field.
+    pub fn sample_uniform<R: rand::Rng>(len: usize, rng: &mut R) -> Self {
+        Self((0..len).map(|_| T::sample_uniform(rng)).collect())
     }
 
     pub fn from_vec(v: Vec<T>) -> Self {

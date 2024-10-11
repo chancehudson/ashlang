@@ -125,10 +125,12 @@ impl<T: FieldElement> Matrix2D<T> {
         }
     }
 
-    pub fn rand_uniform<R: rand::Rng>(rows: usize, columns: usize, rng: &mut R) -> Self {
+    /// Sample a uniform random matrix of the specified dimensions
+    /// from the underlying field.
+    pub fn sample_uniform<R: rand::Rng>(rows: usize, columns: usize, rng: &mut R) -> Self {
         Self {
             dimensions: (rows, columns),
-            values: Vector::rand_uniform(rows * columns, rng).to_vec(),
+            values: Vector::sample_uniform(rows * columns, rng).to_vec(),
         }
     }
 }

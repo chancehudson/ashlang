@@ -55,6 +55,16 @@ impl<T: FieldElement> Polynomial<T> {
         }
     }
 
+    /// Return the constant term of the polynomial.
+    /// This is the coefficient of the x^0 term.
+    pub fn constant_term(&self) -> T {
+        if self.coefficients.is_empty() {
+            T::zero()
+        } else {
+            self.coefficients[0].clone()
+        }
+    }
+
     /// Return a coefficient vector with trailing zero
     /// coefficients removed.
     ///
@@ -285,18 +295,18 @@ mod test {
             let mut r = rand::thread_rng();
             let p1 = Polynomial {
                 coefficients: vec![
-                    FoiFieldElement::sample_rand(&mut r),
-                    FoiFieldElement::sample_rand(&mut r),
-                    FoiFieldElement::sample_rand(&mut r),
-                    FoiFieldElement::sample_rand(&mut r),
-                    FoiFieldElement::sample_rand(&mut r),
+                    FoiFieldElement::sample_uniform(&mut r),
+                    FoiFieldElement::sample_uniform(&mut r),
+                    FoiFieldElement::sample_uniform(&mut r),
+                    FoiFieldElement::sample_uniform(&mut r),
+                    FoiFieldElement::sample_uniform(&mut r),
                 ],
             };
             let p2 = Polynomial {
                 coefficients: vec![
-                    FoiFieldElement::sample_rand(&mut r),
-                    FoiFieldElement::sample_rand(&mut r),
-                    FoiFieldElement::sample_rand(&mut r),
+                    FoiFieldElement::sample_uniform(&mut r),
+                    FoiFieldElement::sample_uniform(&mut r),
+                    FoiFieldElement::sample_uniform(&mut r),
                 ],
             };
             let (q, r) = p1.div(&p2);
