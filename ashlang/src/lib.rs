@@ -1,4 +1,4 @@
-//! [![CircleCI](https://dl.circleci.com/status-badge/img/gh/chancehudson/ashlang/tree/main.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/gh/chancehudson/ashlang/tree/main)
+//! [![Build](https://img.shields.io/circleci/build/github/chancehudson/ashlang/main)](https://dl.circleci.com/status-badge/redirect/gh/chancehudson/ashlang/tree/main) [![Docs](https://img.shields.io/docsrs/ashlang)](https://docs.rs/ashlang) [![Version](https://img.shields.io/crates/v/ashlang)](https://crates.io/crates/ashlang)
 //!
 //! A language designed to compile and execute on mathematical virtual machines.
 //!
