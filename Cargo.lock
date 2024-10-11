@@ -248,7 +248,7 @@ dependencies = [
  "pest",
  "pest_derive",
  "ring-math",
- "scalarff 0.4.3",
+ "scalarff",
  "spartan",
  "triton-vm",
 ]
@@ -1424,7 +1424,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "rand 0.8.5",
- "scalarff 0.5.1",
+ "scalarff",
 ]
 
 [[package]]
@@ -1455,17 +1455,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "scalarff"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfef4665624906679b3a8791efb36e3c956050297b7996762b53cf0faf1f5acc"
-dependencies = [
- "colored",
- "num-bigint",
- "num-integer",
 ]
 
 [[package]]
