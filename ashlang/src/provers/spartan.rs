@@ -62,25 +62,18 @@ fn to_32(v: Vec<u8>) -> [u8; 32] {
 pub struct SpartanProver {}
 
 impl AshlangProver<SpartanProof> for SpartanProver {
-    fn prove(config: &Config) -> Result<SpartanProof> {
-        let mut config = config.clone();
-        config.extension_priorities.push("ar1cs".to_string());
-
-        if config.field != "curve25519" {
-            return log::error!(
-                "unsupported curve for microsoft/spartan proof",
-                "field must be \"curve25519\""
-            );
+    fn prove_ir(
+        r1cs: &str,
+        inputs: Vec<String>,
+        secret_inputs: Vec<String>,
+    ) -> Result<SpartanProof> {
+        if !inputs.is_empty() {
+            anyhow::bail!("ashlang spartan connector does not support public inputs")
         }
-
-        let mut compiler: Compiler<Curve25519PolynomialRing> = Compiler::new(&config)?;
-        let r1cs = compiler.compile(&config.entry_fn)?;
-
         // produce public parameters
         let spartan_config = transform_r1cs(
             &r1cs,
-            config
-                .secret_inputs
+            secret_inputs
                 .iter()
                 .map(|v| Curve25519FieldElement::deserialize(v))
                 .collect::<Vec<_>>(),
@@ -115,6 +108,22 @@ impl AshlangProver<SpartanProof> for SpartanProver {
             gens,
             inputs: assignment_inputs,
         })
+    }
+
+    fn prove(config: &Config) -> Result<SpartanProof> {
+        let mut config = config.clone();
+        config.extension_priorities.push("ar1cs".to_string());
+
+        if config.field != "curve25519" {
+            return log::error!(
+                "unsupported curve for microsoft/spartan proof",
+                "field must be \"curve25519\""
+            );
+        }
+
+        let mut compiler: Compiler<Curve25519PolynomialRing> = Compiler::new(&config)?;
+        let r1cs = compiler.compile(&config.entry_fn)?;
+        Self::prove_ir(&r1cs, vec![], config.secret_inputs)
     }
 
     fn verify(serialized_proof: SpartanProof) -> Result<bool> {
