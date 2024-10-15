@@ -1,6 +1,6 @@
 [package]
 name = "ashlang"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 authors = ["Chance Hudson <PSE>"]
 description = "A language for zero knowledge proofs"
