@@ -18,6 +18,41 @@ use crate::rings::OxfoiPolynomialRing;
 pub struct TritonVMProver {}
 
 impl AshlangProver<(Stark, Claim, Proof)> for TritonVMProver {
+    fn prove_ir(
+        asm: &str,
+        public_inputs: Vec<String>,
+        secret_inputs: Vec<String>,
+    ) -> Result<(Stark, Claim, Proof)> {
+        // then attempt to prove the assembly in TritonVM
+        let instructions = triton_vm::parser::parse(asm);
+        if let Err(e) = instructions {
+            return log::error!(&format!("Failed to parse compiled tasm: {:?}", e));
+        }
+        let instructions = instructions.unwrap();
+        let l_instructions = triton_vm::parser::to_labelled_instructions(instructions.as_slice());
+        let program = triton_vm::program::Program::new(l_instructions.as_slice());
+        let public_inputs = PublicInput::from(
+            public_inputs
+                .clone()
+                .into_iter()
+                .map(|v| BFieldElement::from_str(&v).unwrap())
+                .collect::<Vec<_>>(),
+        );
+        let secret_inputs = NonDeterminism::from(
+            secret_inputs
+                .clone()
+                .into_iter()
+                .map(|v| BFieldElement::from_str(&v).unwrap())
+                .collect::<Vec<_>>(),
+        );
+
+        Ok(triton_vm::prove_program(
+            &program,
+            public_inputs,
+            secret_inputs,
+        )?)
+    }
+
     fn prove(config: &Config) -> Result<(Stark, Claim, Proof)> {
         let mut config = config.clone();
         if config.field != "foi" && config.field != "goldilocks" {
@@ -34,36 +69,8 @@ impl AshlangProver<(Stark, Claim, Proof)> for TritonVMProver {
         // compile as needed
         //
         let asm = compiler.compile(&config.entry_fn)?;
-        // then attempt to prove the assembly in TritonVM
-        let instructions = triton_vm::parser::parse(&asm);
-        if let Err(e) = instructions {
-            return log::error!(&format!("Failed to parse compiled tasm: {:?}", e));
-        }
-        let instructions = instructions.unwrap();
-        let l_instructions = triton_vm::parser::to_labelled_instructions(instructions.as_slice());
-        let program = triton_vm::program::Program::new(l_instructions.as_slice());
-        let public_inputs = PublicInput::from(
-            config
-                .inputs
-                .clone()
-                .into_iter()
-                .map(|v| BFieldElement::from_str(&v).unwrap())
-                .collect::<Vec<_>>(),
-        );
-        let secret_inputs = NonDeterminism::from(
-            config
-                .secret_inputs
-                .clone()
-                .into_iter()
-                .map(|v| BFieldElement::from_str(&v).unwrap())
-                .collect::<Vec<_>>(),
-        );
-
-        Ok(triton_vm::prove_program(
-            &program,
-            public_inputs,
-            secret_inputs,
-        )?)
+        // generate the proof
+        Self::prove_ir(&asm, config.inputs, config.secret_inputs)
     }
 
     fn verify(_proof: (Stark, Claim, Proof)) -> Result<bool> {
