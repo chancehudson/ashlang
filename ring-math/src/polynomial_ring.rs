@@ -250,7 +250,7 @@ macro_rules! polynomial_ring {
             }
 
             fn name_str() -> &'static str {
-                "polynomial_ring"
+                $name_str
             }
 
             /// Return a constant polynomial with the provided
