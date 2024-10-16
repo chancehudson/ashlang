@@ -18,6 +18,7 @@ mod provers;
 mod r1cs;
 mod rings;
 mod tasm;
+mod time;
 
 fn main() -> Result<()> {
     let mut config = cli::parse()?;

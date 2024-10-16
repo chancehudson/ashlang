@@ -83,6 +83,7 @@ pub struct AshPestParser;
 pub struct AshParser {
     pub ast: Vec<AstNode>,
     pub fn_names: HashMap<String, u64>,
+    pub entry_fn_name: String,
 }
 
 impl AshParser {
@@ -95,6 +96,7 @@ impl AshParser {
         let mut out = Self {
             ast: Vec::new(),
             fn_names: HashMap::new(),
+            entry_fn_name: name.to_string(),
         };
 
         match AshPestParser::parse(Rule::program, &source) {

@@ -48,6 +48,7 @@ pub mod r1cs;
 pub mod rings;
 /// Core logic for the tasm target.
 pub mod tasm;
+mod time;
 
 pub use cli::Config;
 

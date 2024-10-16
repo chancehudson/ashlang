@@ -281,17 +281,24 @@ Path 2: {:?}",
                         .collect::<Vec<R1csConstraint<T::F>>>()
                         .to_vec(),
                 );
+                let ar1cs_src = [
+                    vec![
+                        format!("# {}", parser.entry_fn_name),
+                        format!("# Compiled at {}", crate::time::now()),
+                        format!("#"),
+                    ],
+                    final_constraints
+                        .iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<String>>(),
+                ]
+                .concat()
+                .join("\n");
                 if self.print_asm {
                     // prints the raw constraints
-                    for c in &final_constraints {
-                        println!("{}", c);
-                    }
+                    println!("{ar1cs_src}");
                 }
-                Ok(final_constraints
-                    .iter()
-                    .map(|v| v.to_string())
-                    .collect::<Vec<String>>()
-                    .join("\n"))
+                Ok(ar1cs_src)
             }
             "tasm" => {
                 use crate::tasm::vm::VM;
