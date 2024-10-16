@@ -16,7 +16,7 @@ polynomial_ring!(
         p.term(&Bn128FieldElement::one(), 64);
         p
     },
-    "alt_bn128 polynomial ring"
+    "alt_bn128 x^64+1 polynomial ring"
 );
 
 polynomial_ring!(
@@ -27,7 +27,7 @@ polynomial_ring!(
         p.term(&FoiFieldElement::one(), 64);
         p
     },
-    "oxfoi polynomial ring"
+    "oxfoi x^64+1 polynomial ring"
 );
 
 polynomial_ring!(
@@ -38,7 +38,7 @@ polynomial_ring!(
         p.term(&Curve25519FieldElement::one(), 64);
         p
     },
-    "curve25519 polynomial ring"
+    "curve25519 x^64+1 polynomial ring"
 );
 
 // creates a scalar ring struct DilithiumRingElement
@@ -55,5 +55,5 @@ polynomial_ring!(
         p.term(&DilithiumRingElement::one(), 64);
         p
     },
-    "dilithium_x64+1"
+    "dilithium x^64+1 polynomial ring"
 );
