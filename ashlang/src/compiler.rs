@@ -285,6 +285,7 @@ Path 2: {:?}",
                     vec![
                         format!("# {}", parser.entry_fn_name),
                         format!("# Compiled at {}", crate::time::now()),
+                        format!("# Compiled for {}", T::name_str()),
                         format!("#"),
                     ],
                     final_constraints
