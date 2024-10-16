@@ -1,12 +1,14 @@
+use ring_math::polynomial_ring;
 use ring_math::Polynomial;
 use ring_math::PolynomialRingElement;
 
 use scalarff::alt_bn128::Bn128FieldElement;
 use scalarff::foi::FoiFieldElement;
+use scalarff::scalar_ring;
 use scalarff::Curve25519FieldElement;
 use scalarff::FieldElement;
 
-ring_math::polynomial_ring!(
+polynomial_ring!(
     Bn128PolynomialRing,
     Bn128FieldElement,
     {
@@ -17,7 +19,7 @@ ring_math::polynomial_ring!(
     "alt_bn128 polynomial ring"
 );
 
-ring_math::polynomial_ring!(
+polynomial_ring!(
     OxfoiPolynomialRing,
     FoiFieldElement,
     {
@@ -28,7 +30,7 @@ ring_math::polynomial_ring!(
     "oxfoi polynomial ring"
 );
 
-ring_math::polynomial_ring!(
+polynomial_ring!(
     Curve25519PolynomialRing,
     Curve25519FieldElement,
     {
@@ -37,4 +39,21 @@ ring_math::polynomial_ring!(
         p
     },
     "curve25519 polynomial ring"
+);
+
+// creates a scalar ring struct DilithiumRingElement
+scalar_ring!(DilithiumRingElement, 8380417, "dilithium_23_bit");
+
+// creates a polynomial ring struct
+polynomial_ring!(
+    DilithiumPolynomialRingElement,
+    DilithiumRingElement,
+    {
+        // creating the ring modulus polynomial
+        // here we use x^64 + 1
+        let mut p = Polynomial::identity();
+        p.term(&DilithiumRingElement::one(), 64);
+        p
+    },
+    "dilithium_x64+1"
 );

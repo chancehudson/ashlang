@@ -8,7 +8,7 @@ workflows:
       - compile-r1cs:
           matrix:
             parameters:
-              field: ["foi", "curve25519", "alt_bn128"]
+              field: ["oxfoi", "curve25519", "alt_bn128"]
               rust-version: ["stable", "beta", "nightly"]
       - compile-tasm:
           matrix:
@@ -72,7 +72,7 @@ jobs:
           command: cargo build
       - run:
           name: Run r1cs readme test
-          command: cargo run --release -- r1cs_readme -t r1cs -i ./ashlang/test-vectors -i ./ashlang/stdlib -v -f foi
+          command: cargo run --release -- r1cs_readme -t r1cs -i ./ashlang/test-vectors -i ./ashlang/stdlib -v -f oxfoi
   compile-r1cs:
     machine:
       image: ubuntu-2204:current

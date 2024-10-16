@@ -7,6 +7,7 @@ use scalarff::FieldElement;
 
 use crate::provers::AshlangProver;
 use crate::rings::Bn128PolynomialRing;
+use crate::rings::DilithiumPolynomialRingElement;
 use crate::rings::OxfoiPolynomialRing;
 
 mod cli;
@@ -35,6 +36,11 @@ fn main() -> Result<()> {
         },
         "r1cs" => match config.field.as_str() {
             "foi" => {
+                println!("⚠️ Field specifier \"foi\" is deprecated and will be removed. Instead use \"oxfoi\"");
+                compile_r1cs::<OxfoiPolynomialRing>(&mut config)?;
+                Ok(())
+            }
+            "oxfoi" => {
                 compile_r1cs::<OxfoiPolynomialRing>(&mut config)?;
                 Ok(())
             }
@@ -49,6 +55,10 @@ fn main() -> Result<()> {
             }
             "alt_bn128" => {
                 compile_r1cs::<Bn128PolynomialRing>(&mut config)?;
+                Ok(())
+            }
+            "dilithium" => {
+                compile_r1cs::<DilithiumPolynomialRingElement>(&mut config)?;
                 Ok(())
             }
             _ => {
