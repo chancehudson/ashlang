@@ -3,7 +3,7 @@ use ring_math::Polynomial;
 use ring_math::PolynomialRingElement;
 
 use scalarff::alt_bn128::Bn128FieldElement;
-use scalarff::foi::FoiFieldElement;
+use scalarff::oxfoi::OxfoiFieldElement;
 use scalarff::scalar_ring;
 use scalarff::Curve25519FieldElement;
 use scalarff::FieldElement;
@@ -21,10 +21,10 @@ polynomial_ring!(
 
 polynomial_ring!(
     OxfoiPolynomialRing,
-    FoiFieldElement,
+    OxfoiFieldElement,
     {
-        let mut p = Polynomial::new(vec![FoiFieldElement::one()]);
-        p.term(&FoiFieldElement::one(), 64);
+        let mut p = Polynomial::new(vec![OxfoiFieldElement::one()]);
+        p.term(&OxfoiFieldElement::one(), 64);
         p
     },
     "oxfoi x^64+1 polynomial ring"
