@@ -4,6 +4,10 @@ workflows:
     jobs:
       - lint
       - clippy
+      - ring-math-test:
+          matrix:
+            parameters:
+              rust-version: ["stable", "beta", "nightly"]
       - compile-r1cs-readme
       - compile-r1cs:
           matrix:
@@ -113,3 +117,22 @@ jobs:
       - run:
           name: Run TritonVM tests
           command: sh ./test.sh
+
+  ring-math-test:
+    machine:
+      image: ubuntu-2204:current
+    environment: *rust_env
+    parameters:
+      rust-version:
+        type: string
+    steps:
+      - checkout
+      - run: *rust_version
+      - run:
+          name: Build
+          command: cd ring-math && cargo build
+      - run:
+          name: Run ring-math tests
+          command: |
+            cd ring-math
+            cargo test
