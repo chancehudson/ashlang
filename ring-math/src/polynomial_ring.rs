@@ -11,6 +11,7 @@ use std::ops::Sub;
 use std::ops::SubAssign;
 use std::str::FromStr;
 
+use scalarff::BigUint;
 use scalarff::FieldElement;
 
 use super::polynomial::Polynomial;
@@ -68,7 +69,7 @@ pub trait PolynomialRingElement:
 
     /// Calculate the l1 norm for this polynomial. That is
     /// the summation of all coefficients
-    fn norm_l1(&self) -> u64 {
+    fn norm_l1(&self) -> BigUint {
         self.coef().norm_l1()
     }
 
@@ -77,13 +78,13 @@ pub trait PolynomialRingElement:
     ///
     /// Specifically, we're calculating the square root in the integer
     /// field, not the prime field
-    fn norm_l2(&self) -> u64 {
+    fn norm_l2(&self) -> BigUint {
         self.coef().norm_l2()
     }
 
     /// Calculate the l-infinity norm for this polynomial. That is
     /// the largest coefficient
-    fn norm_max(&self) -> u64 {
+    fn norm_max(&self) -> BigUint {
         self.coef().norm_max()
     }
 
@@ -139,12 +140,17 @@ pub trait PolynomialRingElement:
 ///
 /// e.g.
 /// ```
-/// polynomial_ring!(
+/// use scalarff::OxfoiFieldElement;
+/// use scalarff::FieldElement;
+/// use ring_math::Polynomial;
+/// use ring_math::PolynomialRingElement;
+///
+/// ring_math::polynomial_ring!(
 /// Poly64,
-/// FoiFieldElement,
+/// OxfoiFieldElement,
 /// {
-///     let mut p = Polynomial::new(vec![FoiFieldElement::one()]);
-///     p.term(&FoiFieldElement::one(), 64);
+///     let mut p = Polynomial::new(vec![OxfoiFieldElement::one()]);
+///     p.term(&OxfoiFieldElement::one(), 64);
 ///     p
 /// },
 /// "Poly64"
@@ -335,17 +341,17 @@ macro_rules! polynomial_ring {
 #[cfg(test)]
 mod test {
     use scalarff::FieldElement;
-    use scalarff::FoiFieldElement;
+    use scalarff::OxfoiFieldElement;
 
     use super::Polynomial;
     use super::PolynomialRingElement;
 
     polynomial_ring!(
         Poly64,
-        FoiFieldElement,
+        OxfoiFieldElement,
         {
-            let mut p = Polynomial::new(vec![FoiFieldElement::one()]);
-            p.term(&FoiFieldElement::one(), 64);
+            let mut p = Polynomial::new(vec![OxfoiFieldElement::one()]);
+            p.term(&OxfoiFieldElement::one(), 64);
             p
         },
         "Poly64"
@@ -355,7 +361,7 @@ mod test {
     fn scalar_math_in_ring() {
         for x in 100..500 {
             for y in 200..600 {
-                let z_scalar = FoiFieldElement::from(x) * FoiFieldElement::from(y);
+                let z_scalar = OxfoiFieldElement::from(x) * OxfoiFieldElement::from(y);
                 let z_poly = Poly64::from(x) * Poly64::from(y);
                 assert_eq!(z_poly.polynomial().degree(), 0);
                 assert_eq!(z_poly.polynomial().coefficients[0], z_scalar);
@@ -380,8 +386,8 @@ mod test {
         // reduction step (still O(n^2))
         //
         // sample two random polynomials
-        let a = Poly64::sample_rand(&mut rand::thread_rng());
-        let b = Poly64::sample_rand(&mut rand::thread_rng());
+        let a = Poly64::sample_uniform(&mut rand::thread_rng());
+        let b = Poly64::sample_uniform(&mut rand::thread_rng());
         // create a rotated matrix of polynomial coefficients
         let rot_mat = a.rot();
         let b_coef = b.coef();

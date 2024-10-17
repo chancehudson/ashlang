@@ -287,7 +287,7 @@ impl<T: FieldElement> std::hash::Hash for Polynomial<T> {
 mod test {
     use super::Polynomial;
     use scalarff::FieldElement;
-    use scalarff::FoiFieldElement;
+    use scalarff::OxfoiFieldElement;
 
     #[test]
     fn mul_div() {
@@ -295,18 +295,18 @@ mod test {
             let mut r = rand::thread_rng();
             let p1 = Polynomial {
                 coefficients: vec![
-                    FoiFieldElement::sample_uniform(&mut r),
-                    FoiFieldElement::sample_uniform(&mut r),
-                    FoiFieldElement::sample_uniform(&mut r),
-                    FoiFieldElement::sample_uniform(&mut r),
-                    FoiFieldElement::sample_uniform(&mut r),
+                    OxfoiFieldElement::sample_uniform(&mut r),
+                    OxfoiFieldElement::sample_uniform(&mut r),
+                    OxfoiFieldElement::sample_uniform(&mut r),
+                    OxfoiFieldElement::sample_uniform(&mut r),
+                    OxfoiFieldElement::sample_uniform(&mut r),
                 ],
             };
             let p2 = Polynomial {
                 coefficients: vec![
-                    FoiFieldElement::sample_uniform(&mut r),
-                    FoiFieldElement::sample_uniform(&mut r),
-                    FoiFieldElement::sample_uniform(&mut r),
+                    OxfoiFieldElement::sample_uniform(&mut r),
+                    OxfoiFieldElement::sample_uniform(&mut r),
+                    OxfoiFieldElement::sample_uniform(&mut r),
                 ],
             };
             let (q, r) = p1.div(&p2);

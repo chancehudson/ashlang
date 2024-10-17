@@ -10,6 +10,8 @@ pub struct Matrix2D<T: FieldElement> {
 }
 
 impl<T: FieldElement> Matrix2D<T> {
+    pub const JL_PROJECTION_SIZE: usize = 256;
+
     /// Create a new 2 dimensional matrix of specified
     /// rows and columns
     pub fn new(rows: usize, columns: usize) -> Self {
@@ -133,6 +135,32 @@ impl<T: FieldElement> Matrix2D<T> {
             values: Vector::sample_uniform(rows * columns, rng).to_vec(),
         }
     }
+
+    /// Build a johnson-lindenstrauss projection matrix
+    /// with an input vector size of `input_dimension`.
+    /// Returns a matrix of dimension `Matrix2d::JL_PROJECTION_SIZE x input_dimension`.
+    ///
+    /// Implemented as defined in [LaBRADOR](https://eprint.iacr.org/2022/1341.pdf)
+    /// section 4 (bottom of page 9).
+    pub fn sample_jl<R: rand::Rng>(input_dimension: usize, rng: &mut R) -> Self {
+        let mut values = vec![];
+        // the matrix needs to be sampled randomly with
+        // each element being 0 with probabiltiy 1/2,
+        // 1 with probability 1/4 and -1 with probability 1/4
+        for _ in 0..(input_dimension * Self::JL_PROJECTION_SIZE) {
+            // TODO: don't fork on this logic
+            let v = rng.gen_range(0..=3);
+            match v {
+                0 => values.push(T::one()),
+                1 => values.push(-T::one()),
+                _ => values.push(T::zero()),
+            }
+        }
+        Self {
+            dimensions: (Self::JL_PROJECTION_SIZE, input_dimension),
+            values,
+        }
+    }
 }
 
 impl<T: FieldElement> std::fmt::Display for Matrix2D<T> {
@@ -204,5 +232,34 @@ impl<T: FieldElement> std::ops::Mul<Vector<T>> for Matrix2D<T> {
             );
         }
         Vector::from_vec(out)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use scalarff::BigUint;
+    use scalarff::OxfoiFieldElement;
+
+    use super::Matrix2D;
+
+    #[test]
+    fn test_jl_projection() {
+        let input_size = 64;
+        let projection_size = Matrix2D::<OxfoiFieldElement>::JL_PROJECTION_SIZE;
+        for _ in 0..100 {
+            let mut rng = rand::thread_rng();
+            let m = Matrix2D::<OxfoiFieldElement>::sample_jl(input_size, &mut rng);
+            assert_eq!(m.dimensions, (projection_size, input_size));
+            let input = super::Vector::sample_uniform(input_size, &mut rng);
+
+            // the floored value of sqrt(128)
+            let root_128_approx = BigUint::from(11u32);
+            let out = m * input.clone();
+            assert_eq!(out.len(), projection_size);
+            // we'll then check the l2 norm of the matrix multiplied
+            // by the input vector
+            // println!("{} {}", out.norm_l2(), root_128_approx * input.norm_l2());
+            assert!(out.norm_l2() < root_128_approx * input.norm_l2());
+        }
     }
 }
