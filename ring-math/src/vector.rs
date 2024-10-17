@@ -1,3 +1,4 @@
+use scalarff::BigUint;
 use scalarff::FieldElement;
 
 #[derive(Clone, PartialEq)]
@@ -26,6 +27,61 @@ impl<T: FieldElement> Vector<T> {
             out += a.clone() * b.clone();
         }
         out
+    }
+
+    /// Calculate the l1 norm for this vector. That is
+    /// the summation of all coefficients
+    pub fn norm_l1(&self) -> u64 {
+        let digits = self
+            .0
+            .iter()
+            .fold(BigUint::from(0u32), |acc, x| acc + x.to_biguint())
+            .to_u64_digits();
+        if digits.len() > 1 {
+            panic!("Norm l1 is not a single u64 digit");
+        } else if digits.len() == 1 {
+            digits[0]
+        } else {
+            0
+        }
+    }
+
+    /// Calculate the l2 norm for this vector. That is
+    /// the square root of the summation of each coefficient squared
+    ///
+    /// Specifically, we're calculating the square root in the integer
+    /// field, not the prime field
+    pub fn norm_l2(&self) -> u64 {
+        let v = self.0.iter().fold(BigUint::from(0u32), |acc, x| {
+            acc + (x.to_biguint() * x.to_biguint())
+        });
+        let digits = v.sqrt().to_u64_digits();
+        if digits.len() > 1 {
+            panic!("Norm l2 is not a single u64 digit");
+        } else if digits.len() == 1 {
+            digits[0]
+        } else {
+            0
+        }
+    }
+
+    /// Calculate the l-infinity norm for this vector. That is
+    /// the largest coefficient
+    pub fn norm_max(&self) -> u64 {
+        let mut max = T::zero().to_biguint();
+        for i in &self.0 {
+            if i.to_biguint() > max {
+                max = i.to_biguint();
+            }
+        }
+        let digits = max.to_u64_digits();
+        if digits.len() > 1 {
+            panic!("Norm max is not a single u64 digit");
+        } else if digits.len() == 1 {
+            digits[0]
+        } else {
+            0
+        }
     }
 
     /// Sum the elements of the array and return the result.

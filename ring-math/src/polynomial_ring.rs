@@ -69,20 +69,7 @@ pub trait PolynomialRingElement:
     /// Calculate the l1 norm for this polynomial. That is
     /// the summation of all coefficients
     fn norm_l1(&self) -> u64 {
-        let digits = self
-            .polynomial()
-            .coefficients
-            .iter()
-            .fold(Self::F::zero(), |acc, x| acc + x.clone())
-            .to_biguint()
-            .to_u64_digits();
-        if digits.len() > 1 {
-            panic!("Norm l1 is not a single u64 digit");
-        } else if digits.len() == 1 {
-            digits[0]
-        } else {
-            0
-        }
+        self.coef().norm_l1()
     }
 
     /// Calculate the l2 norm for this polynomial. That is
@@ -91,38 +78,13 @@ pub trait PolynomialRingElement:
     /// Specifically, we're calculating the square root in the integer
     /// field, not the prime field
     fn norm_l2(&self) -> u64 {
-        let v = self
-            .polynomial()
-            .coefficients
-            .iter()
-            .fold(Self::F::zero(), |acc, x| acc + (x.clone() * x.clone()));
-        let digits = v.to_biguint().sqrt().to_u64_digits();
-        if digits.len() > 1 {
-            panic!("Norm l2 is not a single u64 digit");
-        } else if digits.len() == 1 {
-            digits[0]
-        } else {
-            0
-        }
+        self.coef().norm_l2()
     }
 
     /// Calculate the l-infinity norm for this polynomial. That is
     /// the largest coefficient
     fn norm_max(&self) -> u64 {
-        let mut max = Self::F::zero().to_biguint();
-        for i in &self.polynomial().coefficients {
-            if i.to_biguint() > max {
-                max = i.to_biguint();
-            }
-        }
-        let digits = max.to_u64_digits();
-        if digits.len() > 1 {
-            panic!("Norm max is not a single u64 digit");
-        } else if digits.len() == 1 {
-            digits[0]
-        } else {
-            0
-        }
+        self.coef().norm_max()
     }
 
     /// Returns a coefficient vector of length equal
