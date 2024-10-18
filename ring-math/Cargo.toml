@@ -1,6 +1,6 @@
 [package]
 name = "ring-math"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Chance Hudson <PSE>"]
 description = "Polynomial ring math over scalar finite fields"

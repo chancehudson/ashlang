@@ -57,6 +57,10 @@ pub trait PolynomialRingElement:
     /// Used to automatically implement norms and other functions.
     fn polynomial(&self) -> &Polynomial<Self::F>;
 
+    /// Create a polynomial ring element from a Polynomial
+    /// with terms in the ring's scalar field.
+    fn from_polynomial(p: Polynomial<Self::F>) -> Self;
+
     /// Attempt to get a scalar representation of the polynomial.
     /// If the polynomial degree is > 0 this method will error.
     fn to_scalar(&self) -> anyhow::Result<Self::F> {
@@ -165,12 +169,16 @@ macro_rules! polynomial_ring {
         impl PolynomialRingElement for $name {
             type F = $field_element;
 
-            fn modulus() -> Polynomial<$field_element> {
+            fn modulus() -> Polynomial<Self::F> {
                 $modulus
             }
 
-            fn polynomial(&self) -> &Polynomial<$field_element> {
+            fn polynomial(&self) -> &Polynomial<Self::F> {
                 &self.0
+            }
+
+            fn from_polynomial(p: Polynomial<Self::F>) -> Self {
+                $name(p)
             }
         }
 
