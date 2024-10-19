@@ -3,6 +3,7 @@ use scalarff::FieldElement;
 use super::vector::Vector;
 
 /// A two dimensional matrix implementation
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq)]
 pub struct Matrix2D<T: FieldElement> {
     pub dimensions: (usize, usize), // (rows, cols)

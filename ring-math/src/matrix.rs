@@ -18,6 +18,7 @@ use std::str::FromStr;
 
 use super::PolynomialRingElement;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct Matrix<T: PolynomialRingElement> {
     // scalars should be represented as dimensions: vec![1]

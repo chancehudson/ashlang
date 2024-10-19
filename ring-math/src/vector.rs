@@ -1,6 +1,7 @@
 use scalarff::BigUint;
 use scalarff::FieldElement;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq)]
 pub struct Vector<T: FieldElement>(pub Vec<T>);
 

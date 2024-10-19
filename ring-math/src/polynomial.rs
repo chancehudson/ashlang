@@ -8,6 +8,7 @@ use crate::Vector;
 ///
 /// The base field may be finite or infinite depending
 /// on T
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Eq)]
 pub struct Polynomial<T>
 where
@@ -164,9 +165,9 @@ impl<T: FieldElement> std::fmt::Display for Polynomial<T> {
                             return "".to_string();
                         }
                         if i > 0 {
-                            format!("{}x^{i}", v.serialize())
+                            format!("{}x^{i}", v.to_string())
                         } else {
-                            v.serialize().to_string()
+                            v.to_string()
                         }
                     })
                     .filter(|x| x.len() > 0)

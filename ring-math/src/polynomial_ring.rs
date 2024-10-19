@@ -203,24 +203,6 @@ macro_rules! polynomial_ring {
                 Self::modulus().degree() * $field_element::byte_len()
             }
 
-            fn serialize(&self) -> String {
-                self.0
-                    .coefficients
-                    .iter()
-                    .map(|v| v.serialize())
-                    .collect::<Vec<_>>()
-                    .join(",")
-            }
-
-            fn deserialize(str: &str) -> Self {
-                $name(Polynomial {
-                    coefficients: str
-                        .split(',')
-                        .map(|v| $field_element::deserialize(v))
-                        .collect::<Vec<_>>(),
-                })
-            }
-
             fn prime() -> scalarff::BigUint {
                 panic!("cannot retrieve a scalar prime for a polynomial field");
             }
@@ -265,15 +247,29 @@ macro_rules! polynomial_ring {
 
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", self.0)
+                write!(
+                    f,
+                    "{}",
+                    self.0
+                        .coefficients
+                        .iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
             }
         }
 
         impl std::str::FromStr for $name {
-            type Err = ();
+            type Err = <$field_element as std::str::FromStr>::Err;
 
-            fn from_str(_s: &str) -> Result<Self, Self::Err> {
-                Err(())
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                Ok(Self(Polynomial {
+                    coefficients: s
+                        .split(',')
+                        .map(|v| $field_element::from_str(v))
+                        .collect::<Result<Vec<_>, _>>()?,
+                }))
             }
         }
 

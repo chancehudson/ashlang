@@ -1,6 +1,6 @@
 [package]
 name = "ring-math"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 authors = ["Chance Hudson <PSE>"]
 description = "Polynomial ring math over scalar finite fields"
@@ -10,8 +10,13 @@ license = "MIT OR Apache-2.0"
 
 [lib]
 
+[features]
+default = ["serde"]
+serde = ["dep:serde", "scalarff/serde"]
+
 [dependencies]
 anyhow = "1.0.89"
 rand = "0.8.5"
-scalarff = { version = "0.6.0", features = ["oxfoi", "alt_bn128", "curve25519", "random"] }
+scalarff = { version = "0.7.0", features = ["oxfoi", "alt_bn128", "curve25519", "random"] }
+serde = { version = "1.0.0", features = ["derive"], optional = true }
 #scalarff = { path = "../../scalarff", features = ["oxfoi", "alt_bn128", "curve25519", "random"] }
