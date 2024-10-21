@@ -34,6 +34,7 @@ pub type SpartanConfig = (
 
 // contains the data necessary to
 // verify a proof
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SpartanProof {
     pub snark: SNARK,
     pub comm: ComputationCommitment,
