@@ -1,8 +1,10 @@
 use anyhow::Result;
+use ashlang::rings::Curve25519PolynomialRing;
 use cli::Config;
 use compiler::Compiler;
 use r1cs::witness;
 use ring_math::PolynomialRingElement;
+use scalarff::Curve25519FieldElement;
 use scalarff::FieldElement;
 
 use crate::provers::AshlangProver;
@@ -46,8 +48,10 @@ fn main() -> Result<()> {
                 Ok(())
             }
             "curve25519" => {
-                let proof = provers::SpartanProver::prove(&config)?;
-                if provers::SpartanProver::verify(proof)? {
+                let r1cs = compile_r1cs::<Curve25519PolynomialRing>(&mut config)?;
+                let proof =
+                    provers::SpartanProver::prove_ir(&r1cs, config.inputs, config.secret_inputs)?;
+                if provers::SpartanProver::verify(&r1cs, proof)? {
                     println!("✅ spartan proof is valid");
                 } else {
                     println!("🔴 spartan proof is NOT valid");

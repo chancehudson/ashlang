@@ -73,7 +73,7 @@ impl AshlangProver<(Stark, Claim, Proof)> for TritonVMProver {
         Self::prove_ir(&asm, config.inputs, config.secret_inputs)
     }
 
-    fn verify(_proof: (Stark, Claim, Proof)) -> Result<bool> {
+    fn verify(_program: &str, _proof: (Stark, Claim, Proof)) -> Result<bool> {
         panic!("tritonvm verification not implemented");
     }
 }

@@ -14,5 +14,5 @@ pub trait AshlangProver<T> {
     /// Generate a proof from an existing IR
     fn prove_ir(ir: &str, public_inputs: Vec<String>, secret_inputs: Vec<String>) -> Result<T>;
     /// Verify a proof
-    fn verify(proof: T) -> Result<bool>;
+    fn verify(program: &str, proof: T) -> Result<bool>;
 }

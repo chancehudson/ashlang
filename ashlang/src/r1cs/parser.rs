@@ -27,6 +27,26 @@ pub struct R1csParser<T: PolynomialRingElement> {
 }
 
 impl<T: PolynomialRingElement> R1csParser<T> {
+    /// Return the number of variables in the witness based
+    /// on the number of variable indices that are constrained.
+    pub fn var_count(&self) -> usize {
+        let mut signal_index_max = 0;
+        for c in &self.constraints {
+            for (_, i) in &c.a {
+                signal_index_max = signal_index_max.max(*i);
+            }
+            for (_, i) in &c.b {
+                signal_index_max = signal_index_max.max(*i);
+            }
+            for (_, i) in &c.c {
+                signal_index_max = signal_index_max.max(*i);
+            }
+        }
+        // return the length, not the max index
+        // length is equal to the max index + 1
+        signal_index_max + 1
+    }
+
     pub fn new(source: &str) -> Result<Self> {
         let mut out = R1csParser {
             constraints: Vec::new(),

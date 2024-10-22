@@ -8,7 +8,6 @@ extern crate merlin;
 use anyhow::Result;
 use curve25519_dalek::scalar::Scalar;
 use libspartan::Assignment;
-use libspartan::ComputationCommitment;
 use libspartan::InputsAssignment;
 use libspartan::Instance;
 use libspartan::SNARKGens;
@@ -30,8 +29,8 @@ pub type SpartanConfig = (
     usize,
     usize,
     Instance,
-    VarsAssignment,
-    InputsAssignment,
+    Option<VarsAssignment>,
+    Option<InputsAssignment>,
 );
 
 // contains the data necessary to
@@ -39,9 +38,6 @@ pub type SpartanConfig = (
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SpartanProof {
     pub snark: SNARK,
-    pub comm: ComputationCommitment,
-    pub gens: SNARKGens,
-
     pub inputs: Assignment,
 }
 
@@ -76,10 +72,12 @@ impl AshlangProver<SpartanProof> for SpartanProver {
         // produce public parameters
         let spartan_config = transform_r1cs(
             &r1cs,
-            secret_inputs
-                .iter()
-                .map(|v| Curve25519FieldElement::from_str(v).unwrap())
-                .collect::<Vec<_>>(),
+            Some(
+                secret_inputs
+                    .iter()
+                    .map(|v| Curve25519FieldElement::from_str(v))
+                    .collect::<Result<Vec<_>>>()?,
+            ),
         )?;
         let (
             num_cons,
@@ -102,14 +100,12 @@ impl AshlangProver<SpartanProof> for SpartanProver {
                 &inst,
                 &comm,
                 &decomm,
-                assignment_vars,
-                &assignment_inputs,
+                assignment_vars.unwrap(),
+                &assignment_inputs.as_ref().unwrap(),
                 &gens,
                 &mut prover_transcript,
             ),
-            comm,
-            gens,
-            inputs: assignment_inputs,
+            inputs: assignment_inputs.unwrap(),
         })
     }
 
@@ -129,7 +125,21 @@ impl AshlangProver<SpartanProof> for SpartanProver {
         Self::prove_ir(&r1cs, vec![], config.secret_inputs)
     }
 
-    fn verify(serialized_proof: SpartanProof) -> Result<bool> {
+    fn verify(r1cs: &str, serialized_proof: SpartanProof) -> Result<bool> {
+        let spartan_config = transform_r1cs(&r1cs, None)?;
+        let (
+            num_cons,
+            num_vars,
+            num_inputs,
+            num_non_zero_entries,
+            inst,
+            _assignment_vars,
+            _assignment_inputs,
+        ) = spartan_config;
+        let gens = SNARKGens::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
+
+        // create a commitment to the R1CS instance
+        let (comm, _decomm) = SNARK::encode(&inst, &gens);
         // verify the proof of satisfiability
         let mut verifier_transcript = Transcript::new(b"ashlang-spartan");
 
@@ -138,10 +148,10 @@ impl AshlangProver<SpartanProof> for SpartanProver {
         Ok(serialized_proof
             .snark
             .verify(
-                &serialized_proof.comm,
+                &comm,
                 &serialized_proof.inputs,
                 &mut verifier_transcript,
-                &serialized_proof.gens,
+                &gens,
             )
             .is_ok())
     }
@@ -151,37 +161,22 @@ impl AshlangProver<SpartanProof> for SpartanProver {
 /// - calculate a witness given some inputs
 /// - rearrange the R1CS variables such that the `one` variable and all inputs are at the end
 /// - prepare a SpartanConfig structure to be used with `ashlang_spartan::prove`
-pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result<SpartanConfig> {
-    let witness = crate::r1cs::witness::build::<Curve25519PolynomialRing>(
-        r1cs,
-        inputs
-            .iter()
-            .map(|v| Curve25519PolynomialRing(Polynomial::new(vec![*v])))
-            .collect(),
-    )?;
-    let mut witness = witness.variables;
-
-    // put the one variable at the end of the witness vector
-    // all the R1csConstraint variables need to be modified similary
-    // see the massive iterator body below
-    let l = witness.len();
-    witness[0] = witness[l - 1];
-    witness[l - 1] = Curve25519FieldElement::from(1);
-
+pub fn transform_r1cs(
+    r1cs: &str,
+    inputs: Option<Vec<Curve25519FieldElement>>,
+) -> Result<SpartanConfig> {
     // filter out the symbolic constraints
-    let constraints = {
-        let r1cs_parser: R1csParser<Curve25519PolynomialRing> = R1csParser::new(r1cs)?;
-        r1cs_parser
-            .constraints
-            .into_iter()
-            .filter(|c| !c.symbolic)
-            .collect::<Vec<_>>()
-    };
+    let r1cs_parser: R1csParser<Curve25519PolynomialRing> = R1csParser::new(r1cs)?;
+    let constraints = r1cs_parser
+        .constraints
+        .iter()
+        .filter(|c| !c.symbolic)
+        .collect::<Vec<_>>();
 
     // number of constraints
     let num_cons = constraints.len();
     // number of variables
-    let num_vars = witness.len() - 1;
+    let num_vars = r1cs_parser.var_count() - 1;
     let num_inputs = 0;
 
     // this variable is absurdly complex, it works for now
@@ -200,8 +195,8 @@ pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result
             let mut new_c = vec![];
             for (v, var_i) in constraint.a.clone() {
                 if var_i == 0 {
-                    new_a.push((v, witness.len() - 1));
-                } else if var_i == witness.len() - 1 {
+                    new_a.push((v, r1cs_parser.var_count() - 1));
+                } else if var_i == r1cs_parser.var_count() - 1 {
                     new_a.push((v, 0));
                 } else {
                     new_a.push((v, var_i));
@@ -209,8 +204,8 @@ pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result
             }
             for (v, var_i) in constraint.b.clone() {
                 if var_i == 0 {
-                    new_b.push((v, witness.len() - 1));
-                } else if var_i == witness.len() - 1 {
+                    new_b.push((v, r1cs_parser.var_count() - 1));
+                } else if var_i == r1cs_parser.var_count() - 1 {
                     new_b.push((v, 0));
                 } else {
                     new_b.push((v, var_i));
@@ -218,8 +213,8 @@ pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result
             }
             for (v, var_i) in constraint.c.clone() {
                 if var_i == 0 {
-                    new_c.push((v, witness.len() - 1));
-                } else if var_i == witness.len() - 1 {
+                    new_c.push((v, r1cs_parser.var_count() - 1));
+                } else if var_i == r1cs_parser.var_count() - 1 {
                     new_c.push((v, 0));
                 } else {
                     new_c.push((v, var_i));
@@ -236,12 +231,6 @@ pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result
             }
         })
         .collect::<Vec<_>>();
-
-    // create a VarsAssignment
-    let mut vars = vec![Scalar::ZERO.to_bytes(); num_vars];
-    for i in 0..num_vars {
-        vars[i] = to_32(witness[i].to_bytes_le());
-    }
 
     // every row = constraint
     // every column = variable
@@ -272,7 +261,43 @@ pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result
         panic!("error building instance: {:?}", e);
     }
     let inst = inst.unwrap();
+    // return here?
+    if inputs.is_none() {
+        // just return the instance?
+        return Ok((
+            num_cons,
+            num_vars,
+            num_inputs,
+            num_non_zero_entries,
+            inst,
+            None,
+            None,
+        ));
+    }
 
+    // build the witness
+    let witness = crate::r1cs::witness::build::<Curve25519PolynomialRing>(
+        r1cs,
+        inputs
+            .unwrap()
+            .iter()
+            .map(|v| Curve25519PolynomialRing(Polynomial::new(vec![*v])))
+            .collect(),
+    )?;
+    let mut witness = witness.variables;
+
+    // put the one variable at the end of the witness vector
+    // all the R1csConstraint variables need to be modified similary
+    // see the massive iterator body below
+    let l = witness.len();
+    witness[0] = witness[l - 1];
+    witness[l - 1] = Curve25519FieldElement::from(1);
+
+    // create a VarsAssignment
+    let mut vars = vec![Scalar::ZERO.to_bytes(); num_vars];
+    for i in 0..num_vars {
+        vars[i] = to_32(witness[i].to_bytes_le());
+    }
     let assignment_vars = VarsAssignment::new(&vars).unwrap();
 
     // create an InputsAssignment
@@ -290,7 +315,7 @@ pub fn transform_r1cs(r1cs: &str, inputs: Vec<Curve25519FieldElement>) -> Result
         num_inputs,
         num_non_zero_entries,
         inst,
-        assignment_vars,
-        assignment_inputs,
+        Some(assignment_vars),
+        Some(assignment_inputs),
     ))
 }
