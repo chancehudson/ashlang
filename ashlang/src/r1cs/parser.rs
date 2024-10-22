@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use super::constraint::string_to_index;
 use super::constraint::R1csConstraint;
@@ -9,7 +10,6 @@ use anyhow::Result;
 use pest::Parser;
 use pest_derive::Parser;
 use ring_math::PolynomialRingElement;
-use scalarff::FieldElement;
 
 #[derive(Parser)]
 #[grammar = "r1cs/r1cs_grammar.pest"] // relative to project `src`
@@ -159,15 +159,15 @@ impl<T: PolynomialRingElement> R1csParser<T> {
                 }
                 if let Some(v) = self.arg_name_index.get(var_index) {
                     // if signal is a variable
-                    out_terms.push((T::F::deserialize(coef), *v));
+                    out_terms.push((T::F::from_str(coef)?, *v));
                 } else if let Some(v) = self.return_name_index.get(var_index) {
-                    out_terms.push((T::F::deserialize(coef), *v));
+                    out_terms.push((T::F::from_str(coef)?, *v));
                 } else {
                     // if coef is a literal
-                    out_terms.push((T::F::deserialize(coef), string_to_index(var_index)));
+                    out_terms.push((T::F::from_str(coef)?, string_to_index(var_index)));
                 }
             } else {
-                out_terms.push((T::F::deserialize(coef), string_to_index(var_index)));
+                out_terms.push((T::F::from_str(coef)?, string_to_index(var_index)));
             }
         }
         Ok(out_terms)

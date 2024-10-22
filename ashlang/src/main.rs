@@ -87,8 +87,8 @@ fn compile_r1cs<T: PolynomialRingElement>(config: &mut Config) -> Result<String>
         config
             .secret_inputs
             .iter()
-            .map(|v| T::deserialize(v))
-            .collect::<Vec<_>>(),
+            .map(|v| T::from_str(v))
+            .collect::<Result<Vec<_>>>()?,
     );
     if let Err(e) = witness {
         println!("Failed to build witness: {:?}", e);
@@ -107,7 +107,7 @@ fn compile_r1cs<T: PolynomialRingElement>(config: &mut Config) -> Result<String>
     if !outputs.is_empty() {
         println!("Received the following outputs:");
         for v in outputs {
-            println!("{}", v.serialize());
+            println!("{v}");
         }
     } else {
         println!("No outputs were generated");

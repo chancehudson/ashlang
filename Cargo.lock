@@ -263,7 +263,7 @@ dependencies = [
  "merlin",
  "pest",
  "pest_derive",
- "ring-math",
+ "ring-math 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "scalarff",
  "serde",
  "spartan",
@@ -1402,6 +1402,18 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 [[package]]
 name = "ring-math"
 version = "0.4.0"
+dependencies = [
+ "anyhow",
+ "rand",
+ "scalarff",
+ "serde",
+]
+
+[[package]]
+name = "ring-math"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59f63ff5ee501c33087d20fd92ba4a217023d1a22760c4ce25960dbb571f0def"
 dependencies = [
  "anyhow",
  "rand",

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use ring_math::Polynomial;
 use scalarff::Curve25519FieldElement;
 use scalarff::FieldElement;
@@ -76,7 +78,7 @@ impl AshlangProver<SpartanProof> for SpartanProver {
             &r1cs,
             secret_inputs
                 .iter()
-                .map(|v| Curve25519FieldElement::deserialize(v))
+                .map(|v| Curve25519FieldElement::from_str(v).unwrap())
                 .collect::<Vec<_>>(),
         )?;
         let (

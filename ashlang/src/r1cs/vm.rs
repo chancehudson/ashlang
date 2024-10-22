@@ -203,7 +203,7 @@ where
     }
 
     /// Serialization to/from AST representation
-    pub fn build_var_from_ast_vec(&mut self, expr: &Expr) -> (Vec<usize>, Vec<T>) {
+    pub fn build_var_from_ast_vec(&mut self, expr: &Expr) -> Result<(Vec<usize>, Vec<T>)> {
         // first iterate all the way through to the first literal
         let mut dimensions: Vec<usize> = Vec::new();
         let mut root_expr = expr.clone();
@@ -223,23 +223,28 @@ where
         }
         // then pull all the literals into a 1 dimensional vec
         let mut vec_rep: Vec<T> = Vec::new();
-        Self::extract_literals(expr, &mut vec_rep);
-        (dimensions, vec_rep)
+        Self::extract_literals(expr, &mut vec_rep)?;
+        Ok((dimensions, vec_rep))
     }
 
-    fn extract_literals(expr: &Expr, out: &mut Vec<T>) {
+    fn extract_literals(expr: &Expr, out: &mut Vec<T>) -> Result<()> {
         match expr {
             Expr::VecVec(v) => {
                 for a in v {
-                    Self::extract_literals(a, out);
+                    Self::extract_literals(a, out)?
                 }
             }
             Expr::VecLit(v) => {
-                let mut vv = v.clone().iter().map(|v| T::deserialize(v)).collect();
+                let mut vv = v
+                    .clone()
+                    .iter()
+                    .map(|v| T::from_str(v))
+                    .collect::<Result<_>>()?;
                 out.append(&mut vv);
             }
             _ => unreachable!(),
         }
+        Ok(())
     }
 
     /// Take a static variable and constrain it's current value
@@ -280,7 +285,7 @@ where
     pub fn eval(&mut self, expr: &Expr) -> Result<Var<T>> {
         match &expr {
             Expr::VecVec(_) | Expr::VecLit(_) => {
-                let (dimensions, values) = self.build_var_from_ast_vec(expr);
+                let (dimensions, values) = self.build_var_from_ast_vec(expr)?;
                 Ok(Var {
                     index: None,
                     location: VarLocation::Static,
@@ -422,7 +427,7 @@ where
             Expr::Lit(val) => Ok(Var {
                 index: None,
                 location: VarLocation::Static,
-                value: Matrix::from(T::deserialize(val)),
+                value: Matrix::from(T::from_str(val)?),
             }),
             _ => {
                 log::error!("unimplemented expression case")
