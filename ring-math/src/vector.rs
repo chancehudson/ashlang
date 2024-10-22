@@ -71,6 +71,7 @@ impl<T: FieldElement> Vector<T> {
 
     /// Sample a uniform random vector of the specified dimension
     /// from the underlying field.
+    #[cfg(feature = "rand")]
     pub fn sample_uniform<R: rand::Rng>(len: usize, rng: &mut R) -> Self {
         Self((0..len).map(|_| T::sample_uniform(rng)).collect())
     }

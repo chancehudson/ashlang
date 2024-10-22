@@ -291,6 +291,7 @@ mod test {
     use scalarff::OxfoiFieldElement;
 
     #[test]
+    #[cfg(feature = "rand")]
     fn mul_div() {
         for _ in 0..100 {
             let mut r = rand::thread_rng();

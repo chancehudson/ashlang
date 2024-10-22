@@ -130,6 +130,7 @@ impl<T: FieldElement> Matrix2D<T> {
 
     /// Sample a uniform random matrix of the specified dimensions
     /// from the underlying field.
+    #[cfg(feature = "rand")]
     pub fn sample_uniform<R: rand::Rng>(rows: usize, columns: usize, rng: &mut R) -> Self {
         Self {
             dimensions: (rows, columns),
@@ -143,6 +144,7 @@ impl<T: FieldElement> Matrix2D<T> {
     ///
     /// Implemented as defined in [LaBRADOR](https://eprint.iacr.org/2022/1341.pdf)
     /// section 4 (bottom of page 9).
+    #[cfg(feature = "rand")]
     pub fn sample_jl<R: rand::Rng>(input_dimension: usize, rng: &mut R) -> Self {
         let mut values = vec![];
         // the matrix needs to be sampled randomly with
@@ -244,6 +246,7 @@ mod test {
     use super::Matrix2D;
 
     #[test]
+    #[cfg(feature = "rand")]
     fn test_jl_projection() {
         let input_size = 64;
         let projection_size = Matrix2D::<OxfoiFieldElement>::JL_PROJECTION_SIZE;

@@ -263,8 +263,8 @@ dependencies = [
  "merlin",
  "pest",
  "pest_derive",
- "ring-math 0.2.1",
- "scalarff 0.6.1",
+ "ring-math",
+ "scalarff",
  "serde",
  "spartan",
  "triton-vm",
@@ -857,12 +857,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fbf6a919d6cf397374f7dfeeea91d974c7c0a7221d0d0f4f20d859d329e53fcc"
 
 [[package]]
-name = "hex"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-
-[[package]]
 name = "iana-time-zone"
 version = "0.1.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1407,22 +1401,11 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
 name = "ring-math"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48d61cdd8db8de7cca6c2a0e3ba1f7660a28e81bfc5125749c2d1594bdee8ad2"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "rand",
- "scalarff 0.6.1",
-]
-
-[[package]]
-name = "ring-math"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "rand",
- "scalarff 0.7.0",
+ "scalarff",
  "serde",
 ]
 
@@ -1458,28 +1441,11 @@ dependencies = [
 
 [[package]]
 name = "scalarff"
-version = "0.6.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "072e68a21fc6376aa00020f4c3363e5700afe30c309b51abe0e74af5392b3ce1"
+checksum = "b5d65dd8129eb6dba2e12a25883262ed0b49a85a2ff8709694155b5a04ed886e"
 dependencies = [
- "ark-bn254",
- "ark-ff",
- "ark-std",
- "colored",
- "curve25519-dalek",
- "ff",
- "num-bigint",
- "num-integer",
- "rand",
- "twenty-first 0.41.0",
-]
-
-[[package]]
-name = "scalarff"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64b13cae1148a3cf731ce3c8861655a155de8bbb76785307175186498d54e70f"
-dependencies = [
+ "anyhow",
  "ark-bn254",
  "ark-ff",
  "ark-std",
@@ -1490,7 +1456,6 @@ dependencies = [
  "num-integer",
  "rand",
  "serde",
- "twenty-first 0.41.0",
 ]
 
 [[package]]
@@ -1727,7 +1692,7 @@ dependencies = [
  "serde_derive",
  "strum",
  "thiserror",
- "twenty-first 0.40.0",
+ "twenty-first",
  "unicode-width",
 ]
 
@@ -1742,34 +1707,6 @@ dependencies = [
  "blake3",
  "get-size",
  "hashbrown 0.14.5",
- "itertools 0.12.1",
- "lazy_static",
- "num-bigint",
- "num-traits",
- "phf",
- "rand",
- "rand_distr",
- "rayon",
- "serde",
- "serde-big-array",
- "serde_derive",
- "serde_json",
- "sha3 0.10.8",
- "thiserror",
-]
-
-[[package]]
-name = "twenty-first"
-version = "0.41.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "453cce0ee28de3ffeb768cb158ffebbe55a9cd6bfb7bada1fac2d1853597c3bf"
-dependencies = [
- "arbitrary",
- "bfieldcodec_derive",
- "blake3",
- "get-size",
- "hashbrown 0.14.5",
- "hex",
  "itertools 0.12.1",
  "lazy_static",
  "num-bigint",

@@ -383,6 +383,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "rand")]
     fn poly_rot() {
         // Testing the relationship as defined in the LatticeFold paper
         // coef(a * b) = rot(a) * coef(b)
