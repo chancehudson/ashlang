@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 
 use anyhow::Result;
-use scalarff::FieldElement;
+use lettuce::FieldScalar;
 
 /// A single r1cs constraints.
 ///
@@ -13,11 +13,12 @@ use scalarff::FieldElement;
 /// indices may be specified multiple times
 /// and will be summed
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct R1csConstraint<T: FieldElement> {
+pub struct R1csConstraint<E: FieldScalar> {
     // (coefficient, var_index)
-    pub a: Vec<(T, usize)>,
-    pub b: Vec<(T, usize)>,
-    pub c: Vec<(T, usize)>,
+    pub a: Vec<(E, usize)>,
+    pub b: Vec<(E, usize)>,
+    pub c: Vec<(E, usize)>,
+    /// output wtns index if this is a symbolic constraint
     pub out_i: Option<usize>,
     pub comment: Option<String>,
     pub symbolic: bool,
@@ -36,8 +37,7 @@ pub enum SymbolicOp {
     Mul,
     Add,
     Sqrt,
-    Input,       // mark a variable as being an input. Value will be assigned as part of witness
-    PublicInput, // mark a variable as being exposed as a public value, if possible
+    Input, // mark a variable as being an input. Value will be assigned as part of witness
     Output,
 }
 
@@ -49,7 +49,6 @@ impl From<&str> for SymbolicOp {
             "+" => SymbolicOp::Add,
             "radix" => SymbolicOp::Sqrt,
             "input" => SymbolicOp::Input,
-            "public_input" => SymbolicOp::PublicInput,
             "output" => SymbolicOp::Output,
             _ => panic!("bad symbolic_op input \"{input}\""),
         }
@@ -64,7 +63,6 @@ impl Display for SymbolicOp {
             SymbolicOp::Add => "+".to_owned(),
             SymbolicOp::Sqrt => "radix".to_owned(),
             SymbolicOp::Input => "input".to_owned(),
-            SymbolicOp::PublicInput => "public_input".to_owned(),
             SymbolicOp::Output => "output".to_owned(),
         };
         write!(f, "{}", out)
@@ -95,7 +93,7 @@ fn comment_space(s: &str) -> String {
 
 static LINE_WIDTH: usize = 40;
 
-impl<T: FieldElement> Display for R1csConstraint<T> {
+impl<T: FieldScalar> Display for R1csConstraint<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut out = "".to_owned();
         if self.symbolic {
@@ -165,7 +163,7 @@ impl<T: FieldElement> Display for R1csConstraint<T> {
     }
 }
 
-impl<T: FieldElement> R1csConstraint<T> {
+impl<T: FieldScalar> R1csConstraint<T> {
     pub fn new(a: Vec<(T, usize)>, b: Vec<(T, usize)>, c: Vec<(T, usize)>, comment: &str) -> Self {
         Self {
             a,
@@ -178,9 +176,9 @@ impl<T: FieldElement> R1csConstraint<T> {
         }
     }
 
-    /// build a symbolic constraint used to solve the witness
+    /// build a symbolic constraint used to solve the witness.
     /// symbolic constraints are of the form `out_i = a (op) b`
-    /// where operation may be any possible operation
+    /// where op may be any possible operation
     /// e.g. not limited by the nature of the proving system
     ///
     /// out_i: index of the signal to constrain (assign)
@@ -206,6 +204,8 @@ impl<T: FieldElement> R1csConstraint<T> {
         }
     }
 
+    /// Given a symbolic constraint a witness, solve for the c constraint value.
+    /// The opposite of a constraint, an arbitrary, binding assignment to the c matrix.
     pub fn solve_symbolic(&self, vars: &HashMap<usize, T>) -> Result<T> {
         if !self.symbolic {
             return Err(anyhow::anyhow!("not a symbolic constraint"));
@@ -221,7 +221,7 @@ impl<T: FieldElement> R1csConstraint<T> {
         match self.symbolic_op.as_ref().unwrap() {
             SymbolicOp::Add => Ok(a + b),
             SymbolicOp::Mul => Ok(a * b),
-            SymbolicOp::Inv => Ok(T::one() / b),
+            SymbolicOp::Inv => Ok(T::one() * b.inverse()),
             SymbolicOp::Sqrt => {
                 if a != (T::one() + T::one()) {
                     anyhow::bail!("Cannot calculate non-square root");
@@ -239,10 +239,6 @@ impl<T: FieldElement> R1csConstraint<T> {
                     ));
                 }
             }
-            SymbolicOp::PublicInput => crate::log::error!(
-                "cannot solve symbolic variable of type \"PublicInput\"",
-                "witness build should prove public input values"
-            ),
             SymbolicOp::Input => crate::log::error!(
                 "cannot solve symbolic variable of type \"Input\"",
                 "witness builder should provide input values"

@@ -3,7 +3,7 @@ use std::fs;
 
 use anyhow::Result;
 use camino::Utf8PathBuf;
-use ring_math::PolynomialRingElement;
+use lettuce::FieldScalar;
 
 use crate::cli::Config;
 use crate::log;
@@ -11,41 +11,33 @@ use crate::parser::AshParser;
 use crate::parser::AstNode;
 use crate::r1cs::constraint::R1csConstraint;
 use crate::r1cs::parser::R1csParser;
-use crate::tasm::asm_parser::AsmParser;
-use crate::tasm::vm::FnCall;
 
 // things that both Compiler and VM
 // need to modify
-pub struct CompilerState<T: PolynomialRingElement> {
+pub struct CompilerState<E: FieldScalar> {
     // each function gets it's own memory space
     // track where in the memory we're at
     pub memory_offset: usize,
-    pub called_fn: HashMap<FnCall, u64>,
-    pub fn_return_types: HashMap<FnCall, FnCall>,
     pub is_fn_ash: HashMap<String, bool>,
-    pub compiled_fn: HashMap<FnCall, Vec<String>>,
     pub fn_to_ast: HashMap<String, Vec<AstNode>>,
     pub block_counter: usize,
     pub block_fn_asm: Vec<Vec<String>>,
-    pub fn_to_r1cs_parser: HashMap<String, R1csParser<T>>,
+    pub fn_to_r1cs_parser: HashMap<String, R1csParser<E>>,
     pub path_to_fn: HashMap<Utf8PathBuf, String>,
     pub fn_to_path: HashMap<String, Utf8PathBuf>,
     pub messages: Vec<String>,
 }
 
-impl<T: PolynomialRingElement> Default for CompilerState<T> {
+impl<E: FieldScalar> Default for CompilerState<E> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: PolynomialRingElement> CompilerState<T> {
+impl<E: FieldScalar> CompilerState<E> {
     pub fn new() -> Self {
         CompilerState {
             memory_offset: 0,
-            called_fn: HashMap::new(),
-            fn_return_types: HashMap::new(),
-            compiled_fn: HashMap::new(),
             fn_to_ast: HashMap::new(),
             is_fn_ash: HashMap::new(),
             block_counter: 0,
@@ -61,20 +53,18 @@ impl<T: PolynomialRingElement> CompilerState<T> {
 /// The Compiler struct handles reading filepaths,
 /// parsing files, recursively loading dependencies,
 /// and then combining functions to form the final asm/ar1cs.
-pub struct Compiler<T: PolynomialRingElement> {
+pub struct Compiler<E: FieldScalar> {
     pub print_asm: bool,
-    state: CompilerState<T>,
+    state: CompilerState<E>,
     extensions: Vec<String>,
-    target: String,
 }
 
-impl<T: PolynomialRingElement> Compiler<T> {
+impl<E: FieldScalar> Compiler<E> {
     pub fn new(config: &Config) -> Result<Self> {
         let mut compiler = Compiler {
             print_asm: false,
             state: CompilerState::new(),
             extensions: config.extension_priorities.clone(),
-            target: config.target.clone(),
         };
         if let Err(e) = compiler.include_many(&config.include_paths) {
             return log::error!(&format!("Failed to include path: {:?}", e));
@@ -104,7 +94,7 @@ impl<T: PolynomialRingElement> Compiler<T> {
         if metadata.is_file() {
             let ext = path.extension();
             if ext.is_none() {
-                anyhow::bail!("Failed to get extension for path: {:?}", path)
+                return Ok(());
             }
             let ext = ext.unwrap();
             if !self.extensions.contains(&ext.to_string()) {
@@ -233,20 +223,8 @@ Path 2: {:?}",
                         self.state.is_fn_ash.insert(fn_name.clone(), true);
                         self.state.fn_to_ast.insert(fn_name, parser.ast);
                     }
-                    "tasm" => {
-                        let parser = AsmParser::parse(&text, &fn_name)?;
-                        self.state.fn_to_ast.insert(fn_name.clone(), vec![]);
-                        let mut call_no_return = parser.call_type.clone();
-                        call_no_return.return_type = None;
-                        self.state
-                            .fn_return_types
-                            .insert(call_no_return.clone(), parser.call_type.clone());
-                        self.state
-                            .compiled_fn
-                            .insert(call_no_return, parser.asm.clone());
-                    }
                     "ar1cs" => {
-                        let parser: R1csParser<T> = R1csParser::new(&text)?;
+                        let parser: R1csParser<E> = R1csParser::new(&text)?;
                         self.state.fn_to_ast.insert(fn_name.clone(), vec![]);
                         self.state.fn_to_r1cs_parser.insert(fn_name.clone(), parser);
                     }
@@ -256,106 +234,47 @@ Path 2: {:?}",
                 }
             }
         }
-        match self.target.as_str() {
-            "r1cs" => {
-                use crate::r1cs::vm::VM;
-                let mut vm: VM<T> = VM::new(&mut self.state);
-                // build constraints from the AST
-                vm.eval_ast(parser.ast)?;
-                let mut final_constraints: Vec<R1csConstraint<T::F>> = Vec::new();
-                final_constraints.append(
-                    &mut vm
-                        .constraints
-                        .iter()
-                        .filter(|v| v.symbolic)
-                        .cloned()
-                        .collect::<Vec<R1csConstraint<T::F>>>()
-                        .to_vec(),
-                );
-                final_constraints.append(
-                    &mut vm
-                        .constraints
-                        .iter()
-                        .filter(|v| !v.symbolic)
-                        .cloned()
-                        .collect::<Vec<R1csConstraint<T::F>>>()
-                        .to_vec(),
-                );
-                let ar1cs_src = [
-                    vec![
-                        format!("# {}", parser.entry_fn_name),
-                        format!("# Compiled at {}", crate::time::now()),
-                        format!("# Compiled for {}", T::name_str()),
-                        format!("#"),
-                    ],
-                    final_constraints
-                        .iter()
-                        .map(|v| v.to_string())
-                        .collect::<Vec<String>>(),
-                ]
-                .concat()
-                .join("\n");
-                if self.print_asm {
-                    // prints the raw constraints
-                    println!("{ar1cs_src}");
-                }
-                Ok(ar1cs_src)
-            }
-            "tasm" => {
-                use crate::tasm::vm::VM;
-                // step 1: compile the entrypoint to assembly
-                let mut vm: VM<T> = VM::new(&mut self.state);
-                vm.eval_ast(parser.ast, vec![], None)?;
-                let mut asm = vm.asm.clone();
-                asm.push("halt".to_string());
-
-                // step 2: add functions to file
-                for (fn_call, fn_asm) in &self.state.compiled_fn {
-                    asm.push("\n".to_string());
-                    asm.push(format!(
-                        "{}: // {}",
-                        fn_call.typed_name(),
-                        self.state.fn_to_path.get(&fn_call.name).unwrap()
-                    ));
-                    asm.append(&mut fn_asm.clone());
-                }
-
-                // step 3: add blocks to file
-                for v in self.state.block_fn_asm.iter() {
-                    let mut block_asm = v.clone();
-                    asm.push("\n".to_string());
-                    asm.append(&mut block_asm);
-                }
-                asm.push("\n".to_string());
-
-                // trivial optimizations
-                let mut final_asm = vec![];
-                final_asm.push(asm[0].clone());
-                for x in 1..asm.len() {
-                    let last = &asm[x - 1];
-                    let curr = &asm[x];
-                    if last == "push 0" && curr == "add" {
-                        final_asm.pop();
-                        continue;
-                    }
-                    if last == "push 1" && curr == "mul" {
-                        final_asm.pop();
-                        continue;
-                    }
-                    final_asm.push(asm[x].clone());
-                }
-
-                if self.print_asm {
-                    // prints the assembly
-                    for l in &final_asm {
-                        println!("{}", l);
-                    }
-                }
-                Ok(final_asm.clone().join("\n"))
-            }
-            _ => {
-                log::error!(&format!("unexpected target: {}", self.target))
-            }
+        use crate::r1cs::vm::VM;
+        let mut vm: VM<E> = VM::new(&mut self.state);
+        // build constraints from the AST
+        vm.eval_ast(parser.ast)?;
+        let mut final_constraints: Vec<R1csConstraint<E>> = Vec::new();
+        final_constraints.append(
+            &mut vm
+                .constraints
+                .iter()
+                .filter(|v| v.symbolic)
+                .cloned()
+                .collect::<Vec<R1csConstraint<E>>>()
+                .to_vec(),
+        );
+        final_constraints.append(
+            &mut vm
+                .constraints
+                .iter()
+                .filter(|v| !v.symbolic)
+                .cloned()
+                .collect::<Vec<R1csConstraint<E>>>()
+                .to_vec(),
+        );
+        let ar1cs_src = [
+            vec![
+                format!("# {}", parser.entry_fn_name),
+                format!("# Compiled at {}", crate::time::now()),
+                format!("# Compiled for {}", E::Q),
+                format!("#"),
+            ],
+            final_constraints
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<String>>(),
+        ]
+        .concat()
+        .join("\n");
+        if self.print_asm {
+            // prints the raw constraints
+            println!("{ar1cs_src}");
         }
+        Ok(ar1cs_src)
     }
 }

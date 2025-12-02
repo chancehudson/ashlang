@@ -1,7 +1,0 @@
-(_, _) -> _
-
-eq
-assert
-push 0
-
-return

@@ -1,5 +1,0 @@
-() -> _
-
-read_io 1
-
-return

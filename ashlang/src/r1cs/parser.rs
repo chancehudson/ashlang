@@ -1,15 +1,17 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
+use anyhow::anyhow;
+use anyhow::Result;
+use lettuce::FieldScalar;
+use lettuce::R1CS;
+use pest::Parser;
+use pest_derive::Parser;
+
 use super::constraint::string_to_index;
 use super::constraint::R1csConstraint;
 use super::constraint::SymbolicOp;
 use crate::log;
-use anyhow::anyhow;
-use anyhow::Result;
-use pest::Parser;
-use pest_derive::Parser;
-use ring_math::PolynomialRingElement;
 
 #[derive(Parser)]
 #[grammar = "r1cs/r1cs_grammar.pest"] // relative to project `src`
@@ -17,8 +19,9 @@ pub struct R1csPestParser;
 
 /// A parser for [ar1cs](https://github.com/chancehudson/ashlang/tree/main/ashlang/src/r1cs#r1cs-compile-target)
 /// source files.
-pub struct R1csParser<T: PolynomialRingElement> {
-    pub constraints: Vec<R1csConstraint<T::F>>,
+#[derive(Clone)]
+pub struct R1csParser<E: FieldScalar> {
+    pub constraints: Vec<R1csConstraint<E>>,
     pub arg_name_index: HashMap<String, usize>,
     pub arg_names: Vec<String>,
     pub return_name_index: HashMap<String, usize>,
@@ -26,7 +29,7 @@ pub struct R1csParser<T: PolynomialRingElement> {
     pub is_function: bool,
 }
 
-impl<T: PolynomialRingElement> R1csParser<T> {
+impl<E: FieldScalar> R1csParser<E> {
     /// Return the number of variables in the witness based
     /// on the number of variable indices that are constrained.
     pub fn var_count(&self) -> usize {
@@ -163,11 +166,12 @@ impl<T: PolynomialRingElement> R1csParser<T> {
         Ok(out)
     }
 
-    pub fn parse_inner(&mut self, p: pest::iterators::Pair<Rule>) -> Result<Vec<(T::F, usize)>> {
+    pub fn parse_inner(&mut self, p: pest::iterators::Pair<Rule>) -> Result<Vec<(E, usize)>> {
         let mut pair = p.into_inner();
         let mut out_terms = Vec::new();
         while let Some(v) = pair.next() {
             let coef = v.as_str();
+            let coef_val = u128::from_str(coef)?;
             let var_index = pair.next().unwrap().as_str();
             if self.is_function {
                 // restrict the signals that may be accessed by literal
@@ -179,15 +183,15 @@ impl<T: PolynomialRingElement> R1csParser<T> {
                 }
                 if let Some(v) = self.arg_name_index.get(var_index) {
                     // if signal is a variable
-                    out_terms.push((T::F::from_str(coef)?, *v));
+                    out_terms.push((E::from(coef_val), *v));
                 } else if let Some(v) = self.return_name_index.get(var_index) {
-                    out_terms.push((T::F::from_str(coef)?, *v));
+                    out_terms.push((E::from(coef_val), *v));
                 } else {
                     // if coef is a literal
-                    out_terms.push((T::F::from_str(coef)?, string_to_index(var_index)));
+                    out_terms.push((E::from(coef_val), string_to_index(var_index)));
                 }
             } else {
-                out_terms.push((T::F::from_str(coef)?, string_to_index(var_index)));
+                out_terms.push((E::from(coef_val), string_to_index(var_index)));
             }
         }
         Ok(out_terms)
@@ -197,7 +201,7 @@ impl<T: PolynomialRingElement> R1csParser<T> {
         &self,
         index_start: usize,
         mut args: Vec<usize>,
-    ) -> Result<Vec<R1csConstraint<T::F>>> {
+    ) -> Result<Vec<R1csConstraint<E>>> {
         // map local signal indices to caller indices
         let mut signal_map: HashMap<usize, usize> = HashMap::new();
         // push the 1 signal to the front of the arg list
@@ -254,5 +258,24 @@ impl<T: PolynomialRingElement> R1csParser<T> {
                 Ok(new_constraint)
             })
             .collect::<Result<Vec<_>>>()
+    }
+
+    pub fn into_r1cs(&self) -> R1CS<E> {
+        let mut r1cs = R1CS::<E>::identity(self.constraints.len(), self.var_count());
+        for (i, constraint) in self.constraints.iter().enumerate() {
+            for (coef, wtns_i) in &constraint.a {
+                assert!(r1cs.a[i][*wtns_i].is_zero());
+                r1cs.a[i][*wtns_i] = *coef;
+            }
+            for (coef, wtns_i) in &constraint.b {
+                assert!(r1cs.b[i][*wtns_i].is_zero());
+                r1cs.b[i][*wtns_i] = *coef;
+            }
+            for (coef, wtns_i) in &constraint.c {
+                assert!(r1cs.c[i][*wtns_i].is_zero());
+                r1cs.c[i][*wtns_i] = *coef;
+            }
+        }
+        r1cs
     }
 }

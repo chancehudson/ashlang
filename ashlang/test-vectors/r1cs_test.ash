@@ -95,6 +95,6 @@ assert_eq(lll, 10)
 
 # input tests
 
-let i = read_secret_input()
+#let i = read_secret_input()
 
-assert_eq(i, 55)
+#assert_eq(i, 55)

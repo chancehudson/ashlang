@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use ring_math::PolynomialRingElement;
-use scalarff::FieldElement;
+use lettuce::*;
 
 use crate::r1cs::parser::R1csParser;
 
@@ -12,39 +11,39 @@ use super::constraint::SymbolicOp;
 ///
 /// `outputs`: a list of indices of variables that should be publicly revealed
 /// `variables`: values of the variables in the computation
-pub struct Witness<T: FieldElement> {
+#[derive(Clone)]
+pub struct Witness<E: FieldScalar> {
     pub outputs: Vec<usize>,
-    pub variables: Vec<T>,
+    pub variables: Vec<E>,
 }
 
 /// Verify that a witness satisfies the constraints of an ar1cs source string.
 /// This function handles parsing the ar1cs source string.
-pub fn verify<T: PolynomialRingElement>(r1cs: &str, witness: Witness<T::F>) -> Result<Vec<T::F>> {
+pub fn verify<E: FieldScalar>(r1cs_parser: &R1csParser<E>, witness: Witness<E>) -> Result<Vec<E>> {
     // confirm that the witness is correct
-    let r1cs: R1csParser<T> = R1csParser::new(r1cs)?;
-    let mut vars: HashMap<usize, T::F> = HashMap::new();
+    let mut vars: HashMap<usize, E> = HashMap::new();
     for (i, v) in witness.variables.iter().enumerate() {
         vars.insert(i, v.clone());
     }
 
-    for c in &r1cs.constraints {
+    for c in &r1cs_parser.constraints {
         if c.symbolic {
             continue;
         }
-        let mut a_lc = T::F::zero();
+        let mut a_lc = E::zero();
         for (coef, index) in &c.a {
             a_lc += coef.clone() * vars.get(index).unwrap().clone();
         }
-        let mut b_lc = T::F::zero();
+        let mut b_lc = E::zero();
         for (coef, index) in &c.b {
             b_lc += coef.clone() * vars.get(index).unwrap().clone();
         }
-        let mut c_lc = T::F::zero();
+        let mut c_lc = E::zero();
         for (coef, index) in &c.c {
             c_lc += coef.clone() * vars.get(index).unwrap().clone();
         }
         if a_lc.clone() * b_lc.clone() != c_lc {
-            anyhow::bail!("Constraint failed: {:?}", c)
+            anyhow::bail!("Constraint failed: {:?}", /*c*/ "")
         }
     }
     Ok(witness
@@ -55,14 +54,13 @@ pub fn verify<T: PolynomialRingElement>(r1cs: &str, witness: Witness<T::F>) -> R
 }
 
 /// Take an ar1cs source file and a set of inputs and build a witness.
-pub fn build<T: PolynomialRingElement>(r1cs: &str, inputs: Vec<T>) -> Result<Witness<T::F>> {
-    let r1cs: R1csParser<T> = R1csParser::new(r1cs)?;
-    let mut vars: HashMap<usize, T::F> = HashMap::new();
+pub fn build<E: FieldScalar>(r1cs_parser: R1csParser<E>, inputs: Vec<E>) -> Result<Witness<E>> {
+    let mut vars: HashMap<usize, E> = HashMap::new();
     let mut outputs = vec![];
     let mut input_counter = 0_usize;
-    vars.insert(0, T::F::one());
+    vars.insert(0, E::one());
     // build the witness
-    for c in &r1cs.constraints {
+    for c in &r1cs_parser.constraints {
         if !c.symbolic {
             continue;
         }
@@ -75,19 +73,7 @@ pub fn build<T: PolynomialRingElement>(r1cs: &str, inputs: Vec<T>) -> Result<Wit
                         "the number of inputs must match the number of input constraints"
                     );
                 }
-                vars.insert(c.out_i.unwrap(), inputs[input_counter].to_scalar()?);
-                input_counter += 1;
-            }
-            SymbolicOp::PublicInput => {
-                // we'll take the relevant signal and mark it as public
-                if input_counter >= inputs.len() {
-                    return crate::log::error!(
-                        "not enough inputs supplied to fulfill symbolic constraints",
-                        "the number of inputs must match the number of input constraints"
-                    );
-                }
-                outputs.push(c.out_i.unwrap());
-                vars.insert(c.out_i.unwrap(), inputs[input_counter].to_scalar()?);
+                vars.insert(c.out_i.unwrap(), inputs[input_counter]);
                 input_counter += 1;
             }
             SymbolicOp::Output => {
