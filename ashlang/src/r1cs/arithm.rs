@@ -5,13 +5,13 @@ use lettuce::*;
 
 use super::*;
 
-/// R1CS arithmetizer for ashlang. Converts ashlang programs
-/// to `Matrix<E>` and `Vector<E>`.
+/// R1CS arithmetizer for ashlang. Takes an ar1cs and some inputs and builds
+/// a witness `Vector<E>` and `R1CS<E>`.
 #[derive(Clone)]
 pub struct Arithmetizer<E: FieldScalar> {
     pub wtns: Option<Vector<E>>,
     pub r1cs: R1CS<E>,
-    pub parser: R1csParser<E>,
+    parser: R1csParser<E>,
     /// Witness indices that are public. Used to construct a vector mask.
     pub output_indices: Vec<usize>,
 }
@@ -62,10 +62,7 @@ impl<E: FieldScalar> Arithmetizer<E> {
         wtns[0] = E::one();
 
         // build the witness
-        for c in &self.parser.constraints {
-            if !c.symbolic {
-                continue;
-            }
+        for c in self.parser.symbolic_constraints() {
             let symbolic_wtns_i = c.out_i.expect("symbolic wtns should exist");
             match c.symbolic_op.as_ref().unwrap() {
                 SymbolicOp::Output => {

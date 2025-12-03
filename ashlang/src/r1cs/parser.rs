@@ -12,21 +12,53 @@ use crate::log;
 
 #[derive(Parser)]
 #[grammar = "r1cs/r1cs_grammar.pest"] // relative to project `src`
-pub struct R1csPestParser;
+pub(crate) struct R1csPestParser;
 
 /// A parser for [ar1cs](https://github.com/chancehudson/ashlang/tree/main/ashlang/src/r1cs#r1cs-compile-target)
 /// source files.
+///
 #[derive(Clone)]
-pub struct R1csParser<E: FieldScalar> {
-    pub constraints: Vec<R1csConstraint<E>>,
-    pub arg_name_index: HashMap<String, usize>,
-    pub arg_names: Vec<String>,
+pub(crate) struct R1csParser<E: FieldScalar> {
+    constraints: Vec<R1csConstraint<E>>,
+    arg_name_index: HashMap<String, usize>,
+    arg_names: Vec<String>,
+    // TODO: these shouldn't be pub
     pub return_name_index: HashMap<String, usize>,
     pub return_names: Vec<String>,
-    pub is_function: bool,
+    is_function: bool,
 }
 
 impl<E: FieldScalar> R1csParser<E> {
+    pub fn symbolic_constraints(&self) -> impl Iterator<Item = &R1csConstraint<E>> {
+        self.constraints
+            .iter()
+            .filter(|constraint| constraint.symbolic)
+    }
+
+    pub fn into_r1cs(&self) -> R1CS<E> {
+        let constraints = self
+            .constraints
+            .iter()
+            .filter(|v| !v.symbolic)
+            .collect::<Vec<_>>();
+        let mut r1cs = R1CS::<E>::identity(constraints.len(), self.wtns_len());
+        for (i, constraint) in constraints.iter().enumerate() {
+            for (coef, wtns_i) in &constraint.a {
+                assert!(r1cs.a[i][*wtns_i].is_zero());
+                r1cs.a[i][*wtns_i] = *coef;
+            }
+            for (coef, wtns_i) in &constraint.b {
+                assert!(r1cs.b[i][*wtns_i].is_zero());
+                r1cs.b[i][*wtns_i] = *coef;
+            }
+            for (coef, wtns_i) in &constraint.c {
+                assert!(r1cs.c[i][*wtns_i].is_zero());
+                r1cs.c[i][*wtns_i] = *coef;
+            }
+        }
+        r1cs
+    }
+
     pub fn wtns_len(&self) -> usize {
         let mut max_i = 0usize;
         for constraint in &self.constraints {
@@ -248,29 +280,5 @@ impl<E: FieldScalar> R1csParser<E> {
                 Ok(new_constraint)
             })
             .collect::<Result<Vec<_>>>()
-    }
-
-    pub fn into_r1cs(&self) -> R1CS<E> {
-        let constraints = self
-            .constraints
-            .iter()
-            .filter(|v| !v.symbolic)
-            .collect::<Vec<_>>();
-        let mut r1cs = R1CS::<E>::identity(constraints.len(), self.wtns_len());
-        for (i, constraint) in constraints.iter().enumerate() {
-            for (coef, wtns_i) in &constraint.a {
-                assert!(r1cs.a[i][*wtns_i].is_zero());
-                r1cs.a[i][*wtns_i] = *coef;
-            }
-            for (coef, wtns_i) in &constraint.b {
-                assert!(r1cs.b[i][*wtns_i].is_zero());
-                r1cs.b[i][*wtns_i] = *coef;
-            }
-            for (coef, wtns_i) in &constraint.c {
-                assert!(r1cs.c[i][*wtns_i].is_zero());
-                r1cs.c[i][*wtns_i] = *coef;
-            }
-        }
-        r1cs
     }
 }
