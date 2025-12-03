@@ -16,7 +16,7 @@ let state[T]
 state[0] = 0 # vectors are not zeroed by default
 let i = 1
 loop T {
-  state[i] = inputs[i]
+  state[i] = inputs[i - 1]
   i = i + 1
 }
 

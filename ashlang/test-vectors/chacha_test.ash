@@ -3,10 +3,8 @@ let b = 2
 
 # let state[16][1] # test
 
-loop 1600 {
-  i = i + 1
-  let v = 2 + i
-  i = i * v
-}
+let k = [99, 1904, 12940]
+k = pow5(k) 
 
-#chacha(state, 0, 0, state)
+
+

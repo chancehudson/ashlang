@@ -175,7 +175,9 @@ Path 2: {:?}",
         } else {
             log::error!(
                 &format!("function is not present in sources: {fn_name}"),
-                &format!("unable to find a file {fn_name}.ash in your include paths after searching recursively\n\nmake sure you have specified an include path containing this file")
+                &format!(
+                    "unable to find a file {fn_name}.ash in your include paths after searching recursively\n\nmake sure you have specified an include path containing this file"
+                )
             )
         }
     }

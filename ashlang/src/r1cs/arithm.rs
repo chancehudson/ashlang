@@ -103,7 +103,7 @@ impl<E: FieldScalar> Arithmetizer<E> {
         assert_eq!(
             wtns.len(),
             written_wtns_indices.len(),
-            "not all witness entries were written!"
+            "not all witness entries were written! check arrays, matrices and inputs"
         );
         if input_counter != input.len() {
             return crate::log::error!(&format!(

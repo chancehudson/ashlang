@@ -278,6 +278,126 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         }
                     }
                 }
+                AstNode::EmptyVecDef(name, indices) => {
+                    // initialize a vector of witness elements to zero
+                    self.compiler_state
+                        .messages
+                        .insert(0, "vector init".to_string());
+                    assert!(!indices.is_empty());
+                    let v = if indices.len() == 1 {
+                        VarType::Vector(Vector::new(indices[0]))
+                    } else if indices.len() == 2 {
+                        VarType::Matrix(Matrix::zero(indices[0], indices[1]))
+                    } else {
+                        anyhow::bail!(
+                            "ashlang: too many indices on variable. Only 2 dimensions are supported."
+                        )
+                    };
+                    let len = v.len();
+                    let var = Var {
+                        index: Some(self.var_index),
+                        location: VarLocation::Constraint,
+                        value: v,
+                    };
+                    self.var_index += len;
+                    self.vars.insert(name, var);
+                }
+                AstNode::AssignVec(name, indices, expr) => {
+                    // this may be a matrix or a vector
+                    let rhs = self.eval(&expr)?;
+                    let indices = indices
+                        .into_iter()
+                        .map(|v| self.eval(&v))
+                        .map(|v| {
+                            let v = v?;
+                            match v.location {
+                                VarLocation::Constraint => {
+                                    anyhow::bail!("ashlang: variable index must be static");
+                                }
+                                VarLocation::Static => match v.value {
+                                    VarType::Scalar(v) => {
+                                        // TODO
+                                        let v: usize = v.into() as usize;
+                                        return Ok(v);
+                                    }
+                                    _ => {
+                                        anyhow::bail!("ashlang: variable index must be scalar");
+                                    }
+                                },
+                            }
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let lhs = self.vars.get(&name).unwrap();
+                    match (&lhs.value, indices.len()) {
+                        (VarType::Vector(v), 0) => {
+                            assert!(
+                                matches!(rhs.value, VarType::Vector(_)),
+                                "cannot assign non-vector to vector"
+                            );
+                            assert!(
+                                rhs.value.len() == lhs.value.len(),
+                                "cannot assign vector of different length"
+                            );
+
+                            match rhs.location {
+                                VarLocation::Constraint => {
+                                    let lhs_start_i = lhs.index.unwrap();
+                                    let rhs_start_i = rhs.index.unwrap();
+                                    for i in 0..lhs.value.len() {
+                                        self.assignment_constraint(
+                                            lhs_start_i + i,
+                                            rhs_start_i + i,
+                                        );
+                                    }
+                                }
+                                VarLocation::Static => {
+                                    unimplemented!()
+                                }
+                            }
+                        }
+                        (VarType::Vector(v), 1) => match rhs.location {
+                            VarLocation::Constraint => {
+                                assert!(
+                                    matches!(rhs.value, VarType::Scalar(_)),
+                                    "cannot assign non-scalar to vector entry"
+                                );
+                                let lhs_start_i = lhs.index.unwrap();
+                                let rhs_start_i = rhs.index.unwrap();
+                                let index = indices[0];
+                                self.assignment_constraint(
+                                    lhs_start_i + index,
+                                    rhs_start_i + index,
+                                );
+                            }
+                            VarLocation::Static => {}
+                        },
+                        (VarType::Matrix(v), 2) => {
+                            let row_i = indices[0];
+                            let col_i = indices[1];
+                            let i = row_i * v.width() + col_i;
+                            match (rhs.value, &rhs.location) {
+                                (VarType::Scalar(v), VarLocation::Constraint) => {
+                                    self.assignment_constraint(
+                                        lhs.index.unwrap() + i,
+                                        rhs.index.unwrap() + i,
+                                    );
+                                }
+                                (VarType::Scalar(v), VarLocation::Static) => {
+                                    self.static_assignment_constraint(lhs.index.unwrap() + 1, v);
+                                }
+                                _ => {
+                                    anyhow::bail!("ashlang: matrix unsupported rhs assignment");
+                                }
+                            }
+                        }
+                        _ => {
+                            anyhow::bail!("ashlang: bad assignment");
+                        }
+                    }
+                    self.compiler_state
+                        .messages
+                        .insert(0, "assigning vector index".to_string());
+                }
                 _ => {
                     return log::error!(&format!("ast node not supported for r1cs: {:?}", v));
                 }
@@ -329,6 +449,38 @@ impl<'a, T: FieldScalar> VM<'a, T> {
             _ => unreachable!(),
         }
         Ok(())
+    }
+
+    fn assignment_constraint(&mut self, lhs_i: usize, rhs_i: usize) {
+        self.constraints.push(R1csConstraint::new(
+            vec![(T::one(), lhs_i)],
+            vec![(T::one(), 0)],
+            vec![(T::one(), rhs_i)],
+            &format!("equality constraint {} = {}", lhs_i, rhs_i),
+        ));
+        self.constraints.push(R1csConstraint::symbolic(
+            rhs_i,
+            vec![(T::one(), 0)],
+            vec![(T::one(), lhs_i)],
+            SymbolicOp::Mul,
+            format!("scalar equality assignment {} -> {}", lhs_i, rhs_i),
+        ));
+    }
+
+    fn static_assignment_constraint(&mut self, lhs_i: usize, rhs_v: T) {
+        self.constraints.push(R1csConstraint::new(
+            vec![(rhs_v, 0)],
+            vec![(T::one(), 0)],
+            vec![(T::one(), lhs_i)],
+            &format!("static assignment ({}) <- {}", lhs_i, rhs_v),
+        ));
+        self.constraints.push(R1csConstraint::symbolic(
+            lhs_i,
+            vec![(rhs_v, 0)],
+            vec![(T::one(), 0)],
+            SymbolicOp::Mul,
+            format!("static assignment ({}) <- {}", lhs_i, rhs_v),
+        ));
     }
 
     /// Used for constants and statics.
@@ -518,9 +670,9 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         }
                     }
                     VarType::Matrix(val) => {
-                        assert_ne!(new_indices.len(), 0);
-                        assert!(new_indices.len() <= 2);
-                        if new_indices.len() == 1 {
+                        if new_indices.is_empty() {
+                            (0, VarType::Matrix(val.clone()))
+                        } else if new_indices.len() == 1 {
                             (
                                 val.width() * new_indices[0] as usize,
                                 VarType::Vector(val[new_indices[0] as usize].clone()),
@@ -610,6 +762,11 @@ impl<'a, T: FieldScalar> VM<'a, T> {
     }
 
     fn eval_numop_signal_static(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Result<Var<T>> {
+        assert_ne!(
+            matches!(lv.location, VarLocation::Constraint),
+            matches!(rv.location, VarLocation::Constraint),
+            "ashlang: numop should be mixed"
+        );
         let static_v;
         let signal_v;
         if lv.location == VarLocation::Static {
@@ -837,6 +994,15 @@ impl<'a, T: FieldScalar> VM<'a, T> {
     }
 
     fn eval_numop_signals(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Result<Var<T>> {
+        assert!(
+            matches!(lv.location, VarLocation::Constraint),
+            "non-constraint lv"
+        );
+        assert!(
+            matches!(rv.location, VarLocation::Constraint),
+            "non-constraint rv"
+        );
+
         // take a lhs and rhs of variable size and apply
         // an operation to each element
         Ok(match op {

@@ -229,7 +229,7 @@ dependencies = [
  "lettuce",
  "pest",
  "pest_derive",
- "ring-math 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ring-math",
  "scalarff",
  "serde",
  "zkpo",
@@ -970,16 +970,6 @@ name = "regex-syntax"
 version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
-
-[[package]]
-name = "ring-math"
-version = "0.4.0"
-dependencies = [
- "anyhow",
- "rand 0.8.5",
- "scalarff",
- "serde",
-]
 
 [[package]]
 name = "ring-math"
