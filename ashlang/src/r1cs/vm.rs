@@ -1,12 +1,8 @@
 use std::collections::HashMap;
-use std::ops::Add;
-use std::ops::Mul;
-use std::ops::Sub;
 use std::str::FromStr;
 
 use anyhow::Result;
 use lettuce::FieldScalar;
-use lettuce::Matrix;
 use lettuce::Vector;
 
 use crate::compiler::CompilerState;
@@ -24,99 +20,24 @@ pub enum VarLocation {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub enum VarType<T: FieldScalar> {
-    Scalar(T),
-    Vector(Vector<T>),
-    Matrix(Matrix<T>),
-}
-
-impl<T: FieldScalar> VarType<T> {
-    pub fn len(&self) -> usize {
-        match self {
-            Self::Scalar(_) => 1,
-            Self::Vector(v) => v.len(),
-            Self::Matrix(v) => v.height() * v.width(),
-        }
-    }
-
-    pub fn iter(&self) -> Vec<T> {
-        match self {
-            Self::Scalar(v) => vec![*v],
-            Self::Vector(v) => v.iter().copied().collect::<Vec<_>>(),
-            Self::Matrix(v) => v
-                .iter()
-                .flat_map(|vec| vec.iter())
-                .copied()
-                .collect::<Vec<_>>(),
-        }
-    }
-
-    pub fn inverse(&self) -> Self {
-        match self {
-            Self::Scalar(v) => Self::Scalar(v.inverse()),
-            Self::Vector(v) => Self::Vector(v.iter().map(|v| v.inverse()).collect::<Vector<_>>()),
-            Self::Matrix(v) => Self::Matrix(Matrix::from_iter(
-                v.iter()
-                    .map(|vec| vec.iter().map(|v| v.inverse()).collect::<Vector<_>>()),
-            )),
-        }
-    }
-}
-
-impl<T: FieldScalar> Add for VarType<T> {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::Scalar(lhs), Self::Scalar(rhs)) => Self::Scalar(lhs + rhs),
-            (Self::Scalar(lhs), Self::Vector(rhs)) => Self::Vector(rhs + lhs),
-            (Self::Scalar(lhs), Self::Matrix(rhs)) => unimplemented!(),
-            (Self::Vector(lhs), Self::Scalar(rhs)) => Self::Vector(lhs + rhs),
-            (Self::Vector(lhs), Self::Vector(rhs)) => Self::Vector(lhs + &rhs),
-            (Self::Vector(lhs), Self::Matrix(rhs)) => unimplemented!(),
-            (Self::Matrix(lhs), Self::Scalar(rhs)) => unimplemented!(),
-            (Self::Matrix(lhs), Self::Vector(rhs)) => {
-                unimplemented!()
-            }
-            (Self::Matrix(lhs), Self::Matrix(rhs)) => Self::Matrix(lhs + &rhs),
-        }
-    }
-}
-
-impl<T: FieldScalar> Mul for VarType<T> {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::Scalar(lhs), Self::Scalar(rhs)) => Self::Scalar(lhs * rhs),
-            (Self::Scalar(lhs), Self::Vector(rhs)) => Self::Vector(rhs * lhs),
-            (Self::Scalar(lhs), Self::Matrix(rhs)) => unimplemented!(),
-            (Self::Vector(lhs), Self::Scalar(rhs)) => Self::Vector(lhs * rhs),
-            (Self::Vector(lhs), Self::Vector(rhs)) => Self::Vector(lhs * &rhs),
-            (Self::Vector(lhs), Self::Matrix(rhs)) => unimplemented!(),
-            (Self::Matrix(lhs), Self::Scalar(rhs)) => unimplemented!(),
-            (Self::Matrix(lhs), Self::Vector(rhs)) => {
-                unimplemented!()
-            }
-            (Self::Matrix(lhs), Self::Matrix(rhs)) => Self::Matrix(lhs * &rhs),
-        }
-    }
-}
-
-impl<T: FieldScalar> Sub for VarType<T> {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self::Output {
-        self + match rhs {
-            Self::Scalar(v) => Self::Scalar(T::negone() * v),
-            Self::Vector(v) => Self::Vector(v * T::negone()),
-            Self::Matrix(v) => Self::Matrix(v * T::negone()),
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Debug)]
 pub struct Var<T: FieldScalar> {
     pub index: Option<usize>,
     pub location: VarLocation,
-    pub value: VarType<T>,
+    pub value: Vector<T>,
+}
+
+impl<T: FieldScalar> Var<T> {
+    pub fn scalar_maybe(&self) -> Option<T> {
+        if self.is_scalar() {
+            Some(self.value[0])
+        } else {
+            None
+        }
+    }
+
+    pub fn is_scalar(&self) -> bool {
+        self.value.len() == 1
+    }
 }
 
 /// Instance of an r1cs VM. This struct is responsible for
@@ -212,7 +133,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     } else {
                         // if we get a static variable from the evaluation
                         // we constrain the assigment into a new signal
-                        let new_var = self.static_to_constraint(&v.value)?;
+                        let new_var = self.static_to_constraint(&v)?;
                         self.vars.insert(name, new_var);
                     }
                 }
@@ -261,23 +182,21 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     self.compiler_state
                         .messages
                         .insert(0, "loop condition".to_string());
-                    let v = self.eval(&expr)?;
-                    if v.location != VarLocation::Static {
+                    let var = self.eval(&expr)?;
+                    if var.location != VarLocation::Static {
                         return log::error!("loop condition must be static variable");
                     }
-                    let v = match v.value {
-                        VarType::Scalar(v) => v,
-                        VarType::Vector(_) | VarType::Matrix(_) => {
-                            return log::error!(
-                                "loop condition must be a scalar, received a vector/matrix"
-                            );
-                        }
+                    let loop_count = if let Some(v) = var.scalar_maybe() {
+                        v.into() as usize
+                    } else {
+                        return log::error!(
+                            "loop condition must be a scalar, received a vector/matrix"
+                        );
                     };
                     // track the old variables, delete any variables
                     // created inside the loop body
                     let old_vars = self.vars.clone();
-                    let loop_count = v.into();
-                    let mut i = T::zero().into();
+                    let mut i = T::zero().into() as usize;
                     while i < loop_count {
                         self.compiler_state
                             .messages
@@ -292,130 +211,69 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         }
                     }
                 }
-                AstNode::EmptyVecDef(name, indices) => {
+                AstNode::EmptyVecDef(name, index) => {
                     // initialize a vector of witness elements to zero
                     self.compiler_state
                         .messages
                         .insert(0, "vector init".to_string());
-                    assert!(!indices.is_empty());
-                    let v = if indices.len() == 1 {
-                        VarType::Vector(Vector::new(indices[0]))
-                    } else if indices.len() == 2 {
-                        VarType::Matrix(Matrix::zero(indices[0], indices[1]))
-                    } else {
-                        anyhow::bail!(
-                            "ashlang: too many indices on variable. Only 2 dimensions are supported."
-                        )
+                    let len = self.eval(&index)?;
+                    match len.location {
+                        VarLocation::Constraint => {
+                            anyhow::bail!("ashlang: cannot index vector with witness value")
+                        }
+                        _ => {}
+                    }
+                    let len = match len.scalar_maybe() {
+                        Some(l) => l.into() as usize,
+                        None => anyhow::bail!("ashlang: empty vec def non-scalar"),
                     };
-                    let len = v.len();
                     let var = Var {
                         index: Some(self.var_index),
                         location: VarLocation::Constraint,
-                        value: v,
+                        value: Vector::new(len),
                     };
                     self.var_index += len;
                     self.vars.insert(name, var);
                 }
-                AstNode::AssignVec(name, indices, expr) => {
+                AstNode::AssignVec(name, index_maybe, expr) => {
                     // this may be a matrix or a vector
                     let rhs = self.eval(&expr)?;
-                    let indices = indices
-                        .into_iter()
-                        .map(|v| self.eval(&v))
-                        .map(|v| {
-                            let v = v?;
-                            match v.location {
-                                VarLocation::Constraint => {
-                                    anyhow::bail!("ashlang: variable index must be static");
-                                }
-                                VarLocation::Static => match v.value {
-                                    VarType::Scalar(v) => {
-                                        // TODO
-                                        let v: usize = v.into() as usize;
-                                        return Ok(v);
-                                    }
-                                    _ => {
-                                        anyhow::bail!("ashlang: variable index must be scalar");
-                                    }
-                                },
+                    let index_maybe = if let Some(index_expr) = index_maybe {
+                        let index = self.eval(&index_expr)?;
+                        match (&index.location, index.is_scalar()) {
+                            (VarLocation::Static, true) => {
+                                Some(index.scalar_maybe().unwrap().into() as usize)
                             }
-                        })
-                        .collect::<Result<Vec<_>>>()?;
-                    let lhs = self.vars.get(&name).unwrap();
-                    match (&lhs.value, indices.len()) {
-                        (VarType::Vector(v), 0) => {
-                            assert!(
-                                matches!(rhs.value, VarType::Vector(_)),
-                                "cannot assign non-vector to vector"
-                            );
-                            assert!(
-                                rhs.value.len() == lhs.value.len(),
-                                "cannot assign vector of different length"
-                            );
+                            _ => panic!(),
+                        }
+                    } else {
+                        None
+                    };
 
-                            match rhs.location {
-                                VarLocation::Constraint => {
-                                    let lhs_start_i = lhs.index.unwrap();
-                                    let rhs_start_i = rhs.index.unwrap();
-                                    for i in 0..lhs.value.len() {
-                                        self.assignment_constraint(
-                                            lhs_start_i + i,
-                                            rhs_start_i + i,
-                                        );
-                                    }
-                                }
-                                VarLocation::Static => {
-                                    unimplemented!()
-                                }
+                    let lhs = self.vars.get(&name).unwrap();
+
+                    match (index_maybe, rhs.scalar_maybe()) {
+                        (Some(index), Some(rhs_v)) => {
+                            self.assignment_constraint(
+                                lhs.index.unwrap() + index as usize,
+                                rhs.index.unwrap(),
+                            );
+                        }
+                        (None, None) => {
+                            // vector assignment
+                            assert_eq!(
+                                lhs.value.len(),
+                                rhs.value.len(),
+                                "ashlang: vector assignment failed, dimension mismatch"
+                            );
+                            let lhs_index = lhs.index.unwrap();
+                            let rhs_index = rhs.index.unwrap();
+                            for i in 0..lhs.value.len() {
+                                self.assignment_constraint(lhs_index + i, rhs_index + i);
                             }
                         }
-                        (VarType::Vector(v), 1) => match rhs.location {
-                            VarLocation::Constraint => {
-                                assert!(
-                                    matches!(rhs.value, VarType::Scalar(_)),
-                                    "cannot assign non-scalar to vector entry"
-                                );
-                                let index = indices[0];
-                                self.assignment_constraint(
-                                    lhs.index.unwrap() + index,
-                                    rhs.index.unwrap(),
-                                );
-                            }
-                            VarLocation::Static => {
-                                assert!(
-                                    matches!(rhs.value, VarType::Scalar(_)),
-                                    "cannot assign non-scalar to vector entry"
-                                );
-                                let index = indices[0];
-                                self.static_assignment_constraint(
-                                    lhs.index.unwrap() + index,
-                                    *rhs.value.iter().first().unwrap(),
-                                );
-                            }
-                        },
-                        (VarType::Matrix(v), 2) => {
-                            let row_i = indices[0];
-                            let col_i = indices[1];
-                            let i = row_i * v.width() + col_i;
-                            match (rhs.value, &rhs.location) {
-                                (VarType::Scalar(v), VarLocation::Constraint) => {
-                                    unimplemented!()
-                                }
-                                (VarType::Scalar(v), VarLocation::Static) => {
-                                    unimplemented!()
-                                }
-                                _ => {
-                                    anyhow::bail!("ashlang: matrix unsupported rhs assignment");
-                                }
-                            }
-                        }
-                        _ => {
-                            anyhow::bail!("ashlang: bad assignment");
-                        }
+                        _ => panic!(),
                     }
-                    self.compiler_state
-                        .messages
-                        .insert(0, "assigning vector index".to_string());
                 }
                 _ => {
                     return log::error!(&format!("ast node not supported for r1cs: {:?}", v));
@@ -528,29 +386,22 @@ impl<'a, T: FieldScalar> VM<'a, T> {
 
     /// Take a static variable and constrain it's current value
     /// into a signal or set of signals
-    fn static_to_constraint(&mut self, var_type: &VarType<T>) -> Result<Var<T>> {
+    fn static_to_constraint(&mut self, var: &Var<T>) -> Result<Var<T>> {
         let index = self.var_index;
-        match var_type {
-            VarType::Scalar(v) => {
-                self.spawn_known_variable(*v);
+        match var.scalar_maybe() {
+            Some(v) => {
+                self.spawn_known_variable(v);
             }
-            VarType::Vector(vec) => {
-                for v in vec {
+            None => {
+                for v in &var.value {
                     self.spawn_known_variable(*v);
-                }
-            }
-            VarType::Matrix(v) => {
-                for vec in v.iter() {
-                    for v in vec {
-                        self.spawn_known_variable(*v);
-                    }
                 }
             }
         }
         Ok(Var {
             index: Some(index),
             location: VarLocation::Constraint,
-            value: var_type.clone(),
+            value: var.value.clone(),
         })
     }
 
@@ -564,28 +415,21 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 Ok(Var {
                     index: None,
                     location: VarLocation::Static,
-                    value: if dimensions.len() == 1 {
-                        VarType::Vector(values.into())
-                    } else {
-                        VarType::Matrix(Matrix::from_iter(
-                            values.chunks(dimensions[1]).map(|v| v.to_vec().into()),
-                        ))
-                    },
+                    value: values.into(),
                 })
             }
             Expr::FnCall(name, is_macro, vars) => {
                 if *is_macro {
-                    if name == "reveal" {
-                        assert_eq!(vars.len(), 1, "reveal macro expected exactly 1 argument");
-                        let v = &vars[0];
-                        let var = self.eval(&v)?;
-
+                    assert_eq!(vars.len(), 1, "reveal macro expected exactly 1 argument");
+                    let v = &vars[0];
+                    let var = self.eval(&v)?;
+                    if name == "write" {
                         match var.location {
                             VarLocation::Static => {
                                 anyhow::bail!("ashlang: refusing to reveal a static value");
                             }
                             VarLocation::Constraint => {
-                                for (i, _v) in var.value.iter().iter().enumerate() {
+                                for (i, _v) in var.value.iter().enumerate() {
                                     self.constraints.push(R1csConstraint::symbolic(
                                         var.index.unwrap() + i,
                                         vec![(T::one(), 0)],
@@ -599,7 +443,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         return Ok(Var {
                             index: None,
                             location: VarLocation::Static,
-                            value: VarType::Scalar(T::zero()),
+                            value: vec![T::zero()].into(),
                         });
                     } else {
                         panic!()
@@ -619,13 +463,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                             if let Some(i) = v.index {
                                 return Ok(i);
                             }
-                            let val = match v.value {
-                                VarType::Matrix(_) | VarType::Vector(_) => {
+                            let val = match v.scalar_maybe() {
+                                Some(v) => v,
+                                None => {
                                     return log::error!(
                                         "cannot pass a vector static to an r1cs function"
                                     );
                                 }
-                                VarType::Scalar(v) => v,
                             };
                             // if we get a static variable we need to
                             // assert equality of it's current value
@@ -647,13 +491,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                             location: VarLocation::Constraint,
                             // TODO: determine a value here
                             // use the symbolic constraint to determine the value
-                            value: VarType::Scalar(0.into()),
+                            value: vec![0.into()].into(),
                         })
                     } else {
                         Ok(Var {
                             index: None,
                             location: VarLocation::Static,
-                            value: VarType::Scalar(1.into()),
+                            value: vec![1.into()].into(),
                         })
                     };
                 }
@@ -675,72 +519,42 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     Ok(Var {
                         index: None,
                         location: VarLocation::Static,
-                        value: VarType::Scalar(1.into()),
+                        value: vec![1.into()].into(),
                     })
                 }
             }
-            Expr::Val(name, indices) => {
-                let mut new_indices: Vec<usize> = vec![];
-                for index_expr in indices {
-                    let v = self.eval(index_expr)?;
-                    if v.value.len() != 1 || v.location != VarLocation::Static {
-                        return log::error!(
-                            "index notation must contain a scalar static expression in: {name}"
-                        );
+            Expr::Val(name, index_maybe) => {
+                let index_maybe = match index_maybe {
+                    Some(index_expr) => {
+                        let v = self.eval(index_expr)?;
+                        if v.value.len() != 1 || v.location != VarLocation::Static {
+                            return log::error!(
+                                "index notation must contain a scalar static expression in: {name}"
+                            );
+                        }
+                        if v.value.len() != 1 {
+                            return log::error!(
+                                "index notation must contain a scalar static expression in: {name}"
+                            );
+                        }
+                        Some(v.value[0].into())
                     }
-                    if v.value.len() != 1 {
-                        return log::error!(
-                            "index notation must contain a scalar static expression in: {name}"
-                        );
-                    }
-                    new_indices.push(v.value.iter()[0].into() as usize);
-                }
+                    None => None,
+                };
                 let v = self.vars.get(name);
                 if v.is_none() {
                     return log::error!(&format!("variable not found: {name}"));
                 }
                 let v = v.unwrap();
-                if new_indices.len() > 2 {
-                    return log::error!("only two dimensional matrices are allowed");
-                }
-                let (offset, val) = match &v.value {
-                    VarType::Scalar(val) => {
-                        assert_eq!(new_indices.len(), 0);
-                        (0, VarType::Scalar(*val))
-                    }
-                    VarType::Vector(val) => {
-                        assert!(new_indices.len() < 2);
-                        if new_indices.len() == 0 {
-                            (0, VarType::Vector(val.clone()))
-                        } else {
-                            (
-                                new_indices[0] as usize,
-                                VarType::Scalar(val[new_indices[0] as usize].clone()),
-                            )
-                        }
-                    }
-                    VarType::Matrix(val) => {
-                        if new_indices.is_empty() {
-                            (0, VarType::Matrix(val.clone()))
-                        } else if new_indices.len() == 1 {
-                            (
-                                val.width() * new_indices[0] as usize,
-                                VarType::Vector(val[new_indices[0] as usize].clone()),
-                            )
-                        } else {
-                            (
-                                val.width() * new_indices[0] as usize + new_indices[1] as usize,
-                                VarType::Scalar(
-                                    val[new_indices[0] as usize][new_indices[1] as usize],
-                                ),
-                            )
-                        }
-                    }
+                let (offset, val) = match (index_maybe, v.scalar_maybe()) {
+                    (None, None) => (0, v.value.clone()),
+                    (Some(index), None) => (index, vec![v.value[index as usize]].into()),
+                    (None, Some(v)) => (0, vec![v].into()),
+                    _ => panic!(""),
                 };
-                // let (matrix, offset) = v.value.retrieve_indices(&new_indices);
                 if let Some(index) = v.index {
                     Ok(Var {
-                        index: Some(index + offset),
+                        index: Some(index + offset as usize),
                         location: VarLocation::Constraint,
                         value: val,
                     })
@@ -756,7 +570,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
             Expr::Lit(val) => Ok(Var {
                 index: None,
                 location: VarLocation::Static,
-                value: VarType::Scalar(T::from(u128::from_str(val)?)),
+                value: vec![T::from(u128::from_str(val)?)].into(),
             }),
             _ => {
                 log::error!("unimplemented expression case")
@@ -791,22 +605,28 @@ impl<'a, T: FieldScalar> VM<'a, T> {
             NumOp::Add => Var {
                 index: None,
                 location: VarLocation::Static,
-                value: lv.value.clone() + rv.value.clone(),
+                value: lv.value.clone() + &rv.value,
             },
             NumOp::Mul => Var {
                 index: None,
                 location: VarLocation::Static,
-                value: lv.value.clone() * rv.value.clone(),
+                value: lv.value.clone() * &rv.value,
             },
             NumOp::Sub => Var {
                 index: None,
                 location: VarLocation::Static,
-                value: lv.value.clone() - rv.value.clone(),
+                value: lv.value.clone() - &rv.value,
             },
             NumOp::Inv => Var {
                 index: None,
                 location: VarLocation::Static,
-                value: lv.value.clone() * rv.value.clone().inverse(),
+                value: lv.value.clone()
+                    * &rv
+                        .value
+                        .clone()
+                        .into_iter()
+                        .map(|v| v.inverse())
+                        .collect::<Vector<_>>(),
             },
         })
     }
@@ -831,13 +651,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 let new_var = Var {
                     index: Some(self.var_index),
                     location: VarLocation::Constraint,
-                    value: lv.value.clone() + rv.value.clone(),
+                    value: lv.value.clone() + &rv.value,
                 };
                 self.var_index += new_var.value.len();
                 for x in 0..new_var.value.len() {
                     let svi = signal_v.index.unwrap() + x;
                     // the coefficient value, not a signal index
-                    let cv = static_v.value.iter()[x].clone();
+                    let cv = static_v.value[x].clone();
                     let ovi = new_var.index.unwrap() + x;
                     // (cv*1 + 1*svi)*(1*1) - (1*ovi) = 0
                     // cv + sv - ov = 0
@@ -863,13 +683,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 let new_var = Var {
                     index: Some(self.var_index),
                     location: VarLocation::Constraint,
-                    value: lv.value.clone() * rv.value.clone(),
+                    value: lv.value.clone() * &rv.value,
                 };
                 self.var_index += new_var.value.len();
                 for x in 0..new_var.value.len() {
                     let svi = signal_v.index.unwrap() + x;
                     // the coefficient value, not a signal index
-                    let cv = static_v.value.iter()[x].clone();
+                    let cv = static_v.value[x].clone();
                     let ovi = new_var.index.unwrap() + x;
                     // (cv*1)*(1*svi) - (1*ovi) = 0
                     // cv * sv - ov = 0
@@ -903,7 +723,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     for x in 0..new_var.value.len() {
                         let lvi = lv.index.unwrap() + x;
                         // the value being subtracted
-                        let cv = rv.value.iter()[x].clone();
+                        let cv = rv.value[x].clone();
                         let ovi = new_var.index.unwrap() + x;
                         // (cv*1 + 1*ovi)*(1*1) - (1*lvi) = 0
                         // (cv + ovi)*1 - lvi = 0
@@ -926,7 +746,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 } else {
                     // subtracting a signal from a static
                     for x in 0..new_var.value.len() {
-                        let lv = lv.value.iter()[x].clone();
+                        let lv = lv.value[x].clone();
                         // the static being subtracted
                         let rvi = rv.index.unwrap() + x;
                         let ovi = new_var.index.unwrap() + x;
@@ -955,7 +775,8 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 let new_var = Var {
                     index: Some(self.var_index),
                     location: VarLocation::Constraint,
-                    value: lv.value.clone() * rv.value.clone().inverse(),
+                    value: lv.value.clone()
+                        * &rv.value.iter().map(|v| v.inverse()).collect::<Vector<_>>(),
                 };
                 self.var_index += new_var.value.len();
                 if lv.location == VarLocation::Constraint {
@@ -964,7 +785,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     for x in 0..new_var.value.len() {
                         let lvi = lv.index.unwrap() + x;
                         // this is a static value
-                        let cv = rv.value.iter()[x].clone();
+                        let cv = rv.value[x].clone();
                         let icv = cv.inverse();
                         let ovi = new_var.index.unwrap() + x;
                         // (icv*lvi)*(1*1) - (1*ovi) = 0
@@ -990,7 +811,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     let inv_var = Var {
                         index: Some(self.var_index),
                         location: VarLocation::Constraint,
-                        value: rv.value.inverse(),
+                        value: rv.value.iter().map(|v| v.inverse()).collect(),
                     };
                     self.var_index += inv_var.value.len();
                     for x in 0..inv_var.value.len() {
@@ -1016,7 +837,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                             ),
                         ]);
                         // now constrain the new_var
-                        let lv = lv.value.iter()[x].clone();
+                        let lv = lv.value[x].clone();
                         let rvi = inv_var.index.unwrap() + x;
                         let ovi = new_var.index.unwrap() + x;
                         // (lv*rvi)*(1*1) - (1*ovi) = 0
@@ -1060,7 +881,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 let new_var = Var {
                     index: Some(self.var_index),
                     location: VarLocation::Constraint,
-                    value: lv.value.clone() + rv.value.clone(),
+                    value: lv.value.clone() + &rv.value,
                 };
                 self.var_index += new_var.value.len();
                 for x in 0..new_var.value.len() {
@@ -1091,7 +912,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 let new_var = Var {
                     index: Some(self.var_index),
                     location: VarLocation::Constraint,
-                    value: lv.value.clone() * rv.value.clone(),
+                    value: lv.value.clone() * &rv.value,
                 };
                 self.var_index += new_var.value.len();
                 for x in 0..new_var.value.len() {
@@ -1122,7 +943,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 let new_var = Var {
                     index: Some(self.var_index),
                     location: VarLocation::Constraint,
-                    value: lv.value.clone() + rv.value.clone() * VarType::Scalar(T::negone()),
+                    value: lv.value.clone() + &(rv.value.clone() * &vec![T::negone()].into()),
                 };
                 self.var_index += new_var.value.len();
                 for x in 0..new_var.value.len() {
@@ -1153,7 +974,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 let inv_var = Var {
                     index: Some(self.var_index),
                     location: VarLocation::Constraint,
-                    value: rv.value.inverse(),
+                    value: rv.value.iter().map(|v| v.inverse()).collect(),
                 };
                 self.var_index += inv_var.value.len();
                 for x in 0..inv_var.value.len() {
@@ -1182,7 +1003,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 let new_var = Var {
                     index: Some(self.var_index),
                     location: VarLocation::Constraint,
-                    value: lv.value.clone() * inv_var.value.clone(),
+                    value: lv.value.clone() * &inv_var.value,
                 };
                 self.var_index += new_var.value.len();
                 for x in 0..inv_var.value.len() {

@@ -27,12 +27,12 @@ pub enum AstNode {
     StaticDef(String, Expr),
     If(Expr, Vec<AstNode>),
     Loop(Expr, Vec<AstNode>),
-    EmptyVecDef(String, Vec<usize>),
+    EmptyVecDef(String, Expr),
 
     // name, indices being assigned
     // and an expression representing the value
     // being assigned
-    AssignVec(String, Vec<Expr>, Expr),
+    AssignVec(String, Option<Box<Expr>>, Expr),
 }
 
 /// An expression in the AST. Many expressions may appear on a single
@@ -42,7 +42,7 @@ pub enum Expr {
     VecVec(Vec<Expr>),
     VecLit(Vec<String>),
     Lit(String),
-    Val(String, Vec<Expr>),
+    Val(String, Option<Box<Expr>>),
     FnCall(String, bool, Vec<Expr>),
     NumOp {
         lhs: Box<Expr>,
@@ -188,23 +188,7 @@ impl AshParser {
                 let next = AshParser::next_or_error(&mut pair)?;
                 let expr = self.build_expr_from_pair(next)?;
                 match expr {
-                    Expr::Val(name, indices) => {
-                        let mut indices_static: Vec<usize> = Vec::new();
-                        for i in indices {
-                            match i {
-                                Expr::Lit(v) => {
-                                    indices_static.push(v.parse::<usize>().unwrap());
-                                }
-                                _ => {
-                                    anyhow::bail!(
-                                        "unexpected expr in var_vec_def: {:?}, expected Lit",
-                                        i
-                                    )
-                                }
-                            }
-                        }
-                        Ok(EmptyVecDef(name, indices_static))
-                    }
+                    Expr::Val(name, index_maybe) => Ok(EmptyVecDef(name, *index_maybe.unwrap())),
                     _ => {
                         anyhow::bail!("unexpected expr in var_vec_def: {:?}, expected Val", expr)
                     }
@@ -229,7 +213,6 @@ impl AshParser {
                 Ok(Loop(iter_count_expr, block_ast))
             }
             Rule::function_call => Ok(ExprUnassigned(self.build_expr_from_pair(pair)?)),
-            Rule::macro_function_call => Ok(ExprUnassigned(self.build_expr_from_pair(pair)?)),
             Rule::var_def => {
                 // get vardef
                 let mut pair = pair.into_inner();
@@ -310,11 +293,12 @@ impl AshParser {
             Rule::var_indexed => {
                 let mut pair = pair.into_inner();
                 let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
-                let mut indices: Vec<Expr> = Vec::new();
-                for v in pair {
-                    indices.push(self.build_expr_from_pair(v)?);
-                }
-                Ok(Expr::Val(name, indices))
+                let index_maybe = if let Some(next) = pair.next() {
+                    Some(self.build_expr_from_pair(next)?.into())
+                } else {
+                    None
+                };
+                Ok(Expr::Val(name, index_maybe))
             }
             Rule::literal_dec => Ok(Expr::Lit(pair.as_str().to_string())),
             Rule::vec => {
@@ -349,33 +333,21 @@ impl AshParser {
                 self.mark_fn_call(fn_name.clone());
                 Ok(Expr::FnCall(fn_name, false, vars))
             }
-            Rule::macro_function_call => {
-                let mut pair = pair.into_inner();
-                let next = AshParser::next_or_error(&mut pair)?;
-                let fn_name = next.as_str().to_string();
-                let arg_pair = AshParser::next_or_error(&mut pair)?.into_inner();
-                let mut vars: Vec<Expr> = Vec::new();
-                for v in arg_pair {
-                    vars.push(self.build_expr_from_pair(v)?);
-                }
-                // self.mark_fn_call(fn_name.clone());
-                Ok(Expr::FnCall(fn_name, true, vars))
-            }
             Rule::atom => {
                 let mut pair = pair.into_inner();
                 let n = AshParser::next_or_error(&mut pair)?;
                 match n.as_rule() {
                     Rule::function_call => Ok(self.build_expr_from_pair(n)?),
-                    Rule::macro_function_call => Ok(self.build_expr_from_pair(n)?),
-                    Rule::varname => Ok(Expr::Val(n.as_str().to_string(), vec![])),
+                    Rule::varname => Ok(Expr::Val(n.as_str().to_string(), None)),
                     Rule::var_indexed => {
                         let mut pair = n.into_inner();
                         let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
-                        let mut indices: Vec<Expr> = Vec::new();
-                        for v in pair {
-                            indices.push(self.build_expr_from_pair(v)?);
-                        }
-                        Ok(Expr::Val(name, indices))
+                        let index_maybe = if let Some(next) = pair.next() {
+                            Some(self.build_expr_from_pair(next)?.into())
+                        } else {
+                            None
+                        };
+                        Ok(Expr::Val(name, index_maybe))
                     }
                     Rule::literal_dec => Ok(Expr::Lit(n.as_str().to_string())),
                     _ => anyhow::bail!("invalid atom"),

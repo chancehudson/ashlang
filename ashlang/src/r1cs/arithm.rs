@@ -1,4 +1,4 @@
-use std::{collections::HashSet, panic};
+use std::collections::HashSet;
 
 use anyhow::Result;
 use lettuce::*;
@@ -15,6 +15,7 @@ pub struct Arithmetizer<E: FieldScalar> {
     /// Witness indices that are public. Used to construct a vector mask.
     pub output_indices: Vec<usize>,
 }
+
 impl<E: FieldScalar> Arithmetizer<E> {
     pub fn new(ar1cs_src: &str) -> Result<Self> {
         let parser = R1csParser::new(ar1cs_src)?;

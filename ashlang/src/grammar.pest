@@ -8,7 +8,7 @@
 program = _{ SOI ~ "\n"* ~ (fn_header ~ "\n")? ~ "\n"* ~ (stmt ~ "\n"+)* ~ (return_stmt ~ "\n"?)? ~ "\n"* ~ EOI }
 
 fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
-stmt      = { var_def | static_def | if_stmt | macro_function_call | function_call | loop_stmt | var_index_assign | var_vec_def }
+stmt      = { var_def | static_def | if_stmt | function_call | loop_stmt | var_index_assign | var_vec_def }
 
 expr        = { atom ~ (op ~ atom)* }
 return_stmt = { "return " ~ expr }
@@ -16,7 +16,6 @@ return_stmt = { "return " ~ expr }
 // this is distinct from fn_header because it accepts an expr or a var
 fn_args       = { "(" ~ ((expr ~ ("," | ")"))+ | ")") }
 function_call = { varname ~ fn_args }
-macro_function_call = { varname ~ "!" ~ fn_args }
 
 loop_stmt = { "loop" ~ expr ~ block }
 
@@ -47,9 +46,9 @@ var_vec_def      = { let_r ~ var_indexed }
 var_index_assign = { var_indexed ~ "=" ~ expr }
 
 var         = { let_r? ~ varname }
-var_indexed = { varname ~ ("[" ~ expr ~ "]")+ }
+var_indexed = { varname ~ ("[" ~ expr ~ "]")? }
 
-atom = { literal_dec | var_indexed | macro_function_call | function_call | varname }
+atom = { literal_dec | function_call | var_indexed | varname }
 
 literal_dec = @{ ASCII_DIGIT+ }
 
