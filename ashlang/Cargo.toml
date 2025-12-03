@@ -2,8 +2,8 @@
 name = "ashlang"
 version = "0.1.3"
 edition = "2024"
-authors = ["Chance Hudson <PSE>"]
-description = "A language for zero knowledge proofs"
+authors = ["Chance Hudson"]
+description = "A language for zero knowledge arguments"
 homepage = "https://github.com/chancehudson/ashlang"
 repository = "https://github.com/chancehudson/ashlang"
 license = "MIT OR Apache-2.0"
@@ -22,10 +22,6 @@ serde = ["dep:serde"]
 
 [dependencies]
 
-# local
-#ring-math = { path = "../ring-math" }
-ring-math = { version = "0.4.0" }
-
 # misc
 anyhow = "1.0.86"
 camino = "1.1.7"
@@ -36,10 +32,8 @@ pest = "2.7.11"
 pest_derive = "2.7.11"
 serde = { version = "1.0.130", features = ["derive"], optional = true }
 
-scalarff = { version = "0.8.0", features = ["serde", "curve25519", "alt_bn128", "oxfoi"] }
-
 chrono = "0"
 
 # lettuce = "0"
-lettuce = { path = "../../lattices/lettuce" }
-zkpo = "0.1.7"
+#lettuce = { path = "../../lattices/lettuce" }
+lettuce = { git = "https://github.com/chancehudson/lattices.git" }
