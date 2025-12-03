@@ -2,14 +2,13 @@ use std::str::FromStr;
 
 use anyhow::Result;
 
-use lettuce::FieldScalar;
-use lettuce::MilliScalarMont;
+use lettuce::*;
 
 use cli::Config;
 use compiler::Compiler;
 use lettuce::Oraccle;
+use r1cs::arithm::Arithmetizer;
 use r1cs::parser::R1csParser;
-use r1cs::witness;
 
 mod cli;
 mod compiler;
@@ -20,58 +19,48 @@ mod r1cs;
 mod time;
 
 fn main() -> Result<()> {
+    type E = MilliScalarMont;
     let mut config = cli::parse()?;
-    compile_r1cs::<MilliScalarMont>(&mut config)?;
-    Ok(())
-}
-
-/// Used to compile and verify r1cs that does not yet have a default prover
-fn compile_r1cs<E: FieldScalar>(config: &mut Config) -> Result<String> {
     config.extension_priorities.push("ar1cs".to_string());
-    let mut compiler: Compiler<E> = Compiler::new(config)?;
+    let input = config
+        .input
+        .iter()
+        .map(|v| E::from(u128::from_str(v).unwrap()))
+        .collect();
 
-    let ar1cs = compiler.compile(&config.entry_fn)?;
-    let compiled_str = ar1cs.clone();
-    let r1cs_parser = R1csParser::new(&ar1cs)?;
+    let mut compiler: Compiler<E> = Compiler::new(&mut config)?;
+    let ar1cs_src = compiler.compile(&config.entry_fn)?;
+    println!("{}\n", ar1cs_src);
 
-    let witness = witness::build::<E>(
-        r1cs_parser.clone(),
-        config
-            .inputs
-            .iter()
-            .map(|v| Ok(E::from(u128::from_str(v)?)))
-            .collect::<Result<Vec<_>>>()?,
-    )?;
-    let r1cs = r1cs_parser.into_r1cs();
-
-    let solved = witness::verify::<E>(&r1cs_parser, witness.clone());
-    if let Err(e) = solved {
-        println!("Failed to solve r1cs: {:?}", e);
-        std::process::exit(1);
-    }
-    let outputs = solved?;
-    println!("{}", compiled_str);
-    println!("R1CS: built and validated witness ✅");
-    if !outputs.is_empty() {
+    let mut arithm = Arithmetizer::new(&ar1cs_src)?;
+    println!("{}", arithm.r1cs);
+    print!("Building witness...");
+    let output_len = arithm.compute_wtns(input)?;
+    print!(" ✅\nVerifying witness...");
+    println!("{}", arithm.wtns.as_ref().unwrap());
+    let wtns = arithm.assert_wtns()?;
+    if output_len > 0 {
         println!("Received the following outputs:");
-        for v in outputs {
+        for v in arithm.outputs()? {
             println!("{v}");
         }
     } else {
-        println!("No outputs were generated");
+        print!("No outputs were generated 🟡");
     }
+    print!("\nwitness is consistent ✅\nBuilding argument of knowledge...");
 
     match config.arg_fn.as_str() {
         "innerprod" => {
             let oraccle = Oraccle::new();
-            let innerprod_arg =
-                lettuce::InnerProdR1CS::new(witness.variables.into(), &r1cs, &oraccle)?;
-            println!("Generated transparent argument of knowledge");
+            let innerprod_arg = lettuce::InnerProdR1CS::new(wtns.clone(), &arithm.r1cs, &oraccle)?;
+            print!(" (?)\nVerifying argument of knowledge... ");
             let oraccle = Oraccle::new();
             innerprod_arg.verify(&oraccle)?;
-            println!("Verified transparent argument of knowledge");
+            println!("✅");
         }
         v => anyhow::bail!("unknown argument \"{}\". valid options: \"innerprod\"", v),
     }
-    Ok(compiled_str)
+    println!("🔮 program exists and was executed");
+
+    Ok(())
 }

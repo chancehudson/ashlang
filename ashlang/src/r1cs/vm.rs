@@ -143,10 +143,10 @@ impl<'a, T: FieldScalar> VM<'a, T> {
         // should fail in any field that is different than
         // the current one
         let constraints = vec![R1csConstraint::new(
-            vec![(T::zero() - T::one(), 0)],
-            vec![(T::zero() - T::one(), 0)],
+            vec![(T::negone(), 0)],
+            vec![(T::negone(), 0)],
             vec![(T::one(), 0)],
-            "field safety constraint",
+            "field cardinality sanity constraint",
         )];
         compiler_state.messages.push("".to_string());
         VM {
@@ -197,7 +197,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         self.vars.insert(name, v);
                     } else {
                         // if we get a static variable from the evaluation
-                        // we constraint the assigment into a new signal
+                        // we constrain the assigment into a new signal
                         let new_var = self.static_to_constraint(&v.value)?;
                         self.vars.insert(name, new_var);
                     }
@@ -331,6 +331,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
         Ok(())
     }
 
+    /// Used for constants and statics.
     fn spawn_known_variable(&mut self, val: T) {
         self.constraints.push(R1csConstraint::new(
             vec![(T::one(), self.var_index)],

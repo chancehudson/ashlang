@@ -83,9 +83,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.90"
+version = "1.0.100"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37bf3594c4c988a53154954629820791dde498571819ae4ca50ca811e060cc95"
+checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
 name = "ark-bn254"
@@ -232,6 +232,7 @@ dependencies = [
  "ring-math 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "scalarff",
  "serde",
+ "zkpo",
 ]
 
 [[package]]
@@ -1481,4 +1482,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.110",
+]
+
+[[package]]
+name = "zkpo"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "406ce2bf1685a78427b5b1e23ccdf07cb22da115c231ceb65b522fb9142d827d"
+dependencies = [
+ "anyhow",
 ]

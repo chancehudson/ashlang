@@ -1,8 +1,7 @@
-use std::collections::HashMap;
 use std::fmt::Display;
 
 use anyhow::Result;
-use lettuce::FieldScalar;
+use lettuce::*;
 
 /// A single r1cs constraints.
 ///
@@ -93,7 +92,7 @@ fn comment_space(s: &str) -> String {
 
 static LINE_WIDTH: usize = 40;
 
-impl<T: FieldScalar> Display for R1csConstraint<T> {
+impl<E: FieldScalar> Display for R1csConstraint<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut out = "".to_owned();
         if self.symbolic {
@@ -163,8 +162,8 @@ impl<T: FieldScalar> Display for R1csConstraint<T> {
     }
 }
 
-impl<T: FieldScalar> R1csConstraint<T> {
-    pub fn new(a: Vec<(T, usize)>, b: Vec<(T, usize)>, c: Vec<(T, usize)>, comment: &str) -> Self {
+impl<E: FieldScalar> R1csConstraint<E> {
+    pub fn new(a: Vec<(E, usize)>, b: Vec<(E, usize)>, c: Vec<(E, usize)>, comment: &str) -> Self {
         Self {
             a,
             b,
@@ -188,8 +187,8 @@ impl<T: FieldScalar> R1csConstraint<T> {
     /// comment: a comment to include in the r1cs for debugging
     pub fn symbolic(
         out_i: usize,
-        a: Vec<(T, usize)>,
-        b: Vec<(T, usize)>,
+        a: Vec<(E, usize)>,
+        b: Vec<(E, usize)>,
         op: SymbolicOp,
         comment: String,
     ) -> Self {
@@ -206,29 +205,34 @@ impl<T: FieldScalar> R1csConstraint<T> {
 
     /// Given a symbolic constraint a witness, solve for the c constraint value.
     /// The opposite of a constraint, an arbitrary, binding assignment to the c matrix.
-    pub fn solve_symbolic(&self, vars: &HashMap<usize, T>) -> Result<T> {
+    pub fn solve_symbolic(&self, wtns: &Vector<E>) -> Result<E> {
         if !self.symbolic {
             return Err(anyhow::anyhow!("not a symbolic constraint"));
         }
-        let mut a = T::zero();
+        let out_i = self.out_i.unwrap();
+        let mut a = E::zero();
         for (coef, index) in &self.a {
-            a += coef.clone() * vars.get(index).unwrap().clone();
+            assert!(*index < wtns.len());
+            assert!(*index != out_i);
+            a += *coef * wtns[*index];
         }
-        let mut b = T::zero();
+        let mut b = E::zero();
         for (coef, index) in &self.b {
-            b += coef.clone() * vars.get(index).unwrap().clone();
+            assert!(*index < wtns.len());
+            assert!(*index != out_i);
+            b += *coef * wtns[*index];
         }
         match self.symbolic_op.as_ref().unwrap() {
             SymbolicOp::Add => Ok(a + b),
             SymbolicOp::Mul => Ok(a * b),
-            SymbolicOp::Inv => Ok(T::one() * b.inverse()),
+            SymbolicOp::Inv => Ok(E::one() * b.inverse()),
             SymbolicOp::Sqrt => {
-                if a != (T::one() + T::one()) {
+                if a != (E::one() + E::one()) {
                     anyhow::bail!("Cannot calculate non-square root");
                 }
                 let l = b.legendre();
                 if l == 0 {
-                    Ok(T::zero())
+                    Ok(E::zero())
                 } else if l == 1 {
                     // always return the positive value
                     Ok(b.sqrt())

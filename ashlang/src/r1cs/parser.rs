@@ -1,16 +1,13 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use anyhow::anyhow;
 use anyhow::Result;
-use lettuce::FieldScalar;
-use lettuce::R1CS;
+use anyhow::anyhow;
+use lettuce::*;
 use pest::Parser;
 use pest_derive::Parser;
 
-use super::constraint::string_to_index;
-use super::constraint::R1csConstraint;
-use super::constraint::SymbolicOp;
+use super::*;
 use crate::log;
 
 #[derive(Parser)]
@@ -30,24 +27,16 @@ pub struct R1csParser<E: FieldScalar> {
 }
 
 impl<E: FieldScalar> R1csParser<E> {
-    /// Return the number of variables in the witness based
-    /// on the number of variable indices that are constrained.
-    pub fn var_count(&self) -> usize {
-        let mut signal_index_max = 0;
-        for c in &self.constraints {
-            for (_, i) in &c.a {
-                signal_index_max = signal_index_max.max(*i);
-            }
-            for (_, i) in &c.b {
-                signal_index_max = signal_index_max.max(*i);
-            }
-            for (_, i) in &c.c {
-                signal_index_max = signal_index_max.max(*i);
+    pub fn wtns_len(&self) -> usize {
+        let mut max_i = 0usize;
+        for constraint in &self.constraints {
+            if let Some(out_i) = constraint.out_i
+                && out_i > max_i
+            {
+                max_i = out_i;
             }
         }
-        // return the length, not the max index
-        // length is equal to the max index + 1
-        signal_index_max + 1
+        max_i + 1
     }
 
     pub fn new(source: &str) -> Result<Self> {
@@ -163,6 +152,7 @@ impl<E: FieldScalar> R1csParser<E> {
                 }
             }
         }
+
         Ok(out)
     }
 
@@ -261,8 +251,13 @@ impl<E: FieldScalar> R1csParser<E> {
     }
 
     pub fn into_r1cs(&self) -> R1CS<E> {
-        let mut r1cs = R1CS::<E>::identity(self.constraints.len(), self.var_count());
-        for (i, constraint) in self.constraints.iter().enumerate() {
+        let constraints = self
+            .constraints
+            .iter()
+            .filter(|v| !v.symbolic)
+            .collect::<Vec<_>>();
+        let mut r1cs = R1CS::<E>::identity(constraints.len(), self.wtns_len());
+        for (i, constraint) in constraints.iter().enumerate() {
             for (coef, wtns_i) in &constraint.a {
                 assert!(r1cs.a[i][*wtns_i].is_zero());
                 r1cs.a[i][*wtns_i] = *coef;

@@ -1,10 +1,12 @@
-let i = 0
+let i = 9
+let b = 2
 
-#let state[16][1] # test
+# let state[16][1] # test
 
-#loop 16 {
-  #state[add(0, i)][0] = i
+loop 1600 {
   i = i + 1
-#}
+  let v = 2 + i
+  i = i * v
+}
 
 #chacha(state, 0, 0, state)

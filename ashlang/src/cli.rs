@@ -1,8 +1,8 @@
 use anyhow::Result;
 use camino::Utf8PathBuf;
-use clap::arg;
 use clap::Arg;
 use clap::Command;
+use clap::arg;
 
 use crate::log;
 
@@ -11,7 +11,7 @@ use crate::log;
 pub struct Config {
     pub include_paths: Vec<Utf8PathBuf>,
     pub verbosity: u8,
-    pub inputs: Vec<String>,
+    pub input: Vec<String>,
     pub extension_priorities: Vec<String>,
     pub entry_fn: String,
     pub arg_fn: String,
@@ -29,33 +29,24 @@ pub fn parse() -> Result<Config> {
         .expect("Failed to get ARG_FN")
         .to_string();
 
-    // TODO: unfuck this up
-    let mut include_paths = matches
-        .get_many::<String>("include")
-        .unwrap_or_default()
-        .map(|v| v.as_str())
-        .filter(|v| !v.is_empty())
-        .map(Utf8PathBuf::from)
-        .collect::<Vec<_>>();
-    include_paths.push(".".into());
+    // hmmm
+    // TODO
+    let include_paths = vec![".".into()];
 
-    let inputs = matches.get_one::<String>("inputs");
-    let mut verbosity = 0_u8;
-    if *matches.get_one::<bool>("print_asm").unwrap_or(&false) {
-        verbosity = 1;
-    }
+    let input = matches.get_one::<String>("input");
+    let verbosity = 0_u8;
     Ok(Config {
         include_paths,
         verbosity,
-        inputs: parse_inputs(inputs),
+        input: parse_input(input),
         extension_priorities: vec!["ash".to_string()],
         entry_fn,
         arg_fn,
     })
 }
 
-fn parse_inputs(inputs: Option<&String>) -> Vec<String> {
-    if let Some(i) = inputs {
+fn parse_input(input: Option<&String>) -> Vec<String> {
+    if let Some(i) = input {
         i.split(',')
             .filter(|v| !v.is_empty())
             .map(|v| v.parse().unwrap())
@@ -77,6 +68,6 @@ fn cli() -> Command {
                 .short('i')
                 .long("input")
                 .required(false)
-                .help("private inputs to the program"),
+                .help("private input to the program"),
         )
 }
