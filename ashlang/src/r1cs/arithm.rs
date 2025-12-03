@@ -61,29 +61,21 @@ impl<E: FieldScalar> Arithmetizer<E> {
         wtns[0] = E::one();
 
         // build the witness
-        let mut output_done = false;
         for c in &self.parser.constraints {
             if !c.symbolic {
                 continue;
             }
             let symbolic_wtns_i = c.out_i.expect("symbolic wtns should exist");
-            assert!(
-                written_wtns_indices.insert(symbolic_wtns_i),
-                "duplicate write, output {c}"
-            );
-            written_wtns_indices.insert(symbolic_wtns_i);
             match c.symbolic_op.as_ref().unwrap() {
                 SymbolicOp::Output => {
-                    assert!(
-                        !output_done,
-                        "cannot generate public output after private witness"
-                    );
+                    // we'll reveal in place rather than move to the front of the vector
                     output_indices.push(symbolic_wtns_i);
-                    // dont use output for now
-                    unreachable!()
                 }
                 SymbolicOp::Input => {
-                    output_done = true;
+                    assert!(
+                        written_wtns_indices.insert(symbolic_wtns_i),
+                        "duplicate write, input {c}"
+                    );
                     // we'll take the next input value and set it
                     if input_counter >= input.len() {
                         return crate::log::error!(
@@ -95,7 +87,10 @@ impl<E: FieldScalar> Arithmetizer<E> {
                     input_counter += 1;
                 }
                 _ => {
-                    output_done = true;
+                    assert!(
+                        written_wtns_indices.insert(symbolic_wtns_i),
+                        "duplicate write, constraint {c}"
+                    );
                     wtns[symbolic_wtns_i] = c.solve_symbolic(&wtns)?;
                 }
             }

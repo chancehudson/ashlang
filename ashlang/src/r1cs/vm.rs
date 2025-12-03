@@ -191,6 +191,20 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                             .insert(0, format!("re-assign {name}"));
                     }
                     let v = self.eval(&expr)?;
+
+                    if let Some(var) = self.vars.get_mut(&name)
+                        && var.location == VarLocation::Static
+                    {
+                        if v.location == VarLocation::Constraint {
+                            anyhow::bail!(
+                                "ashlang: constraint variable may not be assigned to static"
+                            );
+                        } else {
+                            assert!(var.value.len() == v.value.len());
+                            var.value = v.value;
+                            return Ok(());
+                        }
+                    }
                     if v.location == VarLocation::Constraint {
                         // if we get a constrained variable from the
                         // evaluation we simply store that as a named variable
@@ -361,15 +375,23 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                                     matches!(rhs.value, VarType::Scalar(_)),
                                     "cannot assign non-scalar to vector entry"
                                 );
-                                let lhs_start_i = lhs.index.unwrap();
-                                let rhs_start_i = rhs.index.unwrap();
                                 let index = indices[0];
                                 self.assignment_constraint(
-                                    lhs_start_i + index,
-                                    rhs_start_i + index,
+                                    lhs.index.unwrap() + index,
+                                    rhs.index.unwrap(),
                                 );
                             }
-                            VarLocation::Static => {}
+                            VarLocation::Static => {
+                                assert!(
+                                    matches!(rhs.value, VarType::Scalar(_)),
+                                    "cannot assign non-scalar to vector entry"
+                                );
+                                let index = indices[0];
+                                self.static_assignment_constraint(
+                                    lhs.index.unwrap() + index,
+                                    *rhs.value.iter().first().unwrap(),
+                                );
+                            }
                         },
                         (VarType::Matrix(v), 2) => {
                             let row_i = indices[0];
@@ -377,13 +399,10 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                             let i = row_i * v.width() + col_i;
                             match (rhs.value, &rhs.location) {
                                 (VarType::Scalar(v), VarLocation::Constraint) => {
-                                    self.assignment_constraint(
-                                        lhs.index.unwrap() + i,
-                                        rhs.index.unwrap() + i,
-                                    );
+                                    unimplemented!()
                                 }
                                 (VarType::Scalar(v), VarLocation::Static) => {
-                                    self.static_assignment_constraint(lhs.index.unwrap() + 1, v);
+                                    unimplemented!()
                                 }
                                 _ => {
                                     anyhow::bail!("ashlang: matrix unsupported rhs assignment");
@@ -459,11 +478,11 @@ impl<'a, T: FieldScalar> VM<'a, T> {
             &format!("equality constraint {} = {}", lhs_i, rhs_i),
         ));
         self.constraints.push(R1csConstraint::symbolic(
-            rhs_i,
+            lhs_i,
             vec![(T::one(), 0)],
-            vec![(T::one(), lhs_i)],
+            vec![(T::one(), rhs_i)],
             SymbolicOp::Mul,
-            format!("scalar equality assignment {} -> {}", lhs_i, rhs_i),
+            format!("scalar equality assignment ({}) <- {}", lhs_i, rhs_i),
         ));
     }
 
@@ -554,7 +573,38 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     },
                 })
             }
-            Expr::FnCall(name, vars) => {
+            Expr::FnCall(name, is_macro, vars) => {
+                if *is_macro {
+                    if name == "reveal" {
+                        assert_eq!(vars.len(), 1, "reveal macro expected exactly 1 argument");
+                        let v = &vars[0];
+                        let var = self.eval(&v)?;
+
+                        match var.location {
+                            VarLocation::Static => {
+                                anyhow::bail!("ashlang: refusing to reveal a static value");
+                            }
+                            VarLocation::Constraint => {
+                                for (i, _v) in var.value.iter().iter().enumerate() {
+                                    self.constraints.push(R1csConstraint::symbolic(
+                                        var.index.unwrap() + i,
+                                        vec![(T::one(), 0)],
+                                        vec![(T::one(), 0)],
+                                        SymbolicOp::Output,
+                                        "explicit reveal by macro".to_string(),
+                                    ));
+                                }
+                            }
+                        }
+                        return Ok(Var {
+                            index: None,
+                            location: VarLocation::Static,
+                            value: VarType::Scalar(T::zero()),
+                        });
+                    } else {
+                        panic!()
+                    }
+                }
                 // TODO: break this into separate functions
                 let path = self.compiler_state.fn_to_path.get(name).unwrap();
                 self.compiler_state

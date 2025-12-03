@@ -1,14 +1,12 @@
-use std::str::FromStr;
+use std::{str::FromStr, time::Instant};
 
 use anyhow::Result;
 
 use lettuce::*;
 
-use cli::Config;
 use compiler::Compiler;
 use lettuce::Oraccle;
 use r1cs::arithm::Arithmetizer;
-use r1cs::parser::R1csParser;
 
 mod cli;
 mod compiler;
@@ -52,11 +50,21 @@ fn main() -> Result<()> {
     match config.arg_fn.as_str() {
         "innerprod" => {
             let oraccle = Oraccle::new();
+            let start = Instant::now();
             let innerprod_arg = lettuce::InnerProdR1CS::new(wtns.clone(), &arithm.r1cs, &oraccle)?;
-            print!(" (?)\nVerifying argument of knowledge... ");
+            print!(
+                " {} (?)\nVerifying transparent inner product argument... ",
+                format!("{} ms", start.elapsed().as_millis())
+            );
             let oraccle = Oraccle::new();
+            let start = Instant::now();
             innerprod_arg.verify(&oraccle)?;
-            println!("✅");
+            println!(" {} ✅", format!("{} ms", start.elapsed().as_millis()));
+            println!(
+                "{} constraints, {} variables",
+                arithm.r1cs.height(),
+                arithm.r1cs.width()
+            )
         }
         v => anyhow::bail!("unknown argument \"{}\". valid options: \"innerprod\"", v),
     }
