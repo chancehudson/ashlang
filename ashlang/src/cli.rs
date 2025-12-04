@@ -1,24 +1,15 @@
+use std::str::FromStr;
+
 use anyhow::Result;
-use camino::Utf8PathBuf;
 use clap::Arg;
 use clap::Command;
 use clap::arg;
+use lettuce::*;
 
-use crate::log;
-
-/// Compiler configuration. Contains all fields necessary to compile an ashlang program.
-#[derive(Clone, Debug)]
-pub struct Config {
-    pub include_paths: Vec<Utf8PathBuf>,
-    pub verbosity: u8,
-    pub input: Vec<String>,
-    pub extension_priorities: Vec<String>,
-    pub entry_fn: String,
-    pub arg_fn: String,
-}
+use crate::*;
 
 #[allow(dead_code)]
-pub fn parse() -> Result<Config> {
+pub fn parse<E: FieldScalar>() -> Result<Config<E>> {
     let matches = cli().get_matches();
     let entry_fn = matches
         .get_one::<String>("ENTRY_FN")
@@ -38,21 +29,27 @@ pub fn parse() -> Result<Config> {
     Ok(Config {
         include_paths,
         verbosity,
-        input: parse_input(input),
+        input: parse_input::<E>(input)?,
         extension_priorities: vec!["ash".to_string()],
         entry_fn,
         arg_fn,
     })
 }
 
-fn parse_input(input: Option<&String>) -> Vec<String> {
+fn parse_input<E: FieldScalar>(input: Option<&String>) -> Result<Vector<E>> {
     if let Some(i) = input {
-        i.split(',')
+        Ok(i.split(',')
             .filter(|v| !v.is_empty())
-            .map(|v| v.parse().unwrap())
-            .collect()
+            .map(|v| v.to_string())
+            .map(|v| {
+                u128::from_str(&v)
+                    .map(|v| E::from(v))
+                    .map_err(|e| anyhow::anyhow!(e))
+            })
+            .collect::<Result<Vec<E>>>()?
+            .into())
     } else {
-        vec![]
+        Ok(vec![].into())
     }
 }
 

@@ -12,7 +12,7 @@ use lettuce::*;
 /// indices may be specified multiple times
 /// and will be summed
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct R1csConstraint<E: FieldScalar> {
+pub struct AR1CSConstraint<E: FieldScalar> {
     // (coefficient, var_index)
     pub a: Vec<(E, usize)>,
     pub b: Vec<(E, usize)>,
@@ -92,7 +92,7 @@ fn comment_space(s: &str) -> String {
 
 static LINE_WIDTH: usize = 40;
 
-impl<E: FieldScalar> Display for R1csConstraint<E> {
+impl<E: FieldScalar> Display for AR1CSConstraint<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut out = "".to_owned();
         if self.symbolic {
@@ -162,7 +162,7 @@ impl<E: FieldScalar> Display for R1csConstraint<E> {
     }
 }
 
-impl<E: FieldScalar> R1csConstraint<E> {
+impl<E: FieldScalar> AR1CSConstraint<E> {
     pub fn new(a: Vec<(E, usize)>, b: Vec<(E, usize)>, c: Vec<(E, usize)>, comment: &str) -> Self {
         Self {
             a,

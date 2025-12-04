@@ -10,8 +10,7 @@ use pest::pratt_parser::Op;
 use pest::pratt_parser::PrattParser;
 use pest_derive::Parser;
 
-use self::AstNode::*;
-use crate::log;
+use crate::*;
 use log::error;
 
 /// A top level AST node. Each of these generally corresponds to
@@ -74,328 +73,346 @@ pub enum NumOp {
     Mul,
 }
 
-#[derive(Parser)]
-#[grammar = "grammar.pest"] // relative to project `src`
-pub struct AshPestParser;
+pub use internal::AshParser;
 
-/// Parses an ashlang source file into an AST and
-/// map of function names called by the source file.
-pub struct AshParser {
-    pub ast: Vec<AstNode>,
-    pub fn_names: HashMap<String, u64>,
-    pub entry_fn_name: String,
-}
+// pest living up to its name
+// jk this is a totally reasonable thing
+mod internal {
+    use super::*;
+    #[derive(Parser)]
+    #[grammar = "grammar.pest"] // relative to project `src`
+    struct AshPestParser;
 
-impl AshParser {
-    /// Take a source file and a function name and output
-    /// an instance of the parser.
-    pub fn parse(source: &str, name: &str) -> Result<Self> {
-        // append a new line to all source strings because
-        // they aren't necessarily unix compatible files
-        let source = format!("{source}\n");
-        let mut out = Self {
-            ast: Vec::new(),
-            fn_names: HashMap::new(),
-            entry_fn_name: name.to_string(),
-        };
-
-        match AshPestParser::parse(Rule::program, &source) {
-            Ok(pairs) => {
-                let ast = out.build_ast_from_lines(pairs);
-                if let Err(e) = ast {
-                    return error!(&format!("error building program ast: {e}"));
-                }
-            }
-            Err(e) => {
-                return Err(anyhow::anyhow!(log::parse_error(e, name)));
-            }
-        }
-        Ok(out)
+    /// Parses an ashlang source file into an AST and
+    /// map of function names called by the source file.
+    #[derive(Clone)]
+    pub struct AshParser {
+        pub ast: Vec<AstNode>,
+        pub fn_names: HashMap<String, u64>,
+        pub entry_fn_name: String,
     }
 
-    fn mark_fn_call(&mut self, name: String) {
-        let count = self.fn_names.entry(name).or_insert(0);
-        *count += 1;
-    }
+    impl AshParser {
+        /// Take a source file and a function name and output
+        /// an instance of the parser.
+        pub fn parse(source: &str, name: &str) -> Result<Self> {
+            // append a new line to all source strings because
+            // they aren't necessarily unix compatible files
+            let source = format!("{source}\n");
+            let mut out = Self {
+                ast: Vec::new(),
+                fn_names: HashMap::new(),
+                entry_fn_name: name.to_string(),
+            };
 
-    pub fn next_or_error<'a, T: RuleType>(pairs: &'a mut Pairs<T>) -> Result<Pair<'a, T>> {
-        if let Some(n) = pairs.next() {
-            Ok(n)
-        } else {
-            anyhow::bail!("Expected next token but found none")
-        }
-    }
-
-    fn build_ast_from_lines(&mut self, pairs: Pairs<Rule>) -> Result<()> {
-        for pair in pairs {
-            match pair.as_rule() {
-                Rule::fn_header => {
-                    // parse the function header which includes argument
-                    // if invocation started in the file no arguments
-                    // should be accepted. Instead the argv function should
-                    // be used
-                    let pair = pair.into_inner();
-                    let mut vars: Vec<String> = Vec::new();
-                    for v in pair {
-                        vars.push(v.as_str().to_string());
+            match AshPestParser::parse(Rule::program, &source) {
+                Ok(pairs) => {
+                    let ast = out.build_ast_from_lines(pairs);
+                    if let Err(e) = ast {
+                        return error!(&format!("error building program ast: {e}"));
                     }
-                    // let pair.next().unwrap()
-                    self.ast.push(FnVar(vars));
                 }
-                Rule::stmt => {
+                Err(e) => {
+                    return Err(anyhow::anyhow!(log::parse_error(e, name)));
+                }
+            }
+            Ok(out)
+        }
+
+        fn mark_fn_call(&mut self, name: String) {
+            let count = self.fn_names.entry(name).or_insert(0);
+            *count += 1;
+        }
+
+        pub fn next_or_error<'a, T: RuleType>(pairs: &'a mut Pairs<T>) -> Result<Pair<'a, T>> {
+            if let Some(n) = pairs.next() {
+                Ok(n)
+            } else {
+                anyhow::bail!("Expected next token but found none")
+            }
+        }
+
+        fn build_ast_from_lines(&mut self, pairs: Pairs<Rule>) -> Result<()> {
+            for pair in pairs {
+                match pair.as_rule() {
+                    Rule::fn_header => {
+                        // parse the function header which includes argument
+                        // if invocation started in the file no arguments
+                        // should be accepted. Instead the argv function should
+                        // be used
+                        let pair = pair.into_inner();
+                        let mut vars: Vec<String> = Vec::new();
+                        for v in pair {
+                            vars.push(v.as_str().to_string());
+                        }
+                        // let pair.next().unwrap()
+                        self.ast.push(AstNode::FnVar(vars));
+                    }
+                    Rule::stmt => {
+                        let mut pair = pair.into_inner();
+                        let next = AshParser::next_or_error(&mut pair)?;
+                        let ast = self.build_ast_from_pair(next)?;
+                        self.ast.push(ast);
+                    }
+                    Rule::return_stmt => {
+                        let mut pair = pair.into_inner();
+                        let next = AshParser::next_or_error(&mut pair)?;
+                        let expr = self.build_expr_from_pair(next)?;
+                        self.ast.push(AstNode::Rtrn(expr));
+                    }
+                    Rule::EOI => {}
+                    _ => anyhow::bail!("unexpected line pair rule: {:?}", pair.as_rule()),
+                }
+            }
+            Ok(())
+        }
+
+        fn build_ast_from_pair(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<AstNode> {
+            match pair.as_rule() {
+                Rule::var_index_assign => {
                     let mut pair = pair.into_inner();
                     let next = AshParser::next_or_error(&mut pair)?;
-                    let ast = self.build_ast_from_pair(next)?;
-                    self.ast.push(ast);
-                }
-                Rule::return_stmt => {
-                    let mut pair = pair.into_inner();
+                    let v = self.build_expr_from_pair(next)?;
+                    let name;
+                    let indices;
+                    match v {
+                        Expr::Val(n, i) => {
+                            name = n;
+                            indices = i;
+                        }
+                        _ => {
+                            anyhow::bail!(
+                                "unexpected expr in var_index_assign: {:?}, expected Val",
+                                v
+                            )
+                        }
+                    }
                     let next = AshParser::next_or_error(&mut pair)?;
                     let expr = self.build_expr_from_pair(next)?;
-                    self.ast.push(Rtrn(expr));
+                    Ok(AstNode::AssignVec(name, indices, expr))
                 }
-                Rule::EOI => {}
-                _ => anyhow::bail!("unexpected line pair rule: {:?}", pair.as_rule()),
+                Rule::var_vec_def => {
+                    let mut pair = pair.into_inner();
+                    let _ = AshParser::next_or_error(&mut pair)?;
+                    let next = AshParser::next_or_error(&mut pair)?;
+                    let expr = self.build_expr_from_pair(next)?;
+                    match expr {
+                        Expr::Val(name, index_maybe) => {
+                            Ok(AstNode::EmptyVecDef(name, *index_maybe.unwrap()))
+                        }
+                        _ => {
+                            anyhow::bail!(
+                                "unexpected expr in var_vec_def: {:?}, expected Val",
+                                expr
+                            )
+                        }
+                    }
+                }
+                Rule::loop_stmt => {
+                    let mut pair = pair.into_inner();
+                    let iter_count = AshParser::next_or_error(&mut pair)?;
+                    let iter_count_expr = self.build_expr_from_pair(iter_count)?;
+                    let block = AshParser::next_or_error(&mut pair)?;
+                    let block_inner = block.into_inner();
+                    let block_ast = block_inner
+                        .map(|v| match v.as_rule() {
+                            Rule::stmt => {
+                                let mut pair = v.into_inner();
+                                let next = AshParser::next_or_error(&mut pair)?;
+                                self.build_ast_from_pair(next)
+                            }
+                            _ => Err(anyhow::anyhow!("invalid expression in block")),
+                        })
+                        .collect::<Result<Vec<AstNode>>>()?;
+                    Ok(AstNode::Loop(iter_count_expr, block_ast))
+                }
+                Rule::function_call => {
+                    Ok(AstNode::ExprUnassigned(self.build_expr_from_pair(pair)?))
+                }
+                Rule::var_def => {
+                    // get vardef
+                    let mut pair = pair.into_inner();
+                    let next = AshParser::next_or_error(&mut pair)?;
+                    let mut varpair = next.into_inner();
+                    let name;
+                    let is_let;
+                    if varpair.len() == 2 {
+                        // it's a let assignment
+                        AshParser::next_or_error(&mut varpair)?;
+                        name = AshParser::next_or_error(&mut varpair)?.as_str().to_string();
+                        is_let = true;
+                    } else if varpair.len() == 1 {
+                        // it's a regular assignment
+                        name = AshParser::next_or_error(&mut varpair)?.as_str().to_string();
+                        is_let = false;
+                    } else {
+                        return Err(anyhow::anyhow!("invalid varpait"));
+                    }
+
+                    let n = AshParser::next_or_error(&mut pair)?;
+                    Ok(AstNode::Stmt(name, is_let, self.build_expr_from_pair(n)?))
+                }
+                Rule::static_def => {
+                    let mut pair = pair.into_inner();
+                    let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
+                    let expr = AshParser::next_or_error(&mut pair)?;
+                    Ok(AstNode::StaticDef(
+                        name.as_str().to_string(),
+                        self.build_expr_from_pair(expr)?,
+                    ))
+                }
+                Rule::if_stmt => {
+                    let mut pair = pair.into_inner();
+                    let bool_expr = AshParser::next_or_error(&mut pair)?;
+                    let mut bool_expr_pair = bool_expr.into_inner();
+                    let expr1 =
+                        self.build_expr_from_pair(AshParser::next_or_error(&mut bool_expr_pair)?)?;
+                    let bool_op = match AshParser::next_or_error(&mut bool_expr_pair)?.as_rule() {
+                        Rule::equal => BoolOp::Equal,
+                        Rule::not_equal => BoolOp::NotEqual,
+                        Rule::gt => BoolOp::GreaterThan,
+                        Rule::lt => BoolOp::LessThan,
+                        _ => anyhow::bail!("invalid bool op"),
+                    };
+                    let expr2 =
+                        self.build_expr_from_pair(AshParser::next_or_error(&mut bool_expr_pair)?)?;
+                    let block = AshParser::next_or_error(&mut pair)?;
+                    let block_inner = block.into_inner();
+                    let block_ast = block_inner
+                        .map(|v| match v.as_rule() {
+                            Rule::stmt => {
+                                let mut pair = v.into_inner();
+                                let next = AshParser::next_or_error(&mut pair)?;
+                                self.build_ast_from_pair(next)
+                            }
+                            _ => anyhow::bail!("invalid expression in block"),
+                        })
+                        .collect::<Result<Vec<AstNode>>>()?;
+                    Ok(AstNode::If(
+                        Expr::BoolOp {
+                            lhs: Box::new(expr1),
+                            bool_op,
+                            rhs: Box::new(expr2),
+                        },
+                        block_ast,
+                    ))
+                }
+                unknown_expr => anyhow::bail!(
+                    "Unable to build ast node, unexpected expression: {:?}",
+                    unknown_expr
+                ),
             }
         }
-        Ok(())
-    }
 
-    fn build_ast_from_pair(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<AstNode> {
-        match pair.as_rule() {
-            Rule::var_index_assign => {
-                let mut pair = pair.into_inner();
-                let next = AshParser::next_or_error(&mut pair)?;
-                let v = self.build_expr_from_pair(next)?;
-                let name;
-                let indices;
-                match v {
-                    Expr::Val(n, i) => {
-                        name = n;
-                        indices = i;
-                    }
-                    _ => {
-                        anyhow::bail!("unexpected expr in var_index_assign: {:?}, expected Val", v)
-                    }
+        fn build_expr_from_pair(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<Expr> {
+            match pair.as_rule() {
+                Rule::var_indexed => {
+                    let mut pair = pair.into_inner();
+                    let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
+                    let index_maybe = if let Some(next) = pair.next() {
+                        Some(self.build_expr_from_pair(next)?.into())
+                    } else {
+                        None
+                    };
+                    Ok(Expr::Val(name, index_maybe))
                 }
-                let next = AshParser::next_or_error(&mut pair)?;
-                let expr = self.build_expr_from_pair(next)?;
-                Ok(AssignVec(name, indices, expr))
-            }
-            Rule::var_vec_def => {
-                let mut pair = pair.into_inner();
-                let _ = AshParser::next_or_error(&mut pair)?;
-                let next = AshParser::next_or_error(&mut pair)?;
-                let expr = self.build_expr_from_pair(next)?;
-                match expr {
-                    Expr::Val(name, index_maybe) => Ok(EmptyVecDef(name, *index_maybe.unwrap())),
-                    _ => {
-                        anyhow::bail!("unexpected expr in var_vec_def: {:?}, expected Val", expr)
-                    }
-                }
-            }
-            Rule::loop_stmt => {
-                let mut pair = pair.into_inner();
-                let iter_count = AshParser::next_or_error(&mut pair)?;
-                let iter_count_expr = self.build_expr_from_pair(iter_count)?;
-                let block = AshParser::next_or_error(&mut pair)?;
-                let block_inner = block.into_inner();
-                let block_ast = block_inner
-                    .map(|v| match v.as_rule() {
-                        Rule::stmt => {
-                            let mut pair = v.into_inner();
-                            let next = AshParser::next_or_error(&mut pair)?;
-                            self.build_ast_from_pair(next)
-                        }
-                        _ => Err(anyhow::anyhow!("invalid expression in block")),
-                    })
-                    .collect::<Result<Vec<AstNode>>>()?;
-                Ok(Loop(iter_count_expr, block_ast))
-            }
-            Rule::function_call => Ok(ExprUnassigned(self.build_expr_from_pair(pair)?)),
-            Rule::var_def => {
-                // get vardef
-                let mut pair = pair.into_inner();
-                let next = AshParser::next_or_error(&mut pair)?;
-                let mut varpair = next.into_inner();
-                let name;
-                let is_let;
-                if varpair.len() == 2 {
-                    // it's a let assignment
-                    AshParser::next_or_error(&mut varpair)?;
-                    name = AshParser::next_or_error(&mut varpair)?.as_str().to_string();
-                    is_let = true;
-                } else if varpair.len() == 1 {
-                    // it's a regular assignment
-                    name = AshParser::next_or_error(&mut varpair)?.as_str().to_string();
-                    is_let = false;
-                } else {
-                    return Err(anyhow::anyhow!("invalid varpait"));
-                }
-
-                let n = AshParser::next_or_error(&mut pair)?;
-                Ok(Stmt(name, is_let, self.build_expr_from_pair(n)?))
-            }
-            Rule::static_def => {
-                let mut pair = pair.into_inner();
-                let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
-                let expr = AshParser::next_or_error(&mut pair)?;
-                Ok(StaticDef(
-                    name.as_str().to_string(),
-                    self.build_expr_from_pair(expr)?,
-                ))
-            }
-            Rule::if_stmt => {
-                let mut pair = pair.into_inner();
-                let bool_expr = AshParser::next_or_error(&mut pair)?;
-                let mut bool_expr_pair = bool_expr.into_inner();
-                let expr1 =
-                    self.build_expr_from_pair(AshParser::next_or_error(&mut bool_expr_pair)?)?;
-                let bool_op = match AshParser::next_or_error(&mut bool_expr_pair)?.as_rule() {
-                    Rule::equal => BoolOp::Equal,
-                    Rule::not_equal => BoolOp::NotEqual,
-                    Rule::gt => BoolOp::GreaterThan,
-                    Rule::lt => BoolOp::LessThan,
-                    _ => anyhow::bail!("invalid bool op"),
-                };
-                let expr2 =
-                    self.build_expr_from_pair(AshParser::next_or_error(&mut bool_expr_pair)?)?;
-                let block = AshParser::next_or_error(&mut pair)?;
-                let block_inner = block.into_inner();
-                let block_ast = block_inner
-                    .map(|v| match v.as_rule() {
-                        Rule::stmt => {
-                            let mut pair = v.into_inner();
-                            let next = AshParser::next_or_error(&mut pair)?;
-                            self.build_ast_from_pair(next)
-                        }
-                        _ => anyhow::bail!("invalid expression in block"),
-                    })
-                    .collect::<Result<Vec<AstNode>>>()?;
-                Ok(If(
-                    Expr::BoolOp {
-                        lhs: Box::new(expr1),
-                        bool_op,
-                        rhs: Box::new(expr2),
-                    },
-                    block_ast,
-                ))
-            }
-            unknown_expr => anyhow::bail!(
-                "Unable to build ast node, unexpected expression: {:?}",
-                unknown_expr
-            ),
-        }
-    }
-
-    fn build_expr_from_pair(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<Expr> {
-        match pair.as_rule() {
-            Rule::var_indexed => {
-                let mut pair = pair.into_inner();
-                let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
-                let index_maybe = if let Some(next) = pair.next() {
-                    Some(self.build_expr_from_pair(next)?.into())
-                } else {
-                    None
-                };
-                Ok(Expr::Val(name, index_maybe))
-            }
-            Rule::literal_dec => Ok(Expr::Lit(pair.as_str().to_string())),
-            Rule::vec => {
-                let mut pair = pair.into_inner();
-                let next = AshParser::next_or_error(&mut pair)?;
-                if next.as_rule() == Rule::vec {
-                    let mut out: Vec<Expr> = Vec::new();
-                    out.push(self.build_expr_from_pair(next.clone())?);
-                    for next in pair {
+                Rule::literal_dec => Ok(Expr::Lit(pair.as_str().to_string())),
+                Rule::vec => {
+                    let mut pair = pair.into_inner();
+                    let next = AshParser::next_or_error(&mut pair)?;
+                    if next.as_rule() == Rule::vec {
+                        let mut out: Vec<Expr> = Vec::new();
                         out.push(self.build_expr_from_pair(next.clone())?);
-                        // next = pair.next().unwrap();
-                    }
-                    Ok(Expr::VecVec(out))
-                } else {
-                    let mut out: Vec<String> = Vec::new();
-                    out.push(next.as_str().to_string());
-                    for next in pair {
+                        for next in pair {
+                            out.push(self.build_expr_from_pair(next.clone())?);
+                            // next = pair.next().unwrap();
+                        }
+                        Ok(Expr::VecVec(out))
+                    } else {
+                        let mut out: Vec<String> = Vec::new();
                         out.push(next.as_str().to_string());
+                        for next in pair {
+                            out.push(next.as_str().to_string());
+                        }
+                        Ok(Expr::VecLit(out))
                     }
-                    Ok(Expr::VecLit(out))
                 }
-            }
-            Rule::function_call => {
-                let mut pair = pair.into_inner();
-                let next = AshParser::next_or_error(&mut pair)?;
-                let fn_name = next.as_str().to_string();
-                let arg_pair = AshParser::next_or_error(&mut pair)?.into_inner();
-                let mut vars: Vec<Expr> = Vec::new();
-                for v in arg_pair {
-                    vars.push(self.build_expr_from_pair(v)?);
-                }
-                self.mark_fn_call(fn_name.clone());
-                Ok(Expr::FnCall(fn_name, false, vars))
-            }
-            Rule::atom => {
-                let mut pair = pair.into_inner();
-                let n = AshParser::next_or_error(&mut pair)?;
-                match n.as_rule() {
-                    Rule::function_call => Ok(self.build_expr_from_pair(n)?),
-                    Rule::varname => Ok(Expr::Val(n.as_str().to_string(), None)),
-                    Rule::var_indexed => {
-                        let mut pair = n.into_inner();
-                        let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
-                        let index_maybe = if let Some(next) = pair.next() {
-                            Some(self.build_expr_from_pair(next)?.into())
-                        } else {
-                            None
-                        };
-                        Ok(Expr::Val(name, index_maybe))
+                Rule::function_call => {
+                    let mut pair = pair.into_inner();
+                    let next = AshParser::next_or_error(&mut pair)?;
+                    let fn_name = next.as_str().to_string();
+                    let arg_pair = AshParser::next_or_error(&mut pair)?.into_inner();
+                    let mut vars: Vec<Expr> = Vec::new();
+                    for v in arg_pair {
+                        vars.push(self.build_expr_from_pair(v)?);
                     }
-                    Rule::literal_dec => Ok(Expr::Lit(n.as_str().to_string())),
-                    _ => anyhow::bail!("invalid atom"),
+                    self.mark_fn_call(fn_name.clone());
+                    Ok(Expr::FnCall(fn_name, false, vars))
                 }
-            }
-            Rule::expr => {
-                let mut pair = pair.into_inner();
-                if pair.len() == 1 {
-                    return self.build_expr_from_pair(AshParser::next_or_error(&mut pair)?);
+                Rule::atom => {
+                    let mut pair = pair.into_inner();
+                    let n = AshParser::next_or_error(&mut pair)?;
+                    match n.as_rule() {
+                        Rule::function_call => Ok(self.build_expr_from_pair(n)?),
+                        Rule::varname => Ok(Expr::Val(n.as_str().to_string(), None)),
+                        Rule::var_indexed => {
+                            let mut pair = n.into_inner();
+                            let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
+                            let index_maybe = if let Some(next) = pair.next() {
+                                Some(self.build_expr_from_pair(next)?.into())
+                            } else {
+                                None
+                            };
+                            Ok(Expr::Val(name, index_maybe))
+                        }
+                        Rule::literal_dec => Ok(Expr::Lit(n.as_str().to_string())),
+                        _ => anyhow::bail!("invalid atom"),
+                    }
                 }
-                let pratt = PrattParser::new()
-                    .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
-                    .op(Op::infix(Rule::mul, Assoc::Left) | Op::infix(Rule::inv, Assoc::Left));
-                pratt
-                    .map_primary(|primary| match primary.as_rule() {
-                        Rule::atom => self.build_expr_from_pair(primary),
-                        Rule::expr => self.build_expr_from_pair(primary),
-                        _ => Err(anyhow::anyhow!("unexpected rule in pratt parser")),
-                    })
-                    .map_infix(|lhs, op, rhs| match op.as_rule() {
-                        Rule::add => Ok(Expr::NumOp {
-                            lhs: Box::new(lhs?),
-                            op: NumOp::Add,
-                            rhs: Box::new(rhs?),
-                        }),
-                        Rule::sub => Ok(Expr::NumOp {
-                            lhs: Box::new(lhs?),
-                            op: NumOp::Sub,
-                            rhs: Box::new(rhs?),
-                        }),
-                        Rule::mul => Ok(Expr::NumOp {
-                            lhs: Box::new(lhs?),
-                            op: NumOp::Mul,
-                            rhs: Box::new(rhs?),
-                        }),
-                        Rule::inv => Ok(Expr::NumOp {
-                            lhs: Box::new(lhs?),
-                            op: NumOp::Inv,
-                            rhs: Box::new(rhs?),
-                        }),
-                        _ => unreachable!(),
-                    })
-                    .parse(pair)
+                Rule::expr => {
+                    let mut pair = pair.into_inner();
+                    if pair.len() == 1 {
+                        return self.build_expr_from_pair(AshParser::next_or_error(&mut pair)?);
+                    }
+                    let pratt = PrattParser::new()
+                        .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
+                        .op(Op::infix(Rule::mul, Assoc::Left) | Op::infix(Rule::inv, Assoc::Left));
+                    pratt
+                        .map_primary(|primary| match primary.as_rule() {
+                            Rule::atom => self.build_expr_from_pair(primary),
+                            Rule::expr => self.build_expr_from_pair(primary),
+                            _ => Err(anyhow::anyhow!("unexpected rule in pratt parser")),
+                        })
+                        .map_infix(|lhs, op, rhs| match op.as_rule() {
+                            Rule::add => Ok(Expr::NumOp {
+                                lhs: Box::new(lhs?),
+                                op: NumOp::Add,
+                                rhs: Box::new(rhs?),
+                            }),
+                            Rule::sub => Ok(Expr::NumOp {
+                                lhs: Box::new(lhs?),
+                                op: NumOp::Sub,
+                                rhs: Box::new(rhs?),
+                            }),
+                            Rule::mul => Ok(Expr::NumOp {
+                                lhs: Box::new(lhs?),
+                                op: NumOp::Mul,
+                                rhs: Box::new(rhs?),
+                            }),
+                            Rule::inv => Ok(Expr::NumOp {
+                                lhs: Box::new(lhs?),
+                                op: NumOp::Inv,
+                                rhs: Box::new(rhs?),
+                            }),
+                            _ => unreachable!(),
+                        })
+                        .parse(pair)
+                }
+                unknown_expr => anyhow::bail!(
+                    "Unable to build expression, unexpected rule: {:?}",
+                    unknown_expr
+                ),
             }
-            unknown_expr => anyhow::bail!(
-                "Unable to build expression, unexpected rule: {:?}",
-                unknown_expr
-            ),
         }
     }
 }

@@ -1,17 +1,12 @@
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::str::FromStr;
 
 use anyhow::Result;
 use lettuce::FieldScalar;
 use lettuce::Vector;
 
-use crate::compiler::CompilerState;
-use crate::log;
-use crate::parser::AstNode;
-use crate::parser::Expr;
-use crate::parser::NumOp;
-use crate::r1cs::constraint::R1csConstraint;
-use crate::r1cs::constraint::SymbolicOp;
+use crate::*;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum VarLocation {
@@ -51,33 +46,38 @@ pub struct VM<'a, T: FieldScalar> {
     pub vars: HashMap<String, Var<T>>,
     pub compiler_state: &'a mut CompilerState<T>,
     // a, b, c
-    pub constraints: Vec<R1csConstraint<T>>,
+    pub constraints: Vec<AR1CSConstraint<T>>,
     pub args: Vec<Var<T>>,
     pub return_val: Option<Var<T>>,
     pub name: String,
+    pub input_len: usize,
+    pub is_entrypoint: bool,
 }
 
 impl<'a, T: FieldScalar> VM<'a, T> {
-    pub fn new(compiler_state: &'a mut CompilerState<T>) -> Self {
+    pub fn new(compiler_state: &'a mut CompilerState<T>, input_len: usize) -> Self {
         // add the field safety constraint
         // constrains -1*1 * -1*1 - 1 = 0
         // should fail in any field that is different than
         // the current one
-        let constraints = vec![R1csConstraint::new(
+        let constraints = vec![AR1CSConstraint::new(
             vec![(T::negone(), 0)],
             vec![(T::negone(), 0)],
             vec![(T::one(), 0)],
             "field cardinality sanity constraint",
         )];
         compiler_state.messages.push("".to_string());
+        let vars = HashMap::default();
         VM {
             name: "entrypoint".to_string(),
-            var_index: 1,
-            vars: HashMap::new(),
+            var_index: 1, // the one variable is always at index 0
+            vars,
             compiler_state,
             constraints,
             args: Vec::new(),
             return_val: None,
+            input_len,
+            is_entrypoint: true,
         }
     }
 
@@ -90,6 +90,8 @@ impl<'a, T: FieldScalar> VM<'a, T> {
             args,
             return_val: None,
             name: name.to_string(),
+            input_len: vm.input_len,
+            is_entrypoint: false,
         }
     }
 
@@ -138,22 +140,31 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     }
                 }
                 AstNode::FnVar(names) => {
-                    for (i, v) in names[0..names.len()].iter().enumerate() {
-                        let name = v;
+                    for (i, name) in names.iter().enumerate() {
                         if self.vars.contains_key(name) {
                             return log::error!(
                                 &format!("variable already defined: {name}"),
                                 "attempting to define variable in function header"
                             );
                         }
-                        self.vars.insert(name.clone(), self.args[i].clone());
+                        if i == 0 && self.is_entrypoint {
+                            self.vars.insert(
+                                name.clone(),
+                                Var {
+                                    index: None,
+                                    location: VarLocation::Static,
+                                    value: vec![T::from(self.input_len as u128)].into(),
+                                },
+                            );
+                        } else {
+                            self.vars.insert(name.clone(), self.args[i].clone());
+                        }
                     }
                 }
                 AstNode::Rtrn(expr) => {
-                    let fn_source_path = self.compiler_state.fn_to_path.get(&self.name).unwrap();
                     self.compiler_state
                         .messages
-                        .insert(0, format!("return call in {}", fn_source_path));
+                        .insert(0, format!("return call in {}()", self.name));
                     if self.return_val.is_some() {
                         return log::error!(
                             "return value already set",
@@ -329,13 +340,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
     }
 
     fn assignment_constraint(&mut self, lhs_i: usize, rhs_i: usize) {
-        self.constraints.push(R1csConstraint::new(
+        self.constraints.push(AR1CSConstraint::new(
             vec![(T::one(), lhs_i)],
             vec![(T::one(), 0)],
             vec![(T::one(), rhs_i)],
             &format!("equality constraint {} = {}", lhs_i, rhs_i),
         ));
-        self.constraints.push(R1csConstraint::symbolic(
+        self.constraints.push(AR1CSConstraint::symbolic(
             lhs_i,
             vec![(T::one(), 0)],
             vec![(T::one(), rhs_i)],
@@ -345,13 +356,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
     }
 
     fn static_assignment_constraint(&mut self, lhs_i: usize, rhs_v: T) {
-        self.constraints.push(R1csConstraint::new(
+        self.constraints.push(AR1CSConstraint::new(
             vec![(rhs_v, 0)],
             vec![(T::one(), 0)],
             vec![(T::one(), lhs_i)],
             &format!("static assignment ({}) <- {}", lhs_i, rhs_v),
         ));
-        self.constraints.push(R1csConstraint::symbolic(
+        self.constraints.push(AR1CSConstraint::symbolic(
             lhs_i,
             vec![(rhs_v, 0)],
             vec![(T::one(), 0)],
@@ -362,7 +373,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
 
     /// Used for constants and statics.
     fn spawn_known_variable(&mut self, val: T) {
-        self.constraints.push(R1csConstraint::new(
+        self.constraints.push(AR1CSConstraint::new(
             vec![(T::one(), self.var_index)],
             vec![(T::one(), 0)],
             vec![(val, 0)],
@@ -371,7 +382,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 val, self.var_index,
             ),
         ));
-        self.constraints.push(R1csConstraint::symbolic(
+        self.constraints.push(AR1CSConstraint::symbolic(
             self.var_index,
             vec![(T::one(), 0)],
             vec![(val, 0)],
@@ -430,7 +441,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                             }
                             VarLocation::Constraint => {
                                 for (i, _v) in var.value.iter().enumerate() {
-                                    self.constraints.push(R1csConstraint::symbolic(
+                                    self.constraints.push(AR1CSConstraint::symbolic(
                                         var.index.unwrap() + i,
                                         vec![(T::one(), 0)],
                                         vec![(T::one(), 0)],
@@ -450,13 +461,12 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     }
                 }
                 // TODO: break this into separate functions
-                let path = self.compiler_state.fn_to_path.get(name).unwrap();
-                self.compiler_state
-                    .messages
-                    .insert(0, format!("{}() ({})", name, path));
                 let args: Vec<Var<T>> = vars.iter().map(|v| self.eval(v)).collect::<Result<_>>()?;
                 // look for an ar1cs implementation first
-                if let Some(v) = self.compiler_state.fn_to_r1cs_parser.get(name).cloned() {
+                if let Some(ar1cs_parser) = self.compiler_state.fn_ar1cs_maybe(name) {
+                    self.compiler_state
+                        .messages
+                        .insert(0, format!("ar1cs {}()", name));
                     let constrain_args_if_needed = args
                         .iter()
                         .map(|v| {
@@ -481,11 +491,11 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         })
                         .collect::<Result<_>>()?;
                     let out_constraints =
-                        v.signals_as_args(self.var_index, constrain_args_if_needed)?;
+                        ar1cs_parser.signals_as_args(self.var_index, constrain_args_if_needed)?;
                     self.constraints.append(&mut out_constraints.clone());
                     let return_index = self.var_index;
-                    self.var_index += v.return_names.len();
-                    return if !v.return_names.is_empty() {
+                    self.var_index += ar1cs_parser.return_names.len();
+                    return if !ar1cs_parser.return_names.is_empty() {
                         Ok(Var {
                             index: Some(return_index),
                             location: VarLocation::Constraint,
@@ -501,27 +511,25 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         })
                     };
                 }
-                let fn_ast = self.compiler_state.fn_to_ast.get(name);
-                if fn_ast.is_none() {
-                    return log::error!("function not found: {name}");
+                if let Some(ash_parser) = self.compiler_state.fn_ash_maybe(name) {
+                    let mut vm = VM::from(self, args, name);
+                    vm.eval_ast(ash_parser.ast)?;
+                    let return_val = vm.return_val;
+                    let new_var_index = vm.var_index;
+                    let mut out_constraints = vm.constraints;
+                    self.constraints.append(&mut out_constraints);
+                    self.var_index = new_var_index;
+                    return if let Some(v) = return_val {
+                        Ok(v)
+                    } else {
+                        Ok(Var {
+                            index: None,
+                            location: VarLocation::Static,
+                            value: vec![1.into()].into(),
+                        })
+                    };
                 }
-                let fn_ast = fn_ast.unwrap().clone();
-                let mut vm = VM::from(self, args, name);
-                vm.eval_ast(fn_ast)?;
-                let return_val = vm.return_val;
-                let new_var_index = vm.var_index;
-                let mut out_constraints = vm.constraints;
-                self.constraints.append(&mut out_constraints);
-                self.var_index = new_var_index;
-                if let Some(v) = return_val {
-                    Ok(v)
-                } else {
-                    Ok(Var {
-                        index: None,
-                        location: VarLocation::Static,
-                        value: vec![1.into()].into(),
-                    })
-                }
+                anyhow::bail!("ashlang: unknown function: {name}");
             }
             Expr::Val(name, index_maybe) => {
                 let index_maybe = match index_maybe {
@@ -662,13 +670,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // (cv*1 + 1*svi)*(1*1) - (1*ovi) = 0
                     // cv + sv - ov = 0
                     self.constraints.append(&mut vec![
-                        R1csConstraint::new(
+                        AR1CSConstraint::new(
                             vec![(cv, 0), (T::one(), svi)],
                             vec![(T::one(), 0)],
                             vec![(T::one(), ovi)],
                             &format!("addition between ({cv}) and {svi} into {ovi}"),
                         ),
-                        R1csConstraint::symbolic(
+                        AR1CSConstraint::symbolic(
                             ovi,
                             vec![(cv, 0), (T::one(), svi)],
                             vec![(T::one(), 0)],
@@ -694,13 +702,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // (cv*1)*(1*svi) - (1*ovi) = 0
                     // cv * sv - ov = 0
                     self.constraints.append(&mut vec![
-                        R1csConstraint::new(
+                        AR1CSConstraint::new(
                             vec![(cv, 0)],
                             vec![(T::one(), svi)],
                             vec![(T::one(), ovi)],
                             &format!("multiplication between ({cv}) and {svi} into {ovi}"),
                         ),
-                        R1csConstraint::symbolic(
+                        AR1CSConstraint::symbolic(
                             ovi,
                             vec![(cv, 0)],
                             vec![(T::one(), svi)],
@@ -728,13 +736,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         // (cv*1 + 1*ovi)*(1*1) - (1*lvi) = 0
                         // (cv + ovi)*1 - lvi = 0
                         self.constraints.append(&mut vec![
-                            R1csConstraint::new(
+                            AR1CSConstraint::new(
                                 vec![(cv, 0), (T::one(), ovi)],
                                 vec![(T::one(), 0)],
                                 vec![(T::one(), lvi)],
                                 &format!("subtraction between {lvi} and ({cv}) into {ovi}"),
                             ),
-                            R1csConstraint::symbolic(
+                            AR1CSConstraint::symbolic(
                                 ovi,
                                 vec![(T::one(), lvi), (T::negone() * cv, 0)],
                                 vec![(T::one(), 0)],
@@ -753,13 +761,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         // (1*rvi + 1*ovi)*(1*1) - (lv*1) = 0
                         // (rvi + ovi)*1 - lv = 0
                         self.constraints.append(&mut vec![
-                            R1csConstraint::new(
+                            AR1CSConstraint::new(
                                 vec![(T::one(), rvi), (T::one(), ovi)],
                                 vec![(T::one(), 0)],
                                 vec![(lv, 0)],
                                 &format!("subtraction between ({lv}) and {rvi} into {ovi}"),
                             ),
-                            R1csConstraint::symbolic(
+                            AR1CSConstraint::symbolic(
                                 ovi,
                                 vec![(lv, 0), (T::negone(), rvi)],
                                 vec![(T::one(), 0)],
@@ -791,13 +799,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         // (icv*lvi)*(1*1) - (1*ovi) = 0
                         // (icv*lvi)*1 - ovi = 0
                         self.constraints.append(&mut vec![
-                            R1csConstraint::new(
+                            AR1CSConstraint::new(
                                 vec![(icv, lvi)],
                                 vec![(T::one(), 0)],
                                 vec![(T::one(), ovi)],
                                 &format!("modinv between {lvi} and ({cv}) into {ovi}"),
                             ),
-                            R1csConstraint::symbolic(
+                            AR1CSConstraint::symbolic(
                                 ovi,
                                 vec![(icv, lvi)],
                                 vec![(T::one(), 0)],
@@ -822,13 +830,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         // (1*rvi)*(1*ovi) - (1*1) = 0
                         // rvi*ovi - 1 = 0
                         self.constraints.append(&mut vec![
-                            R1csConstraint::new(
+                            AR1CSConstraint::new(
                                 vec![(T::one(), rvi)],
                                 vec![(T::one(), ovi)],
                                 vec![(T::one(), 0)],
                                 &format!("modinv {rvi} into {ovi}"),
                             ),
-                            R1csConstraint::symbolic(
+                            AR1CSConstraint::symbolic(
                                 ovi,
                                 vec![(T::one(), 0)],
                                 vec![(T::one(), rvi)],
@@ -843,13 +851,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         // (lv*rvi)*(1*1) - (1*ovi) = 0
                         // (lv*rvi)*1 - ovi = 0
                         self.constraints.append(&mut vec![
-                            R1csConstraint::new(
+                            AR1CSConstraint::new(
                                 vec![(lv, rvi)],
                                 vec![(T::one(), 0)],
                                 vec![(T::one(), ovi)],
                                 &format!("multiply {rvi} and ({lv}) into {ovi}"),
                             ),
-                            R1csConstraint::symbolic(
+                            AR1CSConstraint::symbolic(
                                 ovi,
                                 vec![(lv, rvi)],
                                 vec![(T::one(), 0)],
@@ -891,13 +899,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // (1*lv + 1*rv) * (1*1) - (1*new_var) = 0
                     // lv + rv - new_var = 0
                     self.constraints.append(&mut vec![
-                        R1csConstraint::new(
+                        AR1CSConstraint::new(
                             vec![(T::one(), lvi), (T::one(), rvi)],
                             vec![(T::one(), 0)],
                             vec![(T::one(), ovi)],
                             &format!("addition between {lvi} and {rvi} into {ovi}"),
                         ),
-                        R1csConstraint::symbolic(
+                        AR1CSConstraint::symbolic(
                             ovi,
                             vec![(T::one(), lvi), (T::one(), rvi)],
                             vec![(T::one(), 0)],
@@ -922,13 +930,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // (1*lv + 1*rv) * (1*1) - (1*new_var) = 0
                     // lv + rv - new_var = 0
                     self.constraints.append(&mut vec![
-                        R1csConstraint::new(
+                        AR1CSConstraint::new(
                             vec![(T::one(), lvi)],
                             vec![(T::one(), rvi)],
                             vec![(T::one(), ovi)],
                             &format!("multiplication between {lvi} and {rvi} into {ovi}"),
                         ),
-                        R1csConstraint::symbolic(
+                        AR1CSConstraint::symbolic(
                             ovi,
                             vec![(T::one(), lvi)],
                             vec![(T::one(), rvi)],
@@ -953,13 +961,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // (1*lv + -1*rv) * (1*1) - (1*new_var) = 0
                     // lv + -1*rv - new_var = 0
                     self.constraints.append(&mut vec![
-                        R1csConstraint::new(
+                        AR1CSConstraint::new(
                             vec![(T::one(), lvi), (T::negone(), rvi)],
                             vec![(T::one(), 0)],
                             vec![(T::one(), ovi)],
                             &format!("subtraction between {lvi} and {rvi} into {ovi}"),
                         ),
-                        R1csConstraint::symbolic(
+                        AR1CSConstraint::symbolic(
                             ovi,
                             vec![(T::one(), lvi), (T::negone(), rvi)],
                             vec![(T::one(), 0)],
@@ -984,13 +992,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // (1*rhs) * (1*rhs_inv) - (1*1) = 0
                     // rhs * rhs_inv - 1 = 0
                     self.constraints.append(&mut vec![
-                        R1csConstraint::new(
+                        AR1CSConstraint::new(
                             vec![(T::one(), rvi)],
                             vec![(T::one(), ovi)],
                             vec![(T::one(), 0)],
                             &format!("inversion of {rvi} into {ovi} (1/2)"),
                         ),
-                        R1csConstraint::symbolic(
+                        AR1CSConstraint::symbolic(
                             ovi,
                             vec![(T::one(), 0)],
                             vec![(T::one(), rvi)],
@@ -1013,13 +1021,13 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // (1*lv) * (1*rv) - (1*new_var) = 0
                     // lv * rv - new_var = 0
                     self.constraints.append(&mut vec![
-                        R1csConstraint::new(
+                        AR1CSConstraint::new(
                             vec![(T::one(), lvi)],
                             vec![(T::one(), rvi)],
                             vec![(T::one(), ovi)],
                             &format!("multiplication of {lvi} and {rvi} into {ovi} (2/2)"),
                         ),
-                        R1csConstraint::symbolic(
+                        AR1CSConstraint::symbolic(
                             ovi,
                             vec![(T::one(), lvi)],
                             vec![(T::one(), rvi)],

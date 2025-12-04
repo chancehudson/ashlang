@@ -18,8 +18,8 @@ pub(crate) struct R1csPestParser;
 /// source files.
 ///
 #[derive(Clone)]
-pub(crate) struct R1csParser<E: FieldScalar> {
-    constraints: Vec<R1csConstraint<E>>,
+pub struct AR1CSParser<E: FieldScalar> {
+    constraints: Vec<AR1CSConstraint<E>>,
     arg_name_index: HashMap<String, usize>,
     arg_names: Vec<String>,
     // TODO: these shouldn't be pub
@@ -28,8 +28,44 @@ pub(crate) struct R1csParser<E: FieldScalar> {
     is_function: bool,
 }
 
-impl<E: FieldScalar> R1csParser<E> {
-    pub fn symbolic_constraints(&self) -> impl Iterator<Item = &R1csConstraint<E>> {
+impl<E: FieldScalar> AR1CSParser<E> {
+    /// Return a mask vectors of zeroes and ones, with ones in each witness
+    /// index that is publicly revealed.
+    pub fn wtns_mask(&self) -> Vector<E> {
+        let mut mask = Vector::new(self.wtns_len());
+        for constraint in self.symbolic_constraints() {
+            match constraint.symbolic_op {
+                Some(SymbolicOp::Output) => {
+                    let out_i = constraint
+                        .out_i
+                        .expect("ashlang: symbolic constraint should always have output index");
+                    mask[out_i] = E::one();
+                }
+                _ => {}
+            }
+        }
+        mask
+    }
+
+    pub fn input_len(&self) -> usize {
+        self.symbolic_constraints()
+            .filter(|v| match v.symbolic_op {
+                Some(SymbolicOp::Input) => true,
+                _ => false,
+            })
+            .count()
+    }
+
+    pub fn output_len(&self) -> usize {
+        self.symbolic_constraints()
+            .filter(|v| match v.symbolic_op {
+                Some(SymbolicOp::Output) => true,
+                _ => false,
+            })
+            .count()
+    }
+
+    pub fn symbolic_constraints(&self) -> impl Iterator<Item = &AR1CSConstraint<E>> {
         self.constraints
             .iter()
             .filter(|constraint| constraint.symbolic)
@@ -72,7 +108,7 @@ impl<E: FieldScalar> R1csParser<E> {
     }
 
     pub fn new(source: &str) -> Result<Self> {
-        let mut out = R1csParser {
+        let mut out = AR1CSParser {
             constraints: Vec::new(),
             arg_name_index: HashMap::new(),
             arg_names: vec![],
@@ -134,7 +170,7 @@ impl<E: FieldScalar> R1csParser<E> {
                     let b = out.parse_inner(b)?;
                     let c = pair.next().unwrap();
                     let c = out.parse_inner(c)?;
-                    out.constraints.push(R1csConstraint::new(a, b, c, ""));
+                    out.constraints.push(AR1CSConstraint::new(a, b, c, ""));
                 }
                 Rule::symbolic_line => {
                     let mut pair = pair.into_inner();
@@ -158,7 +194,7 @@ impl<E: FieldScalar> R1csParser<E> {
                     } else {
                         out_index = string_to_index(o.as_str());
                     }
-                    out.constraints.push(R1csConstraint::symbolic(
+                    out.constraints.push(AR1CSConstraint::symbolic(
                         out_index,
                         a,
                         b,
@@ -223,7 +259,7 @@ impl<E: FieldScalar> R1csParser<E> {
         &self,
         index_start: usize,
         mut args: Vec<usize>,
-    ) -> Result<Vec<R1csConstraint<E>>> {
+    ) -> Result<Vec<AR1CSConstraint<E>>> {
         // map local signal indices to caller indices
         let mut signal_map: HashMap<usize, usize> = HashMap::new();
         // push the 1 signal to the front of the arg list
