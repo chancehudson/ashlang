@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{cmp::Ordering, fmt::Display};
 
 use anyhow::Result;
 use lettuce::*;
@@ -30,7 +30,7 @@ pub struct R1csConstraint<E: FieldScalar> {
 /// These operations can be arbitrarily complex and
 /// are not bound by ability to be expressed as r1cs
 /// constraints.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub enum SymbolicOp {
     Inv,
     Mul,
@@ -162,6 +162,68 @@ impl<E: FieldScalar> Display for R1csConstraint<E> {
     }
 }
 
+/// It's important to deterministically sort output constraints. An r1cs with
+/// constraints in a different order is _technically_ a different program, though it will work
+/// for the same set of witnesses.
+impl<E: FieldScalar> Ord for R1csConstraint<E> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // sort symbolic constraints first
+        if self.symbolic != other.symbolic {
+            return self.symbolic.cmp(&other.symbolic);
+        }
+        // order by maximum witness index accessed.
+        //
+        // order by comparison of coefficients ?
+        // order by
+        if self.symbolic {
+            // both are symbolic
+            let out_i_cmp = self.out_i.unwrap().cmp(other.out_i.as_ref().unwrap());
+            if out_i_cmp.is_eq() {
+                // multiple symbolic constraints operating on a witness element
+                // make sure symbolic constraints are arbitrarily ordered
+                let final_cmp = self
+                    .symbolic_op
+                    .as_ref()
+                    .unwrap()
+                    .cmp(other.symbolic_op.as_ref().unwrap());
+                if final_cmp.is_eq() {
+                    println!(
+                        "ashlang warning: symbolic constraints sorted equal! program may be unsafe"
+                    )
+                }
+                return final_cmp;
+            } else {
+                return out_i_cmp;
+            }
+        }
+        let wtns_cmp = self.max_wtns_i().cmp(&other.max_wtns_i());
+        if wtns_cmp.is_eq() {
+            
+        }
+        wtns_cmp
+
+        panic!()
+    }
+    fn max(self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
+        unimplemented!()
+    }
+    fn min(self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
+        unimplemented!()
+    }
+    fn clamp(self, min: Self, max: Self) -> Self
+    where
+        Self: Sized,
+    {
+        unimplemented!()
+    }
+}
+
 impl<E: FieldScalar> R1csConstraint<E> {
     pub fn new(a: Vec<(E, usize)>, b: Vec<(E, usize)>, c: Vec<(E, usize)>, comment: &str) -> Self {
         Self {
@@ -173,6 +235,27 @@ impl<E: FieldScalar> R1csConstraint<E> {
             symbolic: false,
             symbolic_op: None,
         }
+    }
+
+    /// Returning the highest wtns index with a defined (existent) coefficient.
+    pub fn max_wtns_i(&self) -> usize {
+        let mut max_wtns_i = 0usize;
+        for (_, wtns_i) in self.a.iter() {
+            if wtns_i > &max_wtns_i {
+                max_wtns_i = *wtns_i;
+            }
+        }
+        for (_, wtns_i) in self.b.iter() {
+            if wtns_i > &max_wtns_i {
+                max_wtns_i = *wtns_i;
+            }
+        }
+        for (_, wtns_i) in self.c.iter() {
+            if wtns_i > &max_wtns_i {
+                max_wtns_i = *wtns_i;
+            }
+        }
+        max_wtns_i
     }
 
     /// build a symbolic constraint used to solve the witness.
