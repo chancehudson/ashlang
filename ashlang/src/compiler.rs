@@ -60,7 +60,7 @@ pub struct Compiler<E: FieldScalar> {
 }
 
 impl<E: FieldScalar> Compiler<E> {
-    pub fn new(config: &Config) -> Result<Self> {
+    pub fn new(config: &Config<E>) -> Result<Self> {
         let mut compiler = Compiler {
             print_asm: false,
             state: CompilerState::new(),
@@ -180,6 +180,20 @@ Path 2: {:?}",
                 )
             )
         }
+    }
+
+    /// Take an entry source file and combine entry and includes into a single ashlang source
+    /// string.
+    ///
+    /// Combine as sources separated by == name.ext ==
+    pub fn combine_src(&self, entry_src: &str) -> Result<String> {
+        let parser = AshParser::parse(entry_src, "entry")?;
+        let mut out = entry_src.to_string();
+        for fn_name in parser.fn_names.keys() {
+            let (fn_src, extension) = self.parse_fn(&fn_name)?;
+            out.push_str(&format!("\n== {fn_name}.{extension} ==\n\n{fn_src}"));
+        }
+        Ok(out)
     }
 
     #[allow(dead_code)]

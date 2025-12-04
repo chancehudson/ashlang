@@ -51,6 +51,8 @@ impl<E: FieldScalar> Arithmetizer<E> {
     }
 
     /// Computes the witness for self. Returns the number of public outputs.
+    ///
+    /// Expose input length as a static variable in the entrypoint
     pub fn compute_wtns(&mut self, input: Vector<E>) -> Result<usize> {
         let mut wtns = Vector::new(self.parser.wtns_len());
         let mut written_wtns_indices = HashSet::<usize>::new();

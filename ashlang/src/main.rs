@@ -1,4 +1,4 @@
-use std::{str::FromStr, time::Instant};
+use std::time::Instant;
 
 use anyhow::Result;
 
@@ -20,12 +20,6 @@ fn main() -> Result<()> {
     type E = MilliScalarMont;
     let mut config = cli::parse()?;
     config.extension_priorities.push("ar1cs".to_string());
-    let input = config
-        .input
-        .iter()
-        .map(|v| E::from(u128::from_str(v).unwrap()))
-        .collect();
-
     let mut compiler: Compiler<E> = Compiler::new(&mut config)?;
     let ar1cs_src = compiler.compile(&config.entry_fn)?;
     println!("{}\n", ar1cs_src);
@@ -33,7 +27,7 @@ fn main() -> Result<()> {
     let mut arithm = Arithmetizer::new(&ar1cs_src)?;
     println!("{}", arithm.r1cs);
     print!("Building witness...");
-    let output_len = arithm.compute_wtns(input)?;
+    let output_len = arithm.compute_wtns(config.input)?;
     print!(" ✅\nVerifying witness...");
     println!("{}", arithm.wtns.as_ref().unwrap());
     let wtns = arithm.assert_wtns()?;

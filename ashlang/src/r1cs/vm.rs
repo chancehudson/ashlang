@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -70,10 +71,11 @@ impl<'a, T: FieldScalar> VM<'a, T> {
             "field cardinality sanity constraint",
         )];
         compiler_state.messages.push("".to_string());
+        let mut vars = HashMap::default();
         VM {
             name: "entrypoint".to_string(),
-            var_index: 1,
-            vars: HashMap::new(),
+            var_index: 1, // the one variable is always at index 0
+            vars,
             compiler_state,
             constraints,
             args: Vec::new(),
