@@ -1,9 +1,0 @@
-(_, _) -> _
-
-push 2
-pow
-swap 1
-div_mod
-pop 1
-
-return
