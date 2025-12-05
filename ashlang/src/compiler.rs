@@ -271,7 +271,6 @@ Path 2: {:?}",
         let parser = AshParser::parse(&entry_src, entry_fn)?;
         let fn_calls = self.compile_functions(&parser)?;
         for (fn_name, call_count) in fn_calls {
-            println!("{fn_name} {call_count}");
             if call_count == 0 {
                 continue;
             }

@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-use anyhow::Context;
 use anyhow::Result;
 use lettuce::*;
 
