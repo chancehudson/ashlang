@@ -19,6 +19,7 @@ pub(crate) struct R1csPestParser;
 ///
 #[derive(Clone)]
 pub struct AR1CSParser<E: FieldScalar> {
+    pub src: String,
     constraints: Vec<AR1CSConstraint<E>>,
     arg_name_index: HashMap<String, usize>,
     arg_names: Vec<String>,
@@ -109,6 +110,7 @@ impl<E: FieldScalar> AR1CSParser<E> {
 
     pub fn new(source: &str) -> Result<Self> {
         let mut out = AR1CSParser {
+            src: source.to_string(),
             constraints: Vec::new(),
             arg_name_index: HashMap::new(),
             arg_names: vec![],

@@ -26,9 +26,13 @@ impl<E: FieldScalar> AshlangProgram<E> {
         }
     }
 
-    pub fn ar1cs_src(&self, input_len: usize) -> Result<AR1CSSourceString> {
+    pub fn ar1cs_src(
+        &self,
+        input_len: usize,
+        static_args: &Vec<usize>,
+    ) -> Result<AR1CSSourceString> {
         let compiler = Compiler::<E>::default();
-        compiler.compile_src(&self.src, input_len)
+        compiler.compile_src(&self.src, input_len, static_args)
     }
 }
 
@@ -37,14 +41,14 @@ impl<E: FieldScalar> ZKProgram<E> for AshlangProgram<E> {
         vec![].into()
     }
 
-    fn r1cs(&self, input_len: usize) -> Result<R1CS<E>> {
-        let ar1cs_src = Self::ar1cs_src(self, input_len)?;
+    fn r1cs(&self, input_len: usize, static_args: &Vec<usize>) -> Result<R1CS<E>> {
+        let ar1cs_src = Self::ar1cs_src(self, input_len, static_args)?;
         let ar1cs = AshlangR1CS::new(ar1cs_src)?;
         Ok(ar1cs.r1cs)
     }
 
-    fn compute_wtns(&self, input: Vector<E>) -> Result<Vector<E>> {
-        let ar1cs_src = Self::ar1cs_src(self, input.len())?;
+    fn compute_wtns(&self, input: Vector<E>, static_args: &Vec<usize>) -> Result<Vector<E>> {
+        let ar1cs_src = Self::ar1cs_src(self, input.len(), static_args)?;
         let ar1cs = AshlangR1CS::new(ar1cs_src)?;
         ar1cs.compute_wtns(input)
     }
@@ -56,6 +60,7 @@ pub struct Config<E: FieldScalar> {
     pub include_paths: Vec<Utf8PathBuf>,
     pub verbosity: u8,
     pub input: Vector<E>,
+    pub statics: Vec<usize>,
     pub extension_priorities: Vec<String>,
     pub entry_fn: String,
     pub arg_fn: String,
@@ -132,7 +137,7 @@ impl<E: FieldScalar> Default for Compiler<E> {
         Compiler {
             print_asm: false,
             state: CompilerState::new(),
-            extensions: [".ar1cs", ".ash"].map(|v| v.to_string()).into(),
+            extensions: ["ash", "ar1cs"].map(|v| v.to_string()).into(),
         }
     }
 }
@@ -264,26 +269,45 @@ Path 2: {:?}",
     /// string.
     ///
     /// Combine as sources separated by == name.ext ==
-    pub fn combine_src(mut self, entry_fn: &str) -> Result<AshlangProgram<E>> {
+    pub fn combine_src(self, entry_fn: &str) -> Result<AshlangProgram<E>> {
         let (entry_src, ext) = self.parse_fn(entry_fn)?;
-        let mut out = entry_src.to_string();
         assert_eq!(ext, "ash");
-        let parser = AshParser::parse(&entry_src, entry_fn)?;
+        self.combine_entrypoint_src(&entry_src)
+    }
+
+    /// Take an entry source file and combine entry and includes into a single ashlang source
+    /// string.
+    ///
+    /// Combine as sources separated by == name.ext ==
+    pub fn combine_entrypoint_src(mut self, ashlang_src: &str) -> Result<AshlangProgram<E>> {
+        let mut out = ashlang_src.to_string();
+        let parser = AshParser::parse(ashlang_src, "entrypoint")?;
         let fn_calls = self.compile_functions(&parser)?;
         for (fn_name, call_count) in fn_calls {
             if call_count == 0 {
                 continue;
             }
-            let (fn_src, extension) = self.parse_fn(&fn_name)?;
-            out.push_str(&format!("\n=====\n{fn_name}.{extension}\n"));
-            out.push_str(&fn_src);
+            if let Some(ash_parser) = self.state.fn_ash_maybe(&fn_name) {
+                out.push_str(&format!("\n=====\n{fn_name}.ash\n"));
+                out.push_str(&ash_parser.src);
+            } else if let Some(ar1cs_parser) = self.state.fn_ar1cs_maybe(&fn_name) {
+                out.push_str(&format!("\n=====\n{fn_name}.ar1cs\n"));
+                out.push_str(&ar1cs_parser.src);
+            } else {
+                anyhow::bail!("ashlang::combine_entrypoint_src: unknown function: {fn_name}")
+            }
         }
 
         Ok(AshlangProgram::new(out))
     }
 
     /// Try to compile a combined ashlang source file into an ar1cs.
-    pub fn compile_src(mut self, src: &AshlangSourceString, input_len: usize) -> Result<String> {
+    pub fn compile_src(
+        mut self,
+        src: &AshlangSourceString,
+        input_len: usize,
+        static_args: &Vec<usize>,
+    ) -> Result<String> {
         let mut src_files = src.split("\n=====\n");
         let entrypoint = src_files.next().expect("should have entrypoint");
         for fn_src in src_files {
@@ -295,14 +319,14 @@ Path 2: {:?}",
             let fn_name = filename.file_stem().expect("should have filename");
             match file_ext {
                 "ash" => {
-                    let parser = AshParser::parse(&src, &fn_name)?;
+                    let parser = AshParser::parse(src, fn_name)?;
                     self.state.is_fn_ash.insert(fn_name.to_string(), true);
                     self.state
                         .fn_to_ash_parser
                         .insert(fn_name.to_string(), parser);
                 }
                 "ar1cs" => {
-                    let parser: AR1CSParser<E> = AR1CSParser::new(&src)?;
+                    let parser: AR1CSParser<E> = AR1CSParser::new(src)?;
                     self.state
                         .fn_to_r1cs_parser
                         .insert(fn_name.to_string(), parser);
@@ -311,22 +335,32 @@ Path 2: {:?}",
             }
         }
         let entrypoint_parser = AshParser::parse(&entrypoint, "entrypoint")?;
-        self.compile_parser(entrypoint_parser, input_len)
+        self.compile_parser(entrypoint_parser, input_len, static_args)
     }
 
     #[allow(dead_code)]
-    pub fn compile_str(self, entry_src: &str, input_len: usize) -> Result<String> {
+    pub fn compile_str(
+        self,
+        entry_src: &str,
+        input_len: usize,
+        static_args: &Vec<usize>,
+    ) -> Result<String> {
         let parser = AshParser::parse(entry_src, "entry")?;
-        self.compile_parser(parser, input_len)
+        self.compile_parser(parser, input_len, static_args)
     }
 
     // start at the entry file
     // parse it and determine what other files are needed
     // repeat until all files have been parsed
-    pub fn compile(self, entry_fn_name: &str, input_len: usize) -> Result<AR1CSSourceString> {
+    pub fn compile(
+        self,
+        entry_fn_name: &str,
+        input_len: usize,
+        static_args: &Vec<usize>,
+    ) -> Result<AR1CSSourceString> {
         let parsed = self.parse_fn(entry_fn_name)?;
         let parser = AshParser::parse(&parsed.0, entry_fn_name)?;
-        self.compile_parser(parser, input_len)
+        self.compile_parser(parser, input_len, static_args)
     }
 
     fn compile_functions(&mut self, parser: &AshParser) -> Result<HashMap<String, u64>> {
@@ -374,8 +408,13 @@ Path 2: {:?}",
         Ok(included_fn)
     }
 
-    fn compile_parser(mut self, parser: AshParser, input_len: usize) -> Result<String> {
-        let mut vm: VM<E> = VM::new(&mut self.state, input_len);
+    fn compile_parser(
+        mut self,
+        parser: AshParser,
+        input_len: usize,
+        static_args: &Vec<usize>,
+    ) -> Result<String> {
+        let mut vm: VM<E> = VM::new(&mut self.state, input_len, static_args);
         // build constraints from the AST
         vm.eval_ast(parser.ast)?;
         let mut final_constraints: Vec<AR1CSConstraint<E>> = Vec::new();

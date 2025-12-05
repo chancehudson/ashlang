@@ -25,11 +25,17 @@ pub fn parse<E: FieldScalar>() -> Result<Config<E>> {
     let include_paths = vec![".".into()];
 
     let input = matches.get_one::<String>("input");
+    let statics = matches.get_one::<String>("static");
     let verbosity = 0_u8;
     Ok(Config {
         include_paths,
         verbosity,
         input: parse_input::<E>(input)?,
+        statics: parse_input::<E>(statics)?
+            .into_iter()
+            .map(|v| v.into() as u128)
+            .map(|v| v as usize)
+            .collect(),
         extension_priorities: vec!["ash".to_string()],
         entry_fn,
         arg_fn,
@@ -66,5 +72,12 @@ fn cli() -> Command {
                 .long("input")
                 .required(false)
                 .help("private input to the program"),
+        )
+        .arg(
+            Arg::new("static")
+                .short('c')
+                .long("static")
+                .required(false)
+                .help("static program variables provided to entrypoint"),
         )
 }

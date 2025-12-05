@@ -101,6 +101,7 @@ dependencies = [
  "lettuce",
  "pest",
  "pest_derive",
+ "rand",
  "serde",
  "zkpo",
 ]
@@ -989,7 +990,6 @@ dependencies = [
 [[package]]
 name = "zkpo"
 version = "0.2.0"
-source = "git+https://github.com/chancehudson/zkpo.git#00212059d15ca66eb998eba570e010f346cf09a2"
 dependencies = [
  "anyhow",
  "lettuce",

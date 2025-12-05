@@ -51,11 +51,17 @@ pub struct VM<'a, T: FieldScalar> {
     pub return_val: Option<Var<T>>,
     pub name: String,
     pub input_len: usize,
+    pub static_args: Vec<usize>,
+    pub named_static_args: usize,
     pub is_entrypoint: bool,
 }
 
 impl<'a, T: FieldScalar> VM<'a, T> {
-    pub fn new(compiler_state: &'a mut CompilerState<T>, input_len: usize) -> Self {
+    pub fn new(
+        compiler_state: &'a mut CompilerState<T>,
+        input_len: usize,
+        static_args: &Vec<usize>,
+    ) -> Self {
         // add the field safety constraint
         // constrains -1*1 * -1*1 - 1 = 0
         // should fail in any field that is different than
@@ -76,8 +82,10 @@ impl<'a, T: FieldScalar> VM<'a, T> {
             constraints,
             args: Vec::new(),
             return_val: None,
-            input_len,
             is_entrypoint: true,
+            input_len,
+            static_args: static_args.clone(),
+            named_static_args: 0,
         }
     }
 
@@ -92,6 +100,8 @@ impl<'a, T: FieldScalar> VM<'a, T> {
             name: name.to_string(),
             input_len: vm.input_len,
             is_entrypoint: false,
+            static_args: vec![],
+            named_static_args: 0,
         }
     }
 
@@ -147,15 +157,35 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                                 "attempting to define variable in function header"
                             );
                         }
-                        if i == 0 && self.is_entrypoint {
-                            self.vars.insert(
-                                name.clone(),
-                                Var {
-                                    index: None,
-                                    location: VarLocation::Static,
-                                    value: vec![T::from(self.input_len as u128)].into(),
-                                },
-                            );
+                        if self.is_entrypoint {
+                            if i == 0 {
+                                self.vars.insert(
+                                    name.clone(),
+                                    Var {
+                                        index: None,
+                                        location: VarLocation::Static,
+                                        value: vec![T::from(self.input_len as u128)].into(),
+                                    },
+                                );
+                            } else {
+                                if i - 1 >= self.static_args.len() {
+                                    log::error!(&format!(
+                                        "Expected {} static args, got {}",
+                                        names.len() - 1,
+                                        self.static_args.len()
+                                    ))?;
+                                }
+                                self.named_static_args += 1;
+                                self.vars.insert(
+                                    name.clone(),
+                                    Var {
+                                        index: None,
+                                        location: VarLocation::Static,
+                                        value: vec![T::from(self.static_args[i - 1] as u128)]
+                                            .into(),
+                                    },
+                                );
+                            }
                         } else {
                             self.vars.insert(name.clone(), self.args[i].clone());
                         }
@@ -290,6 +320,22 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     return log::error!(&format!("ast node not supported for r1cs: {:?}", v));
                 }
             }
+        }
+        if self.is_entrypoint && self.named_static_args != self.static_args.len() {
+            // TODO: show way more information
+            // what statics were defined in src, what values were provided
+            // same the symmetric logic above
+            anyhow::bail!(
+                "ashlang: not all static args were used. Received {} statics but only named {} (not including input_len). Silence this using {} as your entrypoint signature",
+                self.static_args.len(),
+                self.named_static_args,
+                vec![
+                    "(input_len, ",
+                    &vec!["_, "; self.static_args.len() - 1].join(""),
+                    "_)"
+                ]
+                .join("")
+            )
         }
         Ok(())
     }

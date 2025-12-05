@@ -27,24 +27,29 @@ pub struct AshlangInnerProdArg<E: FieldScalar> {
 impl<E: FieldScalar> AshlangInnerProdArg<E> {}
 
 impl<E: FieldScalar> ZKArg<E> for AshlangInnerProdArg<E> {
-    fn new(program: impl ZKProgram<E>, input: Vector<E>) -> Result<Self> {
+    fn new(program: impl ZKProgram<E>, input: Vector<E>, static_args: &Vec<usize>) -> Result<Self> {
         let oraccle = Oraccle::new();
         // let start = Instant::now();
         let input_len = input.len();
-        let wtns = program.compute_wtns(input)?;
+        let wtns = program.compute_wtns(input, static_args)?;
         // print!(
         //     " {} (?)\nVerifying transparent inner product argument... ",
         //     format!("{} ms", start.elapsed().as_millis())
         // );
         Ok(Self {
-            arg: lettuce::InnerProdR1CS::new(wtns, program.r1cs(input_len)?, &oraccle)?,
+            arg: lettuce::InnerProdR1CS::new(
+                wtns,
+                program.r1cs(input_len, static_args)?,
+                &oraccle,
+            )?,
         })
     }
 
-    fn verify(self) -> Result<()> {
+    fn verify(self) -> Result<impl Iterator<Item = E>> {
         let oraccle = Oraccle::new();
         self.arg.verify(&oraccle)?;
-        Ok(())
+        // TODO: outputs in lettuce using witness bitmask
+        Ok(vec![].into_iter())
     }
 
     fn outputs(&self) -> impl Iterator<Item = E> {
@@ -66,18 +71,20 @@ pub fn cli_main() -> Result<()> {
 
     println!(
         "compiled to ar1cs: \n{}",
-        ashlang_program.ar1cs_src(config.input.len())?
+        ashlang_program.ar1cs_src(config.input.len(), &config.statics)?
     );
-    println!("{}", ashlang_program.r1cs(config.input.len())?);
+    println!(
+        "{}",
+        ashlang_program.r1cs(config.input.len(), &config.statics)?
+    );
 
     let output = match config.arg_fn.as_str() {
         "innerprod" => {
             print!("\nBuilding argument of knowledge...");
-            let arg = AshlangInnerProdArg::new(ashlang_program, config.input)?;
+            let arg = AshlangInnerProdArg::new(ashlang_program, config.input, &config.statics)?;
             println!("\nVerifying transparent inner prod argument...");
-            let outputs = arg.outputs().collect::<Vector<_>>();
-            arg.verify()?;
-            outputs
+            let outputs = arg.verify()?;
+            outputs.collect::<Vector<_>>()
         }
         v => anyhow::bail!("unknown argument \"{}\". valid options: \"innerprod\"", v),
     };

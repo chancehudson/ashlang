@@ -87,6 +87,7 @@ mod internal {
     /// map of function names called by the source file.
     #[derive(Clone)]
     pub struct AshParser {
+        pub src: String,
         pub ast: Vec<AstNode>,
         pub fn_names: HashMap<String, u64>,
         pub entry_fn_name: String,
@@ -100,6 +101,7 @@ mod internal {
             // they aren't necessarily unix compatible files
             let source = format!("{source}\n");
             let mut out = Self {
+                src: source.clone(),
                 ast: Vec::new(),
                 fn_names: HashMap::new(),
                 entry_fn_name: name.to_string(),
