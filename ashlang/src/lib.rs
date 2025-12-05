@@ -69,21 +69,22 @@ pub fn cli_main() -> Result<()> {
         ashlang_program.ar1cs_src(config.input.len())?
     );
     println!("{}", ashlang_program.r1cs(config.input.len())?);
-    print!("Building argument for input len {}...", config.input.len());
-    let arg = AshlangInnerProdArg::new(ashlang_program, config.input)?;
 
-    let output = arg.outputs().collect::<Vector<_>>();
-    print!(" ✅\nVerifying witness...");
+    let output = match config.arg_fn.as_str() {
+        "innerprod" => {
+            print!("\nBuilding argument of knowledge...");
+            let arg = AshlangInnerProdArg::new(ashlang_program, config.input)?;
+            println!("\nVerifying transparent inner prod argument...");
+            let outputs = arg.outputs().collect::<Vector<_>>();
+            arg.verify()?;
+            outputs
+        }
+        v => anyhow::bail!("unknown argument \"{}\". valid options: \"innerprod\"", v),
+    };
     if output.len() > 0 {
         println!("Received the following outputs: {output}");
     } else {
-        print!("No outputs were generated 🟡");
-    }
-    print!("\nwitness is consistent ✅\nBuilding argument of knowledge...");
-
-    match config.arg_fn.as_str() {
-        "innerprod" => {}
-        v => anyhow::bail!("unknown argument \"{}\". valid options: \"innerprod\"", v),
+        println!("No outputs were generated 🟡");
     }
     println!("🔮 program exists and was executed");
 
