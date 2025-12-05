@@ -35,6 +35,7 @@ serde = { version = "1.0.130", features = ["derive"], optional = true }
 chrono = "0"
 
 # lettuce = "0"
-lettuce = { path = "../../lattices/lettuce" }
-#lettuce = { git = "https://github.com/chancehudson/lattices.git", subdirectory = "lettuce" }
-zkpo = { path = "../../zkpo" }
+#lettuce = { path = "../../lattices/lettuce" }
+lettuce = { git = "https://github.com/chancehudson/lattices.git", subdirectory = "lettuce" }
+#zkpo = { path = "../../zkpo" }
+zkpo = { git = "https://github.com/chancehudson/zkpo.git" }
