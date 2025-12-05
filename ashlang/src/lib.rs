@@ -27,17 +27,21 @@ pub struct AshlangInnerProdArg<E: FieldScalar> {
 impl<E: FieldScalar> AshlangInnerProdArg<E> {}
 
 impl<E: FieldScalar> ZKArg<E> for AshlangInnerProdArg<E> {
-    fn new(program: impl ZKProgram<E>, input: Vector<E>) -> Result<Self> {
+    fn new(program: impl ZKProgram<E>, input: Vector<E>, static_args: &Vec<usize>) -> Result<Self> {
         let oraccle = Oraccle::new();
         // let start = Instant::now();
         let input_len = input.len();
-        let wtns = program.compute_wtns(input)?;
+        let wtns = program.compute_wtns(input, static_args)?;
         // print!(
         //     " {} (?)\nVerifying transparent inner product argument... ",
         //     format!("{} ms", start.elapsed().as_millis())
         // );
         Ok(Self {
-            arg: lettuce::InnerProdR1CS::new(wtns, program.r1cs(input_len)?, &oraccle)?,
+            arg: lettuce::InnerProdR1CS::new(
+                wtns,
+                program.r1cs(input_len, static_args)?,
+                &oraccle,
+            )?,
         })
     }
 
@@ -64,16 +68,20 @@ pub fn cli_main() -> Result<()> {
 
     println!("ashlang source program: \n{}", ashlang_program.src);
 
+    let static_args: Vec<usize> = vec![];
     println!(
         "compiled to ar1cs: \n{}",
-        ashlang_program.ar1cs_src(config.input.len())?
+        ashlang_program.ar1cs_src(config.input.len(), &static_args)?
     );
-    println!("{}", ashlang_program.r1cs(config.input.len())?);
+    println!(
+        "{}",
+        ashlang_program.r1cs(config.input.len(), &static_args)?
+    );
 
     let output = match config.arg_fn.as_str() {
         "innerprod" => {
             print!("\nBuilding argument of knowledge...");
-            let arg = AshlangInnerProdArg::new(ashlang_program, config.input)?;
+            let arg = AshlangInnerProdArg::new(ashlang_program, config.input, &static_args)?;
             println!("\nVerifying transparent inner prod argument...");
             let outputs = arg.outputs().collect::<Vector<_>>();
             arg.verify()?;

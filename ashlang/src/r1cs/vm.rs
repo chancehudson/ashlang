@@ -51,11 +51,16 @@ pub struct VM<'a, T: FieldScalar> {
     pub return_val: Option<Var<T>>,
     pub name: String,
     pub input_len: usize,
+    pub static_args: Vec<usize>,
     pub is_entrypoint: bool,
 }
 
 impl<'a, T: FieldScalar> VM<'a, T> {
-    pub fn new(compiler_state: &'a mut CompilerState<T>, input_len: usize) -> Self {
+    pub fn new(
+        compiler_state: &'a mut CompilerState<T>,
+        input_len: usize,
+        static_args: Vec<usize>,
+    ) -> Self {
         // add the field safety constraint
         // constrains -1*1 * -1*1 - 1 = 0
         // should fail in any field that is different than
@@ -76,8 +81,9 @@ impl<'a, T: FieldScalar> VM<'a, T> {
             constraints,
             args: Vec::new(),
             return_val: None,
-            input_len,
             is_entrypoint: true,
+            input_len,
+            static_args,
         }
     }
 
@@ -92,6 +98,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
             name: name.to_string(),
             input_len: vm.input_len,
             is_entrypoint: false,
+            static_args: vec![],
         }
     }
 
@@ -147,15 +154,27 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                                 "attempting to define variable in function header"
                             );
                         }
-                        if i == 0 && self.is_entrypoint {
-                            self.vars.insert(
-                                name.clone(),
-                                Var {
-                                    index: None,
-                                    location: VarLocation::Static,
-                                    value: vec![T::from(self.input_len as u128)].into(),
-                                },
-                            );
+                        if self.is_entrypoint {
+                            if i == 0 {
+                                self.vars.insert(
+                                    name.clone(),
+                                    Var {
+                                        index: None,
+                                        location: VarLocation::Static,
+                                        value: vec![T::from(self.input_len as u128)].into(),
+                                    },
+                                );
+                            } else {
+                                self.vars.insert(
+                                    name.clone(),
+                                    Var {
+                                        index: None,
+                                        location: VarLocation::Static,
+                                        value: vec![T::from(self.static_args[i - 1] as u128)]
+                                            .into(),
+                                    },
+                                );
+                            }
                         } else {
                             self.vars.insert(name.clone(), self.args[i].clone());
                         }
