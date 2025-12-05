@@ -1,60 +1,26 @@
 use std::collections::HashSet;
 
+use anyhow::Context;
 use anyhow::Result;
 use lettuce::*;
 
+use crate::*;
+
 use super::*;
 
-/// R1CS arithmetizer for ashlang. Takes an ar1cs and some inputs and builds
-/// a witness `Vector<E>` and `R1CS<E>`.
+/// A solvable rank 1 constraint system for a program of finite, constant, length
 #[derive(Clone)]
-pub struct Arithmetizer<E: FieldScalar> {
-    pub wtns: Option<Vector<E>>,
+pub struct AshlangR1CS<E: FieldScalar> {
     pub r1cs: R1CS<E>,
-    parser: R1csParser<E>,
-    /// Witness indices that are public. Used to construct a vector mask.
-    pub output_indices: Vec<usize>,
+    /// A binary vector with 1's in witness indices that are public
+    pub output_mask: Vector<E>,
+    pub ar1cs_src: AR1CSSourceString,
 }
 
-impl<E: FieldScalar> Arithmetizer<E> {
-    pub fn new(ar1cs_src: &str) -> Result<Self> {
-        let parser = R1csParser::new(ar1cs_src)?;
-        Ok(Self {
-            wtns: None,
-            r1cs: parser.clone().into_r1cs(),
-            parser,
-            output_indices: Vec::default(),
-        })
-    }
-
-    /// Get an iterator over the public signals in the circuit.
-    pub fn outputs(&self) -> Result<impl Iterator<Item = E>> {
-        Ok(self
-            .output_indices
-            .iter()
-            .map(|v| self.wtns.as_ref().unwrap()[*v]))
-    }
-
-    /// Assert that a witness is set and fulfills the provided R1CS.
-    pub fn assert_wtns(&self) -> Result<&Vector<E>> {
-        let wtns = self.wtns.as_ref().ok_or(anyhow::anyhow!("no wtns"))?;
-        let eval = self.r1cs.eval(wtns)?;
-        if !eval.is_zero() {
-            let constraint_i = eval.iter().enumerate().find(|(_, v)| !v.is_zero()).unwrap();
-            anyhow::bail!(
-                "ashlang: constraint {} failed, resulting value: {}",
-                constraint_i.0,
-                constraint_i.1
-            );
-        }
-        Ok(wtns)
-    }
-
-    /// Computes the witness for self. Returns the number of public outputs.
-    ///
-    /// Expose input length as a static variable in the entrypoint
-    pub fn compute_wtns(&mut self, input: Vector<E>) -> Result<usize> {
-        let mut wtns = Vector::new(self.parser.wtns_len());
+impl<E: FieldScalar> AshlangR1CS<E> {
+    pub fn compute_wtns(&self, input: Vector<E>) -> Result<Vector<E>> {
+        let parser = AR1CSParser::new(&self.ar1cs_src)?;
+        let mut wtns = Vector::new(parser.wtns_len());
         let mut written_wtns_indices = HashSet::<usize>::new();
 
         let mut output_indices = vec![];
@@ -64,7 +30,7 @@ impl<E: FieldScalar> Arithmetizer<E> {
         wtns[0] = E::one();
 
         // build the witness
-        for c in self.parser.symbolic_constraints() {
+        for c in parser.symbolic_constraints() {
             let symbolic_wtns_i = c.out_i.expect("symbolic wtns should exist");
             match c.symbolic_op.as_ref().unwrap() {
                 SymbolicOp::Output => {
@@ -106,8 +72,29 @@ impl<E: FieldScalar> Arithmetizer<E> {
                 input.len() - input_counter
             ));
         }
-        self.wtns = Some(wtns);
-        self.output_indices = output_indices;
-        Ok(self.output_indices.len())
+        Ok(wtns)
+    }
+
+    pub fn new(ar1cs_src: AR1CSSourceString) -> Result<Self> {
+        let parser = AR1CSParser::new(&ar1cs_src)?;
+        Ok(Self {
+            output_mask: parser.wtns_mask(),
+            r1cs: parser.into_r1cs(),
+            ar1cs_src,
+        })
+    }
+
+    /// Assert that a witness is set and fulfills the provided R1CS.
+    pub fn assert_wtns(&self, wtns: &Vector<E>) -> Result<()> {
+        let eval = self.r1cs.eval(wtns)?;
+        if !eval.is_zero() {
+            let constraint_i = eval.iter().enumerate().find(|(_, v)| !v.is_zero()).unwrap();
+            anyhow::bail!(
+                "ashlang: constraint {} failed, resulting value: {}",
+                constraint_i.0,
+                constraint_i.1
+            );
+        }
+        Ok(())
     }
 }

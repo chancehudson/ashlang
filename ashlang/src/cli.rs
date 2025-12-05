@@ -1,24 +1,12 @@
 use std::str::FromStr;
 
 use anyhow::Result;
-use camino::Utf8PathBuf;
 use clap::Arg;
 use clap::Command;
 use clap::arg;
 use lettuce::*;
 
-use crate::log;
-
-/// Compiler configuration. Contains all fields necessary to compile an ashlang program.
-#[derive(Clone, Debug)]
-pub struct Config<E: FieldScalar> {
-    pub include_paths: Vec<Utf8PathBuf>,
-    pub verbosity: u8,
-    pub input: Vector<E>,
-    pub extension_priorities: Vec<String>,
-    pub entry_fn: String,
-    pub arg_fn: String,
-}
+use crate::*;
 
 #[allow(dead_code)]
 pub fn parse<E: FieldScalar>() -> Result<Config<E>> {

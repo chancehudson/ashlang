@@ -1,7 +1,7 @@
 use anyhow::Result;
 use lettuce::FieldScalar;
 
-use crate::cli::Config;
+use crate::*;
 
 // TODO: make the resulting proof serializable here
 // e.g. `AshlangProver<T: Debug>`

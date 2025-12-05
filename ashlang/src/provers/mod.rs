@@ -2,4 +2,4 @@
 //!
 mod ashlang_prover;
 
-pub use ashlang_prover::AshlangProver;
+pub use ashlang_prover::*;
