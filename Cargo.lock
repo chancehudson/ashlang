@@ -990,6 +990,7 @@ dependencies = [
 [[package]]
 name = "zkpo"
 version = "0.2.0"
+source = "git+https://github.com/chancehudson/zkpo.git#7991b603e4319d8997ad837d248fb3f3415e6768"
 dependencies = [
  "anyhow",
  "lettuce",

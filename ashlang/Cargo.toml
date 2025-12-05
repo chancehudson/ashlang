@@ -40,6 +40,6 @@ chrono = "0"
 # lettuce = "0"
 #lettuce = { path = "../../lattices/lettuce" }
 lettuce = { git = "https://github.com/chancehudson/lattices.git", subdirectory = "lettuce" }
-zkpo = { path = "../../zkpo" }
-#zkpo = { git = "https://github.com/chancehudson/zkpo.git" }
+#zkpo = { path = "../../zkpo" }
+zkpo = { git = "https://github.com/chancehudson/zkpo.git" }
 rand = "0.9.2"
