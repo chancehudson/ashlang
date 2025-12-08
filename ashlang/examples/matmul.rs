@@ -49,8 +49,8 @@ fn main() -> Result<()> {
         "{}",
         program.ar1cs_src(input.len(), &vec![mat.height(), mat.width()])?
     );
-    let arg = AshlangInnerProdArg::new(program, input, &vec![mat.height(), mat.width()])?;
-    arg.verify()?;
+    let arg = AshlangInnerProdArg::new(program.clone(), input, &vec![mat.height(), mat.width()])?;
+    let _outputs = arg.verify(program)?;
 
     Ok(())
 }

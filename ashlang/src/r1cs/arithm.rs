@@ -11,8 +11,6 @@ use super::*;
 #[derive(Clone)]
 pub struct AshlangR1CS<E: FieldScalar> {
     pub r1cs: R1CS<E>,
-    /// A binary vector with 1's in witness indices that are public
-    pub output_mask: Vector<E>,
     pub ar1cs_src: AR1CSSourceString,
 }
 
@@ -77,7 +75,6 @@ impl<E: FieldScalar> AshlangR1CS<E> {
     pub fn new(ar1cs_src: AR1CSSourceString) -> Result<Self> {
         let parser = AR1CSParser::new(&ar1cs_src)?;
         Ok(Self {
-            output_mask: parser.wtns_mask(),
             r1cs: parser.into_r1cs(),
             ar1cs_src,
         })

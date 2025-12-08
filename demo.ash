@@ -13,3 +13,4 @@ loop input_len * input_len {
 }
 
 write_output(x)
+write_output(9999)

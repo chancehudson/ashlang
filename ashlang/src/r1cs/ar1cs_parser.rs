@@ -32,7 +32,7 @@ pub struct AR1CSParser<E: FieldScalar> {
 impl<E: FieldScalar> AR1CSParser<E> {
     /// Return a mask vectors of zeroes and ones, with ones in each witness
     /// index that is publicly revealed.
-    pub fn wtns_mask(&self) -> Vector<E> {
+    fn wtns_mask(&self) -> Vector<E> {
         let mut mask = Vector::new(self.wtns_len());
         for constraint in self.symbolic_constraints() {
             match constraint.symbolic_op {
@@ -79,6 +79,7 @@ impl<E: FieldScalar> AR1CSParser<E> {
             .filter(|v| !v.symbolic)
             .collect::<Vec<_>>();
         let mut r1cs = R1CS::<E>::identity(constraints.len(), self.wtns_len());
+        r1cs.output_mask = self.wtns_mask();
         for (i, constraint) in constraints.iter().enumerate() {
             for (coef, wtns_i) in &constraint.a {
                 assert!(r1cs.a[i][*wtns_i].is_zero());
