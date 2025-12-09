@@ -3,25 +3,23 @@ use std::fmt::Display;
 use anyhow::Result;
 use lettuce::*;
 
-/// A single r1cs constraints.
-///
-/// a b and c represent values in
-/// a constraint a * b - c = 0
-/// each factor specifies an array
-/// of coefficient, index pairs
-/// indices may be specified multiple times
-/// and will be summed
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct AR1CSConstraint<E: FieldScalar> {
-    // (coefficient, var_index)
-    pub a: Vec<(E, usize)>,
-    pub b: Vec<(E, usize)>,
-    pub c: Vec<(E, usize)>,
-    /// output wtns index if this is a symbolic constraint
-    pub out_i: Option<usize>,
-    pub comment: Option<String>,
-    pub symbolic: bool,
-    pub symbolic_op: Option<SymbolicOp>,
+pub enum Constraint<E: FieldScalar> {
+    Witness {
+        // (coefficient, var_index)
+        a: Vec<(E, usize)>,
+        b: Vec<(E, usize)>,
+        c: Vec<(E, usize)>,
+        comment_maybe: Option<String>,
+    },
+    Symbolic {
+        lhs: Vec<(E, usize)>,
+        rhs: Vec<(E, usize)>,
+        /// output wtns index if this is a symbolic constraint
+        out_i: usize,
+        comment_maybe: Option<String>,
+        op: SymbolicOp,
+    },
 }
 
 /// A mathematical operation that will be used during witness
@@ -92,86 +90,97 @@ fn comment_space(s: &str) -> String {
 
 static LINE_WIDTH: usize = 40;
 
-impl<E: FieldScalar> Display for AR1CSConstraint<E> {
+impl<E: FieldScalar> Display for Constraint<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut out = "".to_owned();
-        if self.symbolic {
-            // push the signal that should be assigned
-            // and the operation that should be applied
-            out.push_str(&format!(
-                "{} = ",
-                // self.symbolic_op.as_ref().unwrap().to_string(),
-                index_to_string(&self.out_i.unwrap())
-            ));
+        match self {
+            Self::Symbolic {
+                lhs,
+                rhs,
+                out_i,
+                comment_maybe,
+                op,
+            } => {
+                // push the signal that should be assigned
+                // and the operation that should be applied
+                out.push_str(&format!(
+                    "{} = ",
+                    // self.symbolic_op.as_ref().unwrap().to_string(),
+                    index_to_string(&out_i)
+                ));
 
-            out.push('(');
-            for i in 0..self.a.len() {
-                let (coef, index) = &self.a[i];
-                out.push_str(&format!("{}*{}", coef.to_string(), index_to_string(index)));
-                if i < self.a.len() - 1 {
-                    out.push_str(" + ");
+                out.push('(');
+                for i in 0..lhs.len() {
+                    let (coef, index) = &lhs[i];
+                    out.push_str(&format!("{}*{}", coef.to_string(), index_to_string(index)));
+                    if i < lhs.len() - 1 {
+                        out.push_str(" + ");
+                    }
                 }
-            }
-            out.push_str(&format!(") {} (", self.symbolic_op.as_ref().unwrap()));
-            for i in 0..self.b.len() {
-                let (coef, index) = &self.b[i];
-                out.push_str(&format!("{}*{}", coef.to_string(), index_to_string(index)));
-                if i < self.b.len() - 1 {
-                    out.push_str(" + ");
+                out.push_str(&format!(") {} (", op));
+                for i in 0..rhs.len() {
+                    let (coef, index) = &rhs[i];
+                    out.push_str(&format!("{}*{}", coef.to_string(), index_to_string(index)));
+                    if i < rhs.len() - 1 {
+                        out.push_str(" + ");
+                    }
                 }
-            }
-            out.push(')');
-            out.push_str(&comment_space(&out));
-            if let Some(comment) = &self.comment {
-                out.push_str(&format!("# {}", comment));
-            } else {
-                out.push_str("# symbolic");
-            }
-        } else {
-            out.push_str("0 = (");
-            for i in 0..self.a.len() {
-                let (coef, index) = &self.a[i];
-                out.push_str(&format!("{}*{}", coef.to_string(), index_to_string(index)));
-                if i < self.a.len() - 1 {
-                    out.push_str(" + ");
-                }
-            }
-            out.push_str(") * (");
-            for i in 0..self.b.len() {
-                let (coef, index) = &self.b[i];
-                out.push_str(&format!("{}*{}", coef.to_string(), index_to_string(index)));
-                if i < self.b.len() - 1 {
-                    out.push_str(" + ");
-                }
-            }
-            out.push_str(") - (");
-            for i in 0..self.c.len() {
-                let (coef, index) = &self.c[i];
-                out.push_str(&format!("{}*{}", coef.to_string(), index_to_string(index)));
-                if i < self.c.len() - 1 {
-                    out.push_str(" + ");
-                }
-            }
-            out.push(')');
-            if let Some(comment) = &self.comment {
+                out.push(')');
                 out.push_str(&comment_space(&out));
-                out.push_str(&format!("# {}", comment));
+                if let Some(comment) = &comment_maybe {
+                    out.push_str(&format!("# {}", comment));
+                } else {
+                    out.push_str("# symbolic");
+                }
+            }
+            Self::Witness {
+                a,
+                b,
+                c,
+                comment_maybe,
+            } => {
+                out.push_str("0 = (");
+                for i in 0..a.len() {
+                    let (coef, index) = &a[i];
+                    out.push_str(&format!("{}*{}", coef.to_string(), index_to_string(index)));
+                    if i < a.len() - 1 {
+                        out.push_str(" + ");
+                    }
+                }
+                out.push_str(") * (");
+                for i in 0..b.len() {
+                    let (coef, index) = &b[i];
+                    out.push_str(&format!("{}*{}", coef.to_string(), index_to_string(index)));
+                    if i < b.len() - 1 {
+                        out.push_str(" + ");
+                    }
+                }
+                out.push_str(") - (");
+                for i in 0..c.len() {
+                    let (coef, index) = &c[i];
+                    out.push_str(&format!("{}*{}", coef.to_string(), index_to_string(index)));
+                    if i < c.len() - 1 {
+                        out.push_str(" + ");
+                    }
+                }
+                out.push(')');
+                if let Some(comment) = &comment_maybe {
+                    out.push_str(&comment_space(&out));
+                    out.push_str(&format!("# {}", comment));
+                }
             }
         }
         write!(f, "{}", out)
     }
 }
 
-impl<E: FieldScalar> AR1CSConstraint<E> {
+impl<E: FieldScalar> Constraint<E> {
     pub fn new(a: Vec<(E, usize)>, b: Vec<(E, usize)>, c: Vec<(E, usize)>, comment: &str) -> Self {
-        Self {
+        Self::Witness {
             a,
             b,
             c,
-            out_i: None,
-            comment: Some(comment.to_string()),
-            symbolic: false,
-            symbolic_op: None,
+            comment_maybe: Some(comment.to_string()),
         }
     }
 
@@ -187,70 +196,79 @@ impl<E: FieldScalar> AR1CSConstraint<E> {
     /// comment: a comment to include in the r1cs for debugging
     pub fn symbolic(
         out_i: usize,
-        a: Vec<(E, usize)>,
-        b: Vec<(E, usize)>,
+        lhs: Vec<(E, usize)>,
+        rhs: Vec<(E, usize)>,
         op: SymbolicOp,
         comment: String,
     ) -> Self {
-        Self {
-            a,
-            b,
-            c: vec![],
-            out_i: Some(out_i),
-            comment: Some(comment),
-            symbolic: true,
-            symbolic_op: Some(op),
+        Self::Symbolic {
+            lhs,
+            rhs,
+            out_i,
+            comment_maybe: Some(comment),
+            op,
         }
     }
 
     /// Given a symbolic constraint a witness, solve for the c constraint value.
     /// The opposite of a constraint, an arbitrary, binding assignment to the c matrix.
     pub fn solve_symbolic(&self, wtns: &Vector<E>) -> Result<E> {
-        if !self.symbolic {
-            return Err(anyhow::anyhow!("not a symbolic constraint"));
-        }
-        let out_i = self.out_i.unwrap();
-        let mut a = E::zero();
-        for (coef, index) in &self.a {
-            assert!(*index < wtns.len());
-            assert!(*index != out_i);
-            a += *coef * wtns[*index];
-        }
-        let mut b = E::zero();
-        for (coef, index) in &self.b {
-            assert!(*index < wtns.len());
-            assert!(*index != out_i);
-            b += *coef * wtns[*index];
-        }
-        match self.symbolic_op.as_ref().unwrap() {
-            SymbolicOp::Add => Ok(a + b),
-            SymbolicOp::Mul => Ok(a * b),
-            SymbolicOp::Inv => Ok(E::one() * b.inverse()),
-            SymbolicOp::Sqrt => {
-                if a != (E::one() + E::one()) {
-                    anyhow::bail!("Cannot calculate non-square root");
+        match self {
+            Self::Witness { .. } => Err(anyhow::anyhow!("not a symbolic constraint")),
+            Self::Symbolic {
+                lhs,
+                rhs,
+                out_i,
+                op,
+                ..
+            } => {
+                let mut a = E::zero();
+                for (coef, index) in lhs {
+                    assert!(*index < wtns.len());
+                    assert!(index != out_i);
+                    a += *coef * wtns[*index];
                 }
-                let l = b.legendre();
-                if l == 0 {
-                    Ok(E::zero())
-                } else if l == 1 {
-                    // always return the positive value
-                    Ok(b.sqrt())
-                } else {
-                    return crate::log::error!(&format!(
-                        "cannot take square root of non-residue element: {}",
-                        b.to_string()
-                    ));
+                let mut b = E::zero();
+                for (coef, index) in rhs {
+                    assert!(*index < wtns.len());
+                    assert!(index != out_i);
+                    b += *coef * wtns[*index];
+                }
+                match op {
+                    SymbolicOp::Add => Ok(a + b),
+                    SymbolicOp::Mul => Ok(a * b),
+                    SymbolicOp::Inv => Ok(E::one() * b.inverse()),
+                    SymbolicOp::Sqrt => {
+                        if a != (E::one() + E::one()) {
+                            anyhow::bail!("Cannot calculate non-square root");
+                        }
+                        let l = b.legendre();
+                        if l == 0 {
+                            Ok(E::zero())
+                        } else if l == 1 {
+                            // always return the positive value
+                            Ok(b.sqrt())
+                        } else {
+                            return crate::log::error!(&format!(
+                                "cannot take square root of non-residue element: {}",
+                                b.to_string()
+                            ));
+                        }
+                    }
+                    SymbolicOp::Input => crate::log::error!(
+                        "cannot solve symbolic variable of type \"Input\"",
+                        "witness builder should provide input values"
+                    ),
+                    SymbolicOp::Output => crate::log::error!(
+                        "cannot solve symbolic variable of type \"Output\"",
+                        "witness builder should mark output values"
+                    ),
                 }
             }
-            SymbolicOp::Input => crate::log::error!(
-                "cannot solve symbolic variable of type \"Input\"",
-                "witness builder should provide input values"
-            ),
-            SymbolicOp::Output => crate::log::error!(
-                "cannot solve symbolic variable of type \"Output\"",
-                "witness builder should mark output values"
-            ),
         }
+    }
+
+    pub fn is_symbolic(&self) -> bool {
+        matches!(self, Self::Symbolic { .. })
     }
 }
