@@ -19,14 +19,14 @@ use log::error;
 pub enum AstNode {
     // a variable argument to a function call
     FnVar(Vec<String>),
-    // a let defintion, const definition, or if statement
-    Stmt(String, bool, Expr),
+    // a let definition, static definition, or a variable assignment
+    Stmt(String, Option<VarLocation>, Expr),
     ExprUnassigned(Expr),
     Rtrn(Expr),
-    StaticDef(String, Expr),
     If(Expr, Vec<AstNode>),
-    Loop(Expr, Vec<AstNode>),
-    EmptyVecDef(String, Expr),
+    // name of the precompile, tuple inputs, optional body
+    Precompile(String, Vec<Expr>, Option<Vec<AstNode>>),
+    EmptyVecDef(VarLocation, String, Expr),
 
     // name, indices being assigned
     // and an expression representing the value
@@ -42,7 +42,9 @@ pub enum Expr {
     VecLit(Vec<String>),
     Lit(String),
     Val(String, Option<Box<Expr>>),
-    FnCall(String, bool, Vec<Expr>),
+    FnCall(String, Vec<Expr>),
+    // a precompile that returns a value
+    Precompile(String, Vec<Expr>, Option<Vec<AstNode>>),
     NumOp {
         lhs: Box<Expr>,
         op: NumOp,
@@ -195,12 +197,22 @@ mod internal {
                 }
                 Rule::var_vec_def => {
                     let mut pair = pair.into_inner();
-                    let _ = AshParser::next_or_error(&mut pair)?;
+                    let var_location = AshParser::next_or_error(&mut pair)?;
+                    let location = match var_location.as_rule() {
+                        Rule::let_r => VarLocation::Constraint,
+                        Rule::static_r => VarLocation::Static,
+                        _ => {
+                            anyhow::bail!(
+                                "unexpected rule in vector definition: {:?}",
+                                var_location.as_rule()
+                            )
+                        }
+                    };
                     let next = AshParser::next_or_error(&mut pair)?;
                     let expr = self.build_expr_from_pair(next)?;
                     match expr {
                         Expr::Val(name, index_maybe) => {
-                            Ok(AstNode::EmptyVecDef(name, *index_maybe.unwrap()))
+                            Ok(AstNode::EmptyVecDef(location, name, *index_maybe.unwrap()))
                         }
                         _ => {
                             anyhow::bail!(
@@ -210,23 +222,41 @@ mod internal {
                         }
                     }
                 }
-                Rule::loop_stmt => {
+                Rule::precompile_stmt => {
                     let mut pair = pair.into_inner();
-                    let iter_count = AshParser::next_or_error(&mut pair)?;
-                    let iter_count_expr = self.build_expr_from_pair(iter_count)?;
-                    let block = AshParser::next_or_error(&mut pair)?;
-                    let block_inner = block.into_inner();
-                    let block_ast = block_inner
-                        .map(|v| match v.as_rule() {
-                            Rule::stmt => {
-                                let mut pair = v.into_inner();
-                                let next = AshParser::next_or_error(&mut pair)?;
-                                self.build_ast_from_pair(next)
+                    let precompile_name = AshParser::next_or_error(&mut pair)?;
+                    let precompile_name = precompile_name.as_str().to_string();
+
+                    let mut args = Vec::default();
+                    let mut block_maybe = None;
+                    while let Some(next) = pair.next() {
+                        match next.as_rule() {
+                            Rule::expr => {
+                                args.push(self.build_expr_from_pair(next)?);
                             }
-                            _ => Err(anyhow::anyhow!("invalid expression in block")),
-                        })
-                        .collect::<Result<Vec<AstNode>>>()?;
-                    Ok(AstNode::Loop(iter_count_expr, block_ast))
+                            Rule::block => {
+                                let block_inner = next.into_inner();
+                                let block_ast = block_inner
+                                    .map(|v| match v.as_rule() {
+                                        Rule::stmt => {
+                                            let mut pair = v.into_inner();
+                                            let next = AshParser::next_or_error(&mut pair)?;
+                                            self.build_ast_from_pair(next)
+                                        }
+                                        _ => Err(anyhow::anyhow!(
+                                            "non-statement in precompile block not allowed"
+                                        )),
+                                    })
+                                    .collect::<Result<Vec<AstNode>>>()?;
+                                block_maybe = Some(block_ast);
+                            }
+                            _ => anyhow::bail!(
+                                "ashlang: unexpected rule in precompile statement: {:?}",
+                                next.as_rule()
+                            ),
+                        }
+                    }
+                    Ok(AstNode::Precompile(precompile_name, args, block_maybe))
                 }
                 Rule::function_call => {
                     Ok(AstNode::ExprUnassigned(self.build_expr_from_pair(pair)?))
@@ -237,32 +267,38 @@ mod internal {
                     let next = AshParser::next_or_error(&mut pair)?;
                     let mut varpair = next.into_inner();
                     let name;
-                    let is_let;
+                    let mut location_maybe = None;
                     if varpair.len() == 2 {
-                        // it's a let assignment
-                        AshParser::next_or_error(&mut varpair)?;
+                        // it's a definition assignment
+                        let let_or_static = AshParser::next_or_error(&mut varpair)?;
+                        match let_or_static.as_rule() {
+                            Rule::let_r => {
+                                location_maybe = Some(VarLocation::Constraint);
+                            }
+                            Rule::static_r => {
+                                location_maybe = Some(VarLocation::Static);
+                            }
+                            _ => anyhow::bail!(
+                                "ashlang: unsupported rule in var_def: {:?}",
+                                let_or_static.as_rule()
+                            ),
+                        }
                         name = AshParser::next_or_error(&mut varpair)?.as_str().to_string();
-                        is_let = true;
                     } else if varpair.len() == 1 {
                         // it's a regular assignment
                         name = AshParser::next_or_error(&mut varpair)?.as_str().to_string();
-                        is_let = false;
                     } else {
                         return Err(anyhow::anyhow!("invalid varpait"));
                     }
 
                     let n = AshParser::next_or_error(&mut pair)?;
-                    Ok(AstNode::Stmt(name, is_let, self.build_expr_from_pair(n)?))
-                }
-                Rule::static_def => {
-                    let mut pair = pair.into_inner();
-                    let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
-                    let expr = AshParser::next_or_error(&mut pair)?;
-                    Ok(AstNode::StaticDef(
-                        name.as_str().to_string(),
-                        self.build_expr_from_pair(expr)?,
+                    Ok(AstNode::Stmt(
+                        name,
+                        location_maybe,
+                        self.build_expr_from_pair(n)?,
                     ))
                 }
+
                 Rule::if_stmt => {
                     let mut pair = pair.into_inner();
                     let bool_expr = AshParser::next_or_error(&mut pair)?;
@@ -349,7 +385,7 @@ mod internal {
                         vars.push(self.build_expr_from_pair(v)?);
                     }
                     self.mark_fn_call(fn_name.clone());
-                    Ok(Expr::FnCall(fn_name, false, vars))
+                    Ok(Expr::FnCall(fn_name, vars))
                 }
                 Rule::atom => {
                     let mut pair = pair.into_inner();
@@ -367,6 +403,43 @@ mod internal {
                             };
                             Ok(Expr::Val(name, index_maybe))
                         }
+                        Rule::precompile_expr => {
+                            let mut pair = n.into_inner();
+                            let precompile_name = AshParser::next_or_error(&mut pair)?;
+                            let precompile_name = precompile_name.as_str().to_string();
+
+                            let mut args = Vec::default();
+                            let mut block_maybe = None;
+                            while let Some(next) = pair.next() {
+                                match next.as_rule() {
+                                    Rule::expr => {
+                                        args.push(self.build_expr_from_pair(next)?);
+                                    }
+                                    Rule::block => {
+                                        let block_inner = next.into_inner();
+                                        let block_ast = block_inner
+                                            .map(|v| match v.as_rule() {
+                                                Rule::stmt => {
+                                                    let mut pair = v.into_inner();
+                                                    let next = AshParser::next_or_error(&mut pair)?;
+                                                    self.build_ast_from_pair(next)
+                                                }
+                                                _ => Err(anyhow::anyhow!(
+                                                    "invalid expression in block"
+                                                )),
+                                            })
+                                            .collect::<Result<Vec<AstNode>>>()?;
+                                        block_maybe = Some(block_ast);
+                                    }
+                                    _ => anyhow::bail!(
+                                        "ashlang: unexpected rule in precompile expression: {:?}",
+                                        next.as_rule()
+                                    ),
+                                }
+                            }
+                            Ok(Expr::Precompile(precompile_name, args, block_maybe))
+                        }
+
                         Rule::literal_dec => Ok(Expr::Lit(n.as_str().to_string())),
                         _ => anyhow::bail!("invalid atom"),
                     }

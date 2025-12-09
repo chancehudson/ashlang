@@ -15,14 +15,14 @@ pub enum VarLocation {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct Var<T: FieldScalar> {
+pub struct Var<E: FieldScalar> {
     pub index: Option<usize>,
     pub location: VarLocation,
-    pub value: Vector<T>,
+    pub value: Vector<E>,
 }
 
-impl<T: FieldScalar> Var<T> {
-    pub fn scalar_maybe(&self) -> Option<T> {
+impl<E: FieldScalar> Var<E> {
+    pub fn scalar_maybe(&self) -> Option<E> {
         if self.is_scalar() {
             Some(self.value[0])
         } else {
@@ -38,38 +38,38 @@ impl<T: FieldScalar> Var<T> {
 /// Instance of an r1cs VM. This struct is responsible for
 /// taking an AST and a compiler instance and outputing
 /// a set of r1cs constraints.
-pub struct VM<'a, T: FieldScalar> {
+pub struct VM<'a, E: FieldScalar> {
     // global counter for distinct variables
     // variable at index 0 is always 1
     pub var_index: usize,
     // local scope name keyed to global variable index
-    pub vars: HashMap<String, Var<T>>,
-    pub compiler_state: &'a mut CompilerState<T>,
+    pub vars: HashMap<String, Var<E>>,
+    pub compiler_state: &'a mut CompilerState,
     // a, b, c
-    pub constraints: Vec<AR1CSConstraint<T>>,
-    pub args: Vec<Var<T>>,
-    pub return_val: Option<Var<T>>,
+    pub constraints: Vec<AR1CSConstraint<E>>,
+    pub args: Vec<Var<E>>,
+    pub return_val: Option<Var<E>>,
     pub name: String,
     pub input_len: usize,
-    pub static_args: Vec<usize>,
+    pub static_args: Vec<Vector<E>>,
     pub named_static_args: usize,
     pub is_entrypoint: bool,
 }
 
-impl<'a, T: FieldScalar> VM<'a, T> {
+impl<'a, E: FieldScalar> VM<'a, E> {
     pub fn new(
-        compiler_state: &'a mut CompilerState<T>,
+        compiler_state: &'a mut CompilerState,
         input_len: usize,
-        static_args: &Vec<usize>,
+        static_args: Vec<Vector<E>>,
     ) -> Self {
         // add the field safety constraint
         // constrains -1*1 * -1*1 - 1 = 0
         // should fail in any field that is different than
         // the current one
         let constraints = vec![AR1CSConstraint::new(
-            vec![(T::negone(), 0)],
-            vec![(T::negone(), 0)],
-            vec![(T::one(), 0)],
+            vec![(E::negone(), 0)],
+            vec![(E::negone(), 0)],
+            vec![(E::one(), 0)],
             "field cardinality sanity constraint",
         )];
         compiler_state.messages.push("".to_string());
@@ -84,12 +84,12 @@ impl<'a, T: FieldScalar> VM<'a, T> {
             return_val: None,
             is_entrypoint: true,
             input_len,
-            static_args: static_args.clone(),
+            static_args,
             named_static_args: 0,
         }
     }
 
-    pub fn from(vm: &'a mut VM<T>, args: Vec<Var<T>>, name: &str) -> Self {
+    pub fn from(vm: &'a mut VM<E>, args: Vec<Var<E>>, name: &str) -> Self {
         VM {
             var_index: vm.var_index,
             vars: HashMap::new(),
@@ -108,13 +108,15 @@ impl<'a, T: FieldScalar> VM<'a, T> {
     pub fn eval_ast(&mut self, ast: Vec<AstNode>) -> Result<()> {
         for v in ast {
             match v {
-                AstNode::Stmt(name, is_let, expr) => {
-                    if is_let && self.vars.contains_key(&name) {
-                        return log::error!(&format!("variable already defined: {name}"));
-                    } else if !is_let && !self.vars.contains_key(&name) {
+                AstNode::Stmt(name, location_maybe, expr) => {
+                    if location_maybe.is_none() && !self.vars.contains_key(&name) {
                         return log::error!(&format!("variable does not exist in scope: {name}"));
                     }
-                    if is_let {
+                    if matches!(location_maybe, Some(VarLocation::Static)) {
+                        self.compiler_state
+                            .messages
+                            .insert(0, format!("static {name}"));
+                    } else if matches!(location_maybe, Some(VarLocation::Constraint)) {
                         self.compiler_state
                             .messages
                             .insert(0, format!("let {name}"));
@@ -123,31 +125,94 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                             .messages
                             .insert(0, format!("re-assign {name}"));
                     }
-                    let v = self.eval(&expr)?;
+                    let rhs = self.eval(&expr)?;
 
-                    if let Some(var) = self.vars.get_mut(&name)
-                        && var.location == VarLocation::Static
-                    {
-                        if v.location == VarLocation::Constraint {
-                            anyhow::bail!(
-                                "ashlang: constraint variable may not be assigned to static"
-                            );
-                        } else {
-                            assert!(var.value.len() == v.value.len());
-                            var.value = v.value;
-                            return Ok(());
+                    match (location_maybe, &rhs.location) {
+                        (Some(VarLocation::Static), VarLocation::Static) => {
+                            // new static var
+                            let var = Var {
+                                index: None,
+                                location: VarLocation::Static,
+                                value: rhs.value,
+                            };
+                            self.vars.insert(name, var.clone());
                         }
+                        (Some(VarLocation::Constraint), VarLocation::Constraint) => {
+                            // if we get a constrained variable from the
+                            // evaluation we simply store that as a named variable
+                            self.vars.insert(name, rhs);
+                        }
+                        (Some(VarLocation::Constraint), VarLocation::Static) => {
+                            // if we get a static variable from the evaluation
+                            // we constrain the assigment into a new signal
+                            let new_var = self.static_to_constraint(&rhs)?;
+                            self.vars.insert(name, new_var);
+                        }
+                        (None, VarLocation::Static) => {
+                            // assignment to existing variable from a static value
+                            let lhs_mut = self.vars.get_mut(&name).unwrap();
+                            if lhs_mut.value.len() != rhs.value.len() {
+                                anyhow::bail!(
+                                    "ashlang: dimension mismatch in static re-assignment to {name}"
+                                )
+                            }
+                            match lhs_mut.location {
+                                VarLocation::Constraint => {
+                                    // overwrite the existing witness variable with a new one
+                                    let new_var = self.static_to_constraint(&rhs)?;
+                                    self.vars.insert(name, new_var);
+                                }
+                                VarLocation::Static => {
+                                    lhs_mut.value = rhs.value;
+                                }
+                            }
+                        }
+                        (None, VarLocation::Constraint) => {
+                            // assignment to existing variable from a witness value
+                            let lhs_mut = self.vars.get_mut(&name).unwrap();
+                            if lhs_mut.value.len() != rhs.value.len() {
+                                anyhow::bail!(
+                                    "ashlang: dimension mismatch in witness re-assignment to {name}"
+                                )
+                            }
+                            match lhs_mut.location {
+                                VarLocation::Constraint => {
+                                    // overwrite the existing witness variable with a new one
+                                    self.vars.insert(name, rhs);
+                                }
+                                VarLocation::Static => {
+                                    anyhow::bail!(
+                                        "ashlang: cannot assign to static variable from witness variable"
+                                    )
+                                }
+                            }
+                        }
+                        _ => anyhow::bail!("ashlang: unsupported variable assignment"),
                     }
-                    if v.location == VarLocation::Constraint {
-                        // if we get a constrained variable from the
-                        // evaluation we simply store that as a named variable
-                        self.vars.insert(name, v);
-                    } else {
-                        // if we get a static variable from the evaluation
-                        // we constrain the assigment into a new signal
-                        let new_var = self.static_to_constraint(&v)?;
-                        self.vars.insert(name, new_var);
-                    }
+
+                    // if let Some(var) = self.vars.get_mut(&name)
+                    //     && var.location == VarLocation::Static
+                    // {
+                    //     if v.location == VarLocation::Constraint {
+                    //         anyhow::bail!(
+                    //             "ashlang: constraint variable may not be assigned to static"
+                    //         );
+                    //     } else {
+                    //         assert!(var.value.len() == v.value.len());
+                    //         var.value = v.value;
+                    //         return Ok(());
+                    //     }
+                    // }
+                    // if v.location == VarLocation::Constraint {
+                    //     // if we get a constrained variable from the
+                    //     // evaluation we simply store that as a named variable
+                    //     self.vars.insert(name, v);
+                    // } else {
+                    //     // if we get a static variable from the evaluation
+                    //     // we constrain the assigment into a new signal
+                    //     let new_var = self.static_to_constraint(&v)?;
+                    //     self.vars.insert(name, new_var);/
+                    // }
                 }
                 AstNode::FnVar(names) => {
                     for (i, name) in names.iter().enumerate() {
@@ -164,7 +229,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                                     Var {
                                         index: None,
                                         location: VarLocation::Static,
-                                        value: vec![T::from(self.input_len as u128)].into(),
+                                        value: vec![E::from(self.input_len as u128)].into(),
                                     },
                                 );
                             } else {
@@ -181,8 +246,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                                     Var {
                                         index: None,
                                         location: VarLocation::Static,
-                                        value: vec![T::from(self.static_args[i - 1] as u128)]
-                                            .into(),
+                                        value: self.static_args[i - 1].clone(),
                                     },
                                 );
                             }
@@ -203,56 +267,91 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     }
                     self.return_val = Some(self.eval(&expr)?);
                 }
-                AstNode::StaticDef(name, expr) => {
-                    if self.vars.contains_key(&name) {
-                        return log::error!("variable already defined: {name}");
-                    }
-                    let v = self.eval(&expr)?;
-                    if v.location != VarLocation::Static {
-                        return log::error!("static variable cannot be assigned from signal");
-                    }
-                    self.vars.insert(name, v);
-                }
                 AstNode::ExprUnassigned(expr) => {
                     self.compiler_state
                         .messages
                         .insert(0, "unassigned expression".to_string());
                     self.eval(&expr)?;
                 }
-                AstNode::Loop(expr, body) => {
-                    self.compiler_state
-                        .messages
-                        .insert(0, "loop condition".to_string());
-                    let var = self.eval(&expr)?;
-                    if var.location != VarLocation::Static {
-                        return log::error!("loop condition must be static variable");
-                    }
-                    let loop_count = if let Some(v) = var.scalar_maybe() {
-                        v.into() as usize
-                    } else {
-                        return log::error!(
-                            "loop condition must be a scalar, received a vector/matrix"
-                        );
-                    };
-                    // track the old variables, delete any variables
-                    // created inside the loop body
-                    let old_vars = self.vars.clone();
-                    let mut i = T::zero().into() as usize;
-                    while i < loop_count {
-                        self.compiler_state
-                            .messages
-                            .insert(0, format!("loop iteration {i}"));
-                        self.eval_ast(body.clone())?;
-                        i += 1;
-                        let current_vars = self.vars.clone();
-                        for k in current_vars.keys() {
-                            if !old_vars.contains_key(k) {
-                                self.vars.remove(k);
+                AstNode::Precompile(name, args, body_maybe) => {
+                    match name.as_str() {
+                        "loop" => {
+                            if args.len() != 1 {
+                                anyhow::bail!(
+                                    "ashlang: loop precompile expects exactly 1 argument. Got {}",
+                                    args.len()
+                                )
+                            }
+                            let expr = &args[0];
+                            let body = body_maybe.ok_or(anyhow::anyhow!(
+                                "ashlang: loop precompile expects a body"
+                            ))?;
+                            self.compiler_state
+                                .messages
+                                .insert(0, "loop condition".to_string());
+                            let var = self.eval(&expr)?;
+                            if var.location != VarLocation::Static {
+                                return log::error!("loop condition must be static variable");
+                            }
+                            let loop_count = if let Some(v) = var.scalar_maybe() {
+                                v.into() as usize
+                            } else {
+                                return log::error!(&format!(
+                                    "loop condition must be a scalar, received a vector of length {}",
+                                    var.value.len()
+                                ));
+                            };
+                            // track the old variables, delete any variables
+                            // created inside the loop body
+                            let old_vars = self.vars.clone();
+                            let mut i = E::zero().into() as usize;
+                            while i < loop_count {
+                                self.compiler_state
+                                    .messages
+                                    .insert(0, format!("loop iteration {i}"));
+                                self.eval_ast(body.clone())?;
+                                i += 1;
+                                let current_vars = self.vars.clone();
+                                for k in current_vars.keys() {
+                                    if !old_vars.contains_key(k) {
+                                        self.vars.remove(k);
+                                    }
+                                }
                             }
                         }
+                        "write_output" => {
+                            if args.len() != 1 {
+                                anyhow::bail!(
+                                    "ashlang: write_output precompile expects exactly 1 argument. Got {}",
+                                    args.len()
+                                )
+                            }
+                            let expr = &args[0];
+                            if body_maybe.is_some() {
+                                anyhow::bail!(
+                                    "ashlang: write_output precompile may not contain a body"
+                                );
+                            }
+                            let var = self.eval(expr)?;
+                            if var.location == VarLocation::Static {
+                                anyhow::bail!(
+                                    "ashlang: write_output precompile refusing to write a static variable to output"
+                                )
+                            }
+                            for (i, _v) in var.value.iter().enumerate() {
+                                self.constraints.push(AR1CSConstraint::symbolic(
+                                    var.index.unwrap() + i,
+                                    vec![],
+                                    vec![],
+                                    SymbolicOp::Output,
+                                    "write_output precompile invocation".to_string(),
+                                ));
+                            }
+                        }
+                        _ => anyhow::bail!("ashlang: unsupported precompile: {}", name),
                     }
                 }
-                AstNode::EmptyVecDef(name, index) => {
+                AstNode::EmptyVecDef(location, name, index) => {
                     // initialize a vector of witness elements to zero
                     self.compiler_state
                         .messages
@@ -268,13 +367,25 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         Some(l) => l.into() as usize,
                         None => anyhow::bail!("ashlang: empty vec def non-scalar"),
                     };
-                    let var = Var {
-                        index: Some(self.var_index),
-                        location: VarLocation::Constraint,
-                        value: Vector::new(len),
-                    };
-                    self.var_index += len;
-                    self.vars.insert(name, var);
+                    match location {
+                        VarLocation::Constraint => {
+                            let var = Var {
+                                index: Some(self.var_index),
+                                location,
+                                value: Vector::new(len),
+                            };
+                            self.var_index += len;
+                            self.vars.insert(name, var);
+                        }
+                        VarLocation::Static => {
+                            let var = Var {
+                                index: None,
+                                location,
+                                value: Vector::new(len),
+                            };
+                            self.vars.insert(name, var);
+                        }
+                    }
                 }
                 AstNode::AssignVec(name, index_maybe, expr) => {
                     // this may be a matrix or a vector
@@ -291,16 +402,43 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         None
                     };
 
-                    let lhs = self.vars.get(&name).unwrap();
-
-                    match (index_maybe, rhs.scalar_maybe()) {
-                        (Some(index), Some(rhs_v)) => {
-                            self.assignment_constraint(
-                                lhs.index.unwrap() + index as usize,
-                                rhs.index.unwrap(),
-                            );
+                    let lhs = self.vars.get(&name).unwrap().clone();
+                    match (&lhs.location, index_maybe, &rhs.location) {
+                        (VarLocation::Static, Some(lhs_index), VarLocation::Static) => {
+                            // assigning a specific index of the lhs, which is a static
+                            if let Some(rhs_scalar) = rhs.scalar_maybe() {
+                                let lhs_mut = self.vars.get_mut(&name).unwrap();
+                                lhs_mut.value[lhs_index] = rhs_scalar;
+                            } else {
+                                anyhow::bail!("ashlang: cannot assign non-scalar to vector index!")
+                            }
                         }
-                        (None, None) => {
+                        (VarLocation::Static, None, VarLocation::Static) => {
+                            // assigning a vector to the lhs
+                            if lhs.value.len() != rhs.value.len() {
+                                anyhow::bail!(
+                                    "ashlang: dimension mismatch in vector assignment. Trying to assign vector of len {} to {} which is of len {}",
+                                    rhs.value.len(),
+                                    name,
+                                    lhs.value.len()
+                                )
+                            }
+                            let lhs_mut = self.vars.get_mut(&name).unwrap();
+                            lhs_mut.value = rhs.value;
+                        }
+                        (VarLocation::Constraint, Some(index), VarLocation::Constraint) => {
+                            if let Some(_rhs_scalar) = rhs.scalar_maybe() {
+                                self.assignment_constraint(
+                                    lhs.index.unwrap() + index as usize,
+                                    rhs.index.unwrap(),
+                                );
+                            } else {
+                                anyhow::bail!(
+                                    "ashlang: cannot assign non-scalar to constraint vector index!"
+                                )
+                            }
+                        }
+                        (VarLocation::Constraint, None, VarLocation::Constraint) => {
                             // vector assignment
                             assert_eq!(
                                 lhs.value.len(),
@@ -313,7 +451,14 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                                 self.assignment_constraint(lhs_index + i, rhs_index + i);
                             }
                         }
-                        _ => panic!(),
+
+                        _ => anyhow::bail!(
+                            "ashlang: Unsupported combination of assignment: ({:?}, {:?}, {:?}): {:?}",
+                            lhs.location,
+                            index_maybe,
+                            rhs.location,
+                            expr
+                        ),
                     }
                 }
                 _ => {
@@ -341,7 +486,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
     }
 
     /// Serialization to/from AST representation
-    pub fn build_var_from_ast_vec(&mut self, expr: &Expr) -> Result<(Vec<usize>, Vec<T>)> {
+    pub fn build_var_from_ast_vec(&mut self, expr: &Expr) -> Result<(Vec<usize>, Vec<E>)> {
         // first iterate all the way through to the first literal
         let mut dimensions: Vec<usize> = Vec::new();
         let mut root_expr = expr.clone();
@@ -360,12 +505,12 @@ impl<'a, T: FieldScalar> VM<'a, T> {
             }
         }
         // then pull all the literals into a 1 dimensional vec
-        let mut vec_rep: Vec<T> = Vec::new();
+        let mut vec_rep: Vec<E> = Vec::new();
         Self::extract_literals(expr, &mut vec_rep)?;
         Ok((dimensions, vec_rep))
     }
 
-    fn extract_literals(expr: &Expr, out: &mut Vec<T>) -> Result<()> {
+    fn extract_literals(expr: &Expr, out: &mut Vec<E>) -> Result<()> {
         match expr {
             Expr::VecVec(v) => {
                 for a in v {
@@ -376,7 +521,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 let mut vv = v
                     .clone()
                     .iter()
-                    .map(|v| Ok(T::from(u128::from_str(v)?)))
+                    .map(|v| Ok(E::from(u128::from_str(v)?)))
                     .collect::<Result<_>>()?;
                 out.append(&mut vv);
             }
@@ -387,41 +532,41 @@ impl<'a, T: FieldScalar> VM<'a, T> {
 
     fn assignment_constraint(&mut self, lhs_i: usize, rhs_i: usize) {
         self.constraints.push(AR1CSConstraint::new(
-            vec![(T::one(), lhs_i)],
-            vec![(T::one(), 0)],
-            vec![(T::one(), rhs_i)],
+            vec![(E::one(), lhs_i)],
+            vec![(E::one(), 0)],
+            vec![(E::one(), rhs_i)],
             &format!("equality constraint {} = {}", lhs_i, rhs_i),
         ));
         self.constraints.push(AR1CSConstraint::symbolic(
             lhs_i,
-            vec![(T::one(), 0)],
-            vec![(T::one(), rhs_i)],
+            vec![(E::one(), 0)],
+            vec![(E::one(), rhs_i)],
             SymbolicOp::Mul,
             format!("scalar equality assignment ({}) <- {}", lhs_i, rhs_i),
         ));
     }
 
-    fn static_assignment_constraint(&mut self, lhs_i: usize, rhs_v: T) {
+    fn static_assignment_constraint(&mut self, lhs_i: usize, rhs_v: E) {
         self.constraints.push(AR1CSConstraint::new(
             vec![(rhs_v, 0)],
-            vec![(T::one(), 0)],
-            vec![(T::one(), lhs_i)],
+            vec![(E::one(), 0)],
+            vec![(E::one(), lhs_i)],
             &format!("static assignment ({}) <- {}", lhs_i, rhs_v),
         ));
         self.constraints.push(AR1CSConstraint::symbolic(
             lhs_i,
             vec![(rhs_v, 0)],
-            vec![(T::one(), 0)],
+            vec![(E::one(), 0)],
             SymbolicOp::Mul,
             format!("static assignment ({}) <- {}", lhs_i, rhs_v),
         ));
     }
 
     /// Used for constants and statics.
-    fn spawn_known_variable(&mut self, val: T) {
+    fn spawn_known_variable(&mut self, val: E) {
         self.constraints.push(AR1CSConstraint::new(
-            vec![(T::one(), self.var_index)],
-            vec![(T::one(), 0)],
+            vec![(E::one(), self.var_index)],
+            vec![(E::one(), 0)],
             vec![(val, 0)],
             &format!(
                 "scalar literal ({}) to signal index ({})",
@@ -430,7 +575,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
         ));
         self.constraints.push(AR1CSConstraint::symbolic(
             self.var_index,
-            vec![(T::one(), 0)],
+            vec![(E::one(), 0)],
             vec![(val, 0)],
             SymbolicOp::Mul,
             format!(
@@ -443,7 +588,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
 
     /// Take a static variable and constrain it's current value
     /// into a signal or set of signals
-    fn static_to_constraint(&mut self, var: &Var<T>) -> Result<Var<T>> {
+    fn static_to_constraint(&mut self, var: &Var<E>) -> Result<Var<E>> {
         let index = self.var_index;
         match var.scalar_maybe() {
             Some(v) => {
@@ -462,7 +607,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
         })
     }
 
-    pub fn eval(&mut self, expr: &Expr) -> Result<Var<T>> {
+    pub fn eval(&mut self, expr: &Expr) -> Result<Var<E>> {
         match &expr {
             Expr::VecVec(_) | Expr::VecLit(_) => {
                 let (dimensions, values) = self.build_var_from_ast_vec(expr)?;
@@ -475,88 +620,8 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     value: values.into(),
                 })
             }
-            Expr::FnCall(name, is_macro, vars) => {
-                if *is_macro {
-                    assert_eq!(vars.len(), 1, "reveal macro expected exactly 1 argument");
-                    let v = &vars[0];
-                    let var = self.eval(&v)?;
-                    if name == "write" {
-                        match var.location {
-                            VarLocation::Static => {
-                                anyhow::bail!("ashlang: refusing to reveal a static value");
-                            }
-                            VarLocation::Constraint => {
-                                for (i, _v) in var.value.iter().enumerate() {
-                                    self.constraints.push(AR1CSConstraint::symbolic(
-                                        var.index.unwrap() + i,
-                                        vec![(T::one(), 0)],
-                                        vec![(T::one(), 0)],
-                                        SymbolicOp::Output,
-                                        "explicit reveal by macro".to_string(),
-                                    ));
-                                }
-                            }
-                        }
-                        return Ok(Var {
-                            index: None,
-                            location: VarLocation::Static,
-                            value: vec![T::zero()].into(),
-                        });
-                    } else {
-                        panic!()
-                    }
-                }
-                // TODO: break this into separate functions
-                let args: Vec<Var<T>> = vars.iter().map(|v| self.eval(v)).collect::<Result<_>>()?;
-                // look for an ar1cs implementation first
-                if let Some(ar1cs_parser) = self.compiler_state.fn_ar1cs_maybe(name) {
-                    self.compiler_state
-                        .messages
-                        .insert(0, format!("ar1cs {}()", name));
-                    let constrain_args_if_needed = args
-                        .iter()
-                        .map(|v| {
-                            if let Some(i) = v.index {
-                                return Ok(i);
-                            }
-                            let val = match v.scalar_maybe() {
-                                Some(v) => v,
-                                None => {
-                                    return log::error!(
-                                        "cannot pass a vector static to an r1cs function"
-                                    );
-                                }
-                            };
-                            // if we get a static variable we need to
-                            // assert equality of it's current value
-                            // to turn it into a signal
-                            // log::error!("cannot pass a static variable to a r1cs function");
-                            let index = self.var_index;
-                            self.spawn_known_variable(val);
-                            Ok(index)
-                        })
-                        .collect::<Result<_>>()?;
-                    let out_constraints =
-                        ar1cs_parser.signals_as_args(self.var_index, constrain_args_if_needed)?;
-                    self.constraints.append(&mut out_constraints.clone());
-                    let return_index = self.var_index;
-                    self.var_index += ar1cs_parser.return_names.len();
-                    return if !ar1cs_parser.return_names.is_empty() {
-                        Ok(Var {
-                            index: Some(return_index),
-                            location: VarLocation::Constraint,
-                            // TODO: determine a value here
-                            // use the symbolic constraint to determine the value
-                            value: vec![0.into()].into(),
-                        })
-                    } else {
-                        Ok(Var {
-                            index: None,
-                            location: VarLocation::Static,
-                            value: vec![1.into()].into(),
-                        })
-                    };
-                }
+            Expr::FnCall(name, vars) => {
+                let args: Vec<Var<E>> = vars.iter().map(|v| self.eval(v)).collect::<Result<_>>()?;
                 if let Some(ash_parser) = self.compiler_state.fn_ash_maybe(name) {
                     let mut vm = VM::from(self, args, name);
                     vm.eval_ast(ash_parser.ast)?;
@@ -591,7 +656,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                                 "index notation must contain a scalar static expression in: {name}"
                             );
                         }
-                        Some(v.value[0].into())
+                        Some(v.value[0].into() as usize)
                     }
                     None => None,
                 };
@@ -600,32 +665,98 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     return log::error!(&format!("variable not found: {name}"));
                 }
                 let v = v.unwrap();
-                let (offset, val) = match (index_maybe, v.scalar_maybe()) {
-                    (None, None) => (0, v.value.clone()),
-                    (Some(index), None) => (index, vec![v.value[index as usize]].into()),
-                    (None, Some(v)) => (0, vec![v].into()),
-                    _ => panic!(""),
-                };
-                if let Some(index) = v.index {
-                    Ok(Var {
-                        index: Some(index + offset as usize),
-                        location: VarLocation::Constraint,
-                        value: val,
-                    })
-                } else {
-                    Ok(Var {
+                match (&v.location, index_maybe) {
+                    (VarLocation::Static, Some(index)) => {
+                        if index >= v.value.len() {
+                            anyhow::bail!(
+                                "ashlang: Attempting to access index {} of static \"{}\" which has {} elements",
+                                index,
+                                name,
+                                v.value.len()
+                            )
+                        }
+                        Ok(Var {
+                            index: None,
+                            location: VarLocation::Static,
+                            value: vec![v.value[index]].into(),
+                        })
+                    }
+                    (VarLocation::Static, None) => Ok(Var {
                         index: None,
                         location: VarLocation::Static,
-                        value: val,
-                    })
+                        value: v.value.clone(),
+                    }),
+                    (VarLocation::Constraint, Some(index)) => {
+                        if index >= v.value.len() {
+                            anyhow::bail!(
+                                "ashlang: Attempting to access index {} of variable \"{}\" which has {} elements",
+                                index,
+                                name,
+                                v.value.len()
+                            )
+                        }
+                        Ok(Var {
+                            index: Some(v.index.unwrap() + index),
+                            location: VarLocation::Constraint,
+                            value: vec![v.value[index]].into(),
+                        })
+                    }
+                    (VarLocation::Constraint, None) => Ok(Var {
+                        index: Some(v.index.unwrap()),
+                        location: VarLocation::Constraint,
+                        value: v.value.clone(),
+                    }),
                 }
             }
             Expr::NumOp { lhs, op, rhs } => self.eval_numop(lhs, op, rhs),
             Expr::Lit(val) => Ok(Var {
                 index: None,
                 location: VarLocation::Static,
-                value: vec![T::from(u128::from_str(val)?)].into(),
+                value: vec![E::from(u128::from_str(val)?)].into(),
             }),
+            Expr::Precompile(name, args, block_maybe) => match name.as_str() {
+                "read_input" => {
+                    if args.len() != 1 {
+                        anyhow::bail!(
+                            "ashlang: read_input precompile expects exactly 1 argument. Got {}",
+                            args.len()
+                        )
+                    }
+                    let expr = &args[0];
+                    if block_maybe.is_some() {
+                        anyhow::bail!("ashlang: read_input precompile may not contain a body");
+                    }
+                    let var = self.eval(expr)?;
+                    if var.location != VarLocation::Static {
+                        anyhow::bail!("ashlang: read_input precompile argument must be a static")
+                    }
+                    let read_count = if let Some(v) = var.scalar_maybe() {
+                        v.into() as usize
+                    } else {
+                        anyhow::bail!(
+                            "ashlang: read_input precompile argument must be a vector of length 1, received vector of len: {}",
+                            var.value.len()
+                        )
+                    };
+                    let out = Var {
+                        index: Some(self.var_index),
+                        location: VarLocation::Constraint,
+                        value: Vector::new(read_count),
+                    };
+                    self.var_index += read_count;
+                    for i in 0..read_count {
+                        self.constraints.push(AR1CSConstraint::symbolic(
+                            out.index.unwrap() + i,
+                            vec![],
+                            vec![],
+                            SymbolicOp::Input,
+                            "read_input recompile invocation".to_string(),
+                        ));
+                    }
+                    Ok(out)
+                }
+                _ => anyhow::bail!("ashlang: Unknown precompile in expression: {}", name),
+            },
             _ => {
                 log::error!("unimplemented expression case")
             }
@@ -636,7 +767,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
     // 1. lhs and rhs are both constraint variables
     // 2. lhs is a constraint variable and rhs is a static (and vis-versa)
     // 3. lhs and rhs are both static variables
-    fn eval_numop(&mut self, lhs: &Expr, op: &NumOp, rhs: &Expr) -> Result<Var<T>> {
+    fn eval_numop(&mut self, lhs: &Expr, op: &NumOp, rhs: &Expr) -> Result<Var<E>> {
         let lv = self.eval(lhs)?;
         let rv = self.eval(rhs)?;
         // check that the variables are the same type
@@ -654,7 +785,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
         }
     }
 
-    fn eval_numop_static(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Result<Var<T>> {
+    fn eval_numop_static(&mut self, lv: &Var<E>, op: &NumOp, rv: &Var<E>) -> Result<Var<E>> {
         Ok(match op {
             NumOp::Add => Var {
                 index: None,
@@ -685,7 +816,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
         })
     }
 
-    fn eval_numop_signal_static(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Result<Var<T>> {
+    fn eval_numop_signal_static(&mut self, lv: &Var<E>, op: &NumOp, rv: &Var<E>) -> Result<Var<E>> {
         assert_ne!(
             matches!(lv.location, VarLocation::Constraint),
             matches!(rv.location, VarLocation::Constraint),
@@ -717,15 +848,15 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // cv + sv - ov = 0
                     self.constraints.append(&mut vec![
                         AR1CSConstraint::new(
-                            vec![(cv, 0), (T::one(), svi)],
-                            vec![(T::one(), 0)],
-                            vec![(T::one(), ovi)],
+                            vec![(cv, 0), (E::one(), svi)],
+                            vec![(E::one(), 0)],
+                            vec![(E::one(), ovi)],
                             &format!("addition between ({cv}) and {svi} into {ovi}"),
                         ),
                         AR1CSConstraint::symbolic(
                             ovi,
-                            vec![(cv, 0), (T::one(), svi)],
-                            vec![(T::one(), 0)],
+                            vec![(cv, 0), (E::one(), svi)],
+                            vec![(E::one(), 0)],
                             SymbolicOp::Mul,
                             self.compiler_state.messages[0].clone(),
                         ),
@@ -750,14 +881,14 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     self.constraints.append(&mut vec![
                         AR1CSConstraint::new(
                             vec![(cv, 0)],
-                            vec![(T::one(), svi)],
-                            vec![(T::one(), ovi)],
+                            vec![(E::one(), svi)],
+                            vec![(E::one(), ovi)],
                             &format!("multiplication between ({cv}) and {svi} into {ovi}"),
                         ),
                         AR1CSConstraint::symbolic(
                             ovi,
                             vec![(cv, 0)],
-                            vec![(T::one(), svi)],
+                            vec![(E::one(), svi)],
                             SymbolicOp::Mul,
                             self.compiler_state.messages[0].clone(),
                         ),
@@ -783,15 +914,15 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         // (cv + ovi)*1 - lvi = 0
                         self.constraints.append(&mut vec![
                             AR1CSConstraint::new(
-                                vec![(cv, 0), (T::one(), ovi)],
-                                vec![(T::one(), 0)],
-                                vec![(T::one(), lvi)],
+                                vec![(cv, 0), (E::one(), ovi)],
+                                vec![(E::one(), 0)],
+                                vec![(E::one(), lvi)],
                                 &format!("subtraction between {lvi} and ({cv}) into {ovi}"),
                             ),
                             AR1CSConstraint::symbolic(
                                 ovi,
-                                vec![(T::one(), lvi), (T::negone() * cv, 0)],
-                                vec![(T::one(), 0)],
+                                vec![(E::one(), lvi), (E::negone() * cv, 0)],
+                                vec![(E::one(), 0)],
                                 SymbolicOp::Mul,
                                 self.compiler_state.messages[0].clone(),
                             ),
@@ -808,15 +939,15 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         // (rvi + ovi)*1 - lv = 0
                         self.constraints.append(&mut vec![
                             AR1CSConstraint::new(
-                                vec![(T::one(), rvi), (T::one(), ovi)],
-                                vec![(T::one(), 0)],
+                                vec![(E::one(), rvi), (E::one(), ovi)],
+                                vec![(E::one(), 0)],
                                 vec![(lv, 0)],
                                 &format!("subtraction between ({lv}) and {rvi} into {ovi}"),
                             ),
                             AR1CSConstraint::symbolic(
                                 ovi,
-                                vec![(lv, 0), (T::negone(), rvi)],
-                                vec![(T::one(), 0)],
+                                vec![(lv, 0), (E::negone(), rvi)],
+                                vec![(E::one(), 0)],
                                 SymbolicOp::Mul,
                                 self.compiler_state.messages[0].clone(),
                             ),
@@ -847,14 +978,14 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         self.constraints.append(&mut vec![
                             AR1CSConstraint::new(
                                 vec![(icv, lvi)],
-                                vec![(T::one(), 0)],
-                                vec![(T::one(), ovi)],
+                                vec![(E::one(), 0)],
+                                vec![(E::one(), ovi)],
                                 &format!("modinv between {lvi} and ({cv}) into {ovi}"),
                             ),
                             AR1CSConstraint::symbolic(
                                 ovi,
                                 vec![(icv, lvi)],
-                                vec![(T::one(), 0)],
+                                vec![(E::one(), 0)],
                                 SymbolicOp::Mul,
                                 self.compiler_state.messages[0].clone(),
                             ),
@@ -877,15 +1008,15 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         // rvi*ovi - 1 = 0
                         self.constraints.append(&mut vec![
                             AR1CSConstraint::new(
-                                vec![(T::one(), rvi)],
-                                vec![(T::one(), ovi)],
-                                vec![(T::one(), 0)],
+                                vec![(E::one(), rvi)],
+                                vec![(E::one(), ovi)],
+                                vec![(E::one(), 0)],
                                 &format!("modinv {rvi} into {ovi}"),
                             ),
                             AR1CSConstraint::symbolic(
                                 ovi,
-                                vec![(T::one(), 0)],
-                                vec![(T::one(), rvi)],
+                                vec![(E::one(), 0)],
+                                vec![(E::one(), rvi)],
                                 SymbolicOp::Inv,
                                 self.compiler_state.messages[0].clone(),
                             ),
@@ -899,14 +1030,14 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                         self.constraints.append(&mut vec![
                             AR1CSConstraint::new(
                                 vec![(lv, rvi)],
-                                vec![(T::one(), 0)],
-                                vec![(T::one(), ovi)],
+                                vec![(E::one(), 0)],
+                                vec![(E::one(), ovi)],
                                 &format!("multiply {rvi} and ({lv}) into {ovi}"),
                             ),
                             AR1CSConstraint::symbolic(
                                 ovi,
                                 vec![(lv, rvi)],
-                                vec![(T::one(), 0)],
+                                vec![(E::one(), 0)],
                                 SymbolicOp::Mul,
                                 self.compiler_state.messages[0].clone(),
                             ),
@@ -918,7 +1049,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
         })
     }
 
-    fn eval_numop_signals(&mut self, lv: &Var<T>, op: &NumOp, rv: &Var<T>) -> Result<Var<T>> {
+    fn eval_numop_signals(&mut self, lv: &Var<E>, op: &NumOp, rv: &Var<E>) -> Result<Var<E>> {
         assert!(
             matches!(lv.location, VarLocation::Constraint),
             "non-constraint lv"
@@ -946,15 +1077,15 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // lv + rv - new_var = 0
                     self.constraints.append(&mut vec![
                         AR1CSConstraint::new(
-                            vec![(T::one(), lvi), (T::one(), rvi)],
-                            vec![(T::one(), 0)],
-                            vec![(T::one(), ovi)],
+                            vec![(E::one(), lvi), (E::one(), rvi)],
+                            vec![(E::one(), 0)],
+                            vec![(E::one(), ovi)],
                             &format!("addition between {lvi} and {rvi} into {ovi}"),
                         ),
                         AR1CSConstraint::symbolic(
                             ovi,
-                            vec![(T::one(), lvi), (T::one(), rvi)],
-                            vec![(T::one(), 0)],
+                            vec![(E::one(), lvi), (E::one(), rvi)],
+                            vec![(E::one(), 0)],
                             SymbolicOp::Mul,
                             self.compiler_state.messages[0].clone(),
                         ),
@@ -977,15 +1108,15 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // lv + rv - new_var = 0
                     self.constraints.append(&mut vec![
                         AR1CSConstraint::new(
-                            vec![(T::one(), lvi)],
-                            vec![(T::one(), rvi)],
-                            vec![(T::one(), ovi)],
+                            vec![(E::one(), lvi)],
+                            vec![(E::one(), rvi)],
+                            vec![(E::one(), ovi)],
                             &format!("multiplication between {lvi} and {rvi} into {ovi}"),
                         ),
                         AR1CSConstraint::symbolic(
                             ovi,
-                            vec![(T::one(), lvi)],
-                            vec![(T::one(), rvi)],
+                            vec![(E::one(), lvi)],
+                            vec![(E::one(), rvi)],
                             SymbolicOp::Mul,
                             self.compiler_state.messages[0].clone(),
                         ),
@@ -997,7 +1128,7 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                 let new_var = Var {
                     index: Some(self.var_index),
                     location: VarLocation::Constraint,
-                    value: lv.value.clone() + &(rv.value.clone() * &vec![T::negone()].into()),
+                    value: lv.value.clone() + &(rv.value.clone() * &vec![E::negone()].into()),
                 };
                 self.var_index += new_var.value.len();
                 for x in 0..new_var.value.len() {
@@ -1008,15 +1139,15 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // lv + -1*rv - new_var = 0
                     self.constraints.append(&mut vec![
                         AR1CSConstraint::new(
-                            vec![(T::one(), lvi), (T::negone(), rvi)],
-                            vec![(T::one(), 0)],
-                            vec![(T::one(), ovi)],
+                            vec![(E::one(), lvi), (E::negone(), rvi)],
+                            vec![(E::one(), 0)],
+                            vec![(E::one(), ovi)],
                             &format!("subtraction between {lvi} and {rvi} into {ovi}"),
                         ),
                         AR1CSConstraint::symbolic(
                             ovi,
-                            vec![(T::one(), lvi), (T::negone(), rvi)],
-                            vec![(T::one(), 0)],
+                            vec![(E::one(), lvi), (E::negone(), rvi)],
+                            vec![(E::one(), 0)],
                             SymbolicOp::Mul,
                             self.compiler_state.messages[0].clone(),
                         ),
@@ -1039,15 +1170,15 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // rhs * rhs_inv - 1 = 0
                     self.constraints.append(&mut vec![
                         AR1CSConstraint::new(
-                            vec![(T::one(), rvi)],
-                            vec![(T::one(), ovi)],
-                            vec![(T::one(), 0)],
+                            vec![(E::one(), rvi)],
+                            vec![(E::one(), ovi)],
+                            vec![(E::one(), 0)],
                             &format!("inversion of {rvi} into {ovi} (1/2)"),
                         ),
                         AR1CSConstraint::symbolic(
                             ovi,
-                            vec![(T::one(), 0)],
-                            vec![(T::one(), rvi)],
+                            vec![(E::one(), 0)],
+                            vec![(E::one(), rvi)],
                             SymbolicOp::Inv,
                             self.compiler_state.messages[0].clone(),
                         ),
@@ -1068,15 +1199,15 @@ impl<'a, T: FieldScalar> VM<'a, T> {
                     // lv * rv - new_var = 0
                     self.constraints.append(&mut vec![
                         AR1CSConstraint::new(
-                            vec![(T::one(), lvi)],
-                            vec![(T::one(), rvi)],
-                            vec![(T::one(), ovi)],
+                            vec![(E::one(), lvi)],
+                            vec![(E::one(), rvi)],
+                            vec![(E::one(), ovi)],
                             &format!("multiplication of {lvi} and {rvi} into {ovi} (2/2)"),
                         ),
                         AR1CSConstraint::symbolic(
                             ovi,
-                            vec![(T::one(), lvi)],
-                            vec![(T::one(), rvi)],
+                            vec![(E::one(), lvi)],
+                            vec![(E::one(), rvi)],
                             SymbolicOp::Mul,
                             self.compiler_state.messages[0].clone(),
                         ),

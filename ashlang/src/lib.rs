@@ -23,7 +23,7 @@ use lettuce::*;
 pub struct AshlangInnerProdArg<E: FieldScalar> {
     pub arg: InnerProdR1CS<E>,
     input_len: usize,
-    static_args: Vec<usize>,
+    static_args: Vec<Vector<E>>,
 }
 
 impl<E: FieldScalar> AshlangInnerProdArg<E> {}
@@ -31,23 +31,27 @@ impl<E: FieldScalar> AshlangInnerProdArg<E> {}
 impl<E: FieldScalar> ZKArg<E> for AshlangInnerProdArg<E> {
     type Program = AshlangProgram<E>;
 
-    fn new(program: AshlangProgram<E>, input: Vector<E>, static_args: &Vec<usize>) -> Result<Self> {
+    fn new(
+        program: AshlangProgram<E>,
+        input: Vector<E>,
+        static_args: Vec<Vector<E>>,
+    ) -> Result<Self> {
         let oraccle = Oraccle::new();
         // let start = Instant::now();
         let input_len = input.len();
-        let wtns = program.compute_wtns(input, static_args)?;
+        let wtns = program.compute_wtns(input, static_args.clone())?;
         // print!(
         //     " {} (?)\nVerifying transparent inner product argument... ",
         //     format!("{} ms", start.elapsed().as_millis())
         // );
         Ok(Self {
-            input_len,
-            static_args: static_args.clone(),
             arg: lettuce::InnerProdR1CS::new(
                 wtns,
-                program.r1cs(input_len, static_args)?,
+                program.r1cs(input_len, static_args.clone())?,
                 &oraccle,
             )?,
+            input_len,
+            static_args,
         })
     }
 
@@ -55,12 +59,15 @@ impl<E: FieldScalar> ZKArg<E> for AshlangInnerProdArg<E> {
         let oraccle = Oraccle::new();
         Ok(self
             .arg
-            .verify(program.r1cs(self.input_len, &self.static_args)?, oraccle)?
+            .verify(
+                program.r1cs(self.input_len, self.static_args.clone())?,
+                oraccle,
+            )?
             .into_iter())
     }
 
     fn outputs(&self, program: AshlangProgram<E>) -> Result<impl Iterator<Item = E>> {
-        let r1cs = program.r1cs(self.input_len, &self.static_args)?;
+        let r1cs = program.r1cs(self.input_len, self.static_args.clone())?;
         Ok(self.arg.outputs(r1cs.output_mask))
     }
 }
@@ -68,28 +75,42 @@ impl<E: FieldScalar> ZKArg<E> for AshlangInnerProdArg<E> {
 pub fn cli_main() -> Result<()> {
     type E = MilliScalarMont;
     let mut config = cli::parse()?;
-    config.extension_priorities.push("ar1cs".to_string());
+    let static_args = config
+        .statics
+        .iter()
+        .map(|v| vec![(*v as u128).into()].into())
+        .collect::<Vec<Vector<E>>>();
 
     // we'll take an entry and compile to a single string ashlang file.
-    let compiler: Compiler<E> = Compiler::new(&mut config)?;
+    let compiler: Compiler<E> = Compiler::<E>::new(&mut config)?;
     let ashlang_program = compiler.combine_src(&config.entry_fn)?;
 
     println!("ashlang source program: \n{}", ashlang_program.src);
 
-    println!(
-        "compiled to ar1cs: \n{}",
-        ashlang_program.ar1cs_src(config.input.len(), &config.statics)?
-    );
+    // println!(
+    //     "compiled to ar1cs: \n{}",
+    //     ashlang_program.ar1cs_src(config.input.len(), &config.statics)?
+    // );
     println!(
         "{}",
-        ashlang_program.r1cs(config.input.len(), &config.statics)?
+        ashlang_program.r1cs(config.input.len(), static_args.clone())?
+    );
+    println!(
+        "wtns script: \n{}",
+        ashlang_program
+            .as_r1cs(config.input.len(), static_args.clone())?
+            .1
+            .src
     );
 
     let output = match config.arg_fn.as_str() {
         "innerprod" => {
             print!("\nBuilding argument of knowledge...");
-            let arg =
-                AshlangInnerProdArg::new(ashlang_program.clone(), config.input, &config.statics)?;
+            let arg = AshlangInnerProdArg::new(
+                ashlang_program.clone(),
+                config.input,
+                static_args.clone(),
+            )?;
             println!("\nVerifying transparent inner prod argument...");
             let outputs = arg.verify(ashlang_program)?;
             outputs.collect::<Vector<_>>()
