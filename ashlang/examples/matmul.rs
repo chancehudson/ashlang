@@ -7,8 +7,8 @@ use zkpo::ZKArg;
 static SRC: &'static str = "
 (input_len, mat_height, mat_width)
 
-let mat = read(mat_height * mat_width)
-let vec = read(mat_width)
+let mat = read_input mat_height * mat_width
+let vec = read_input mat_width
 
 let out[mat_height]
 static i = 0
@@ -45,11 +45,15 @@ fn main() -> Result<()> {
         .cloned()
         .chain(vec.into_iter())
         .collect::<Vector<MilliScalarMont>>();
+    let static_args = vec![
+        vec![(mat.height() as u128).into()].into(),
+        vec![(mat.width() as u128).into()].into(),
+    ];
     println!(
-        "{}",
-        program.ar1cs_src(input.len(), &vec![mat.height(), mat.width()])?
+        "witness computation script:\n{}",
+        program.as_r1cs(input.len(), static_args.clone())?.1.src
     );
-    let arg = AshlangInnerProdArg::new(program.clone(), input, &vec![mat.height(), mat.width()])?;
+    let arg = AshlangInnerProdArg::new(program.clone(), input, static_args.clone())?;
     let _outputs = arg.verify(program)?;
 
     Ok(())
