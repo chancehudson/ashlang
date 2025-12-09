@@ -397,9 +397,9 @@ Path 2: {:?}",
         let constraints = vm
             .constraints
             .iter()
-            .filter(|v| !v.symbolic)
+            .filter(|v| !v.is_symbolic())
             .cloned()
-            .collect::<Vec<AR1CSConstraint<E>>>()
+            .collect::<Vec<Constraint<E>>>()
             .to_vec();
         assert!(
             constraints.len() == 1, // field safety constraint
@@ -426,39 +426,58 @@ Path 2: {:?}",
         let mut vm: VM<E> = VM::new(&mut self.state, input_len, static_args);
         // build constraints from the AST
         vm.eval_ast(parser.ast)?;
-        let mut final_constraints: Vec<AR1CSConstraint<E>> = Vec::new();
+        let mut final_constraints: Vec<Constraint<E>> = Vec::new();
         final_constraints.append(
             &mut vm
                 .constraints
                 .iter()
-                .filter(|v| v.symbolic)
+                .filter(|v| v.is_symbolic())
                 .cloned()
-                .collect::<Vec<AR1CSConstraint<E>>>()
+                .collect::<Vec<Constraint<E>>>()
                 .to_vec(),
         );
         final_constraints.append(
             &mut vm
                 .constraints
                 .iter()
-                .filter(|v| !v.symbolic)
+                .filter(|v| !v.is_symbolic())
                 .cloned()
-                .collect::<Vec<AR1CSConstraint<E>>>()
+                .collect::<Vec<Constraint<E>>>()
                 .to_vec(),
         );
         // separate the symbolic constraints and the non-symbolic ones into a witness computation
         // program and an r1cs
         let constraints = final_constraints
             .iter()
-            .filter(|v| !v.symbolic)
+            .filter(|v| !v.is_symbolic())
             .collect::<Vec<_>>();
 
         let wtns_len = {
             let mut max_i = 0usize;
             for constraint in &final_constraints {
-                if let Some(out_i) = constraint.out_i
-                    && out_i > max_i
-                {
-                    max_i = out_i;
+                match constraint {
+                    Constraint::Symbolic { out_i, .. } => {
+                        if out_i > &max_i {
+                            max_i = *out_i;
+                        }
+                    }
+                    Constraint::Witness { a, b, c, .. } => {
+                        for (_, i) in a {
+                            if i > &max_i {
+                                max_i = *i;
+                            }
+                        }
+                        for (_, i) in b {
+                            if i > &max_i {
+                                max_i = *i;
+                            }
+                        }
+                        for (_, i) in c {
+                            if i > &max_i {
+                                max_i = *i;
+                            }
+                        }
+                    }
                 }
             }
             max_i + 1
@@ -494,35 +513,40 @@ Path 2: {:?}",
             }
             expr
         };
-        for symbolic_constraint in final_constraints.iter().filter(|v| v.symbolic) {
-            let out_i = symbolic_constraint.out_i.ok_or(anyhow::anyhow!(
-                "ashlang: symbolic constraint should have witness vector index"
-            ))?;
-            assert!(symbolic_constraint.c.is_empty());
-            match symbolic_constraint.symbolic_op {
-                Some(SymbolicOp::Inv) => {
-                    let lhs = build_linear_combo_expr("lhs", &symbolic_constraint.a);
-                    let rhs = build_linear_combo_expr("rhs", &symbolic_constraint.b);
-                    wtns_script.push_str(&format!("{lhs}\n{rhs}\nwtns[{out_i}] = lhs / rhs\n"));
-                }
-                Some(SymbolicOp::Mul) => {
-                    let lhs = build_linear_combo_expr("lhs", &symbolic_constraint.a);
-                    let rhs = build_linear_combo_expr("rhs", &symbolic_constraint.b);
-                    wtns_script.push_str(&format!("{lhs}\n{rhs}\nwtns[{out_i}] = lhs * rhs\n"));
-                }
-                Some(SymbolicOp::Add) => {
-                    unimplemented!()
-                }
-                Some(SymbolicOp::Sqrt) => {
-                    unimplemented!()
-                }
-                Some(SymbolicOp::Input) => {
-                    wtns_script.push_str(&format!("wtns[{out_i}] = input[{input_count}]\n"));
-                    input_count += 1;
-                }
-                Some(SymbolicOp::Output) => {
-                    output_mask[out_i] = E::one();
-                }
+        for symbolic_constraint in final_constraints.iter().filter(|v| v.is_symbolic()) {
+            match symbolic_constraint {
+                Constraint::Symbolic {
+                    lhs,
+                    rhs,
+                    out_i,
+                    comment_maybe,
+                    op,
+                } => match op {
+                    SymbolicOp::Inv => {
+                        let lhs = build_linear_combo_expr("lhs", &lhs);
+                        let rhs = build_linear_combo_expr("rhs", &rhs);
+                        wtns_script.push_str(&format!("{lhs}\n{rhs}\nwtns[{out_i}] = lhs / rhs\n"));
+                    }
+                    SymbolicOp::Mul => {
+                        let lhs = build_linear_combo_expr("lhs", &lhs);
+                        let rhs = build_linear_combo_expr("rhs", &rhs);
+                        wtns_script.push_str(&format!("{lhs}\n{rhs}\nwtns[{out_i}] = lhs * rhs\n"));
+                    }
+                    SymbolicOp::Add => {
+                        unimplemented!()
+                    }
+                    SymbolicOp::Sqrt => {
+                        unimplemented!()
+                    }
+                    SymbolicOp::Input => {
+                        wtns_script.push_str(&format!("wtns[{out_i}] = input[{input_count}]\n"));
+                        input_count += 1;
+                    }
+                    SymbolicOp::Output => {
+                        output_mask[*out_i] = E::one();
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             }
         }
@@ -531,17 +555,22 @@ Path 2: {:?}",
         r1cs.output_mask = output_mask;
 
         for (i, constraint) in constraints.iter().enumerate() {
-            for (coef, wtns_i) in &constraint.a {
-                assert!(r1cs.a[i][*wtns_i].is_zero());
-                r1cs.a[i][*wtns_i] = *coef;
-            }
-            for (coef, wtns_i) in &constraint.b {
-                assert!(r1cs.b[i][*wtns_i].is_zero());
-                r1cs.b[i][*wtns_i] = *coef;
-            }
-            for (coef, wtns_i) in &constraint.c {
-                assert!(r1cs.c[i][*wtns_i].is_zero());
-                r1cs.c[i][*wtns_i] = *coef;
+            match constraint {
+                Constraint::Witness { a, b, c, .. } => {
+                    for (coef, wtns_i) in a {
+                        assert!(r1cs.a[i][*wtns_i].is_zero());
+                        r1cs.a[i][*wtns_i] = *coef;
+                    }
+                    for (coef, wtns_i) in b {
+                        assert!(r1cs.b[i][*wtns_i].is_zero());
+                        r1cs.b[i][*wtns_i] = *coef;
+                    }
+                    for (coef, wtns_i) in c {
+                        assert!(r1cs.c[i][*wtns_i].is_zero());
+                        r1cs.c[i][*wtns_i] = *coef;
+                    }
+                }
+                _ => unreachable!(),
             }
         }
         Ok((r1cs, AshlangProgram::new(wtns_script)))

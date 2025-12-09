@@ -13,5 +13,8 @@ loop input_len * input_len {
   x = x * 100
 }
 
+let y = x
+assert_eq x y
+
 write_output x
 write_output v

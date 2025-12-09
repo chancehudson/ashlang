@@ -46,7 +46,7 @@ pub struct VM<'a, E: FieldScalar> {
     pub vars: HashMap<String, Var<E>>,
     pub compiler_state: &'a mut CompilerState,
     // a, b, c
-    pub constraints: Vec<AR1CSConstraint<E>>,
+    pub constraints: Vec<Constraint<E>>,
     pub args: Vec<Var<E>>,
     pub return_val: Option<Var<E>>,
     pub name: String,
@@ -66,7 +66,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
         // constrains -1*1 * -1*1 - 1 = 0
         // should fail in any field that is different than
         // the current one
-        let constraints = vec![AR1CSConstraint::new(
+        let constraints = vec![Constraint::new(
             vec![(E::negone(), 0)],
             vec![(E::negone(), 0)],
             vec![(E::one(), 0)],
@@ -339,12 +339,57 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                                 )
                             }
                             for (i, _v) in var.value.iter().enumerate() {
-                                self.constraints.push(AR1CSConstraint::symbolic(
+                                self.constraints.push(Constraint::symbolic(
                                     var.index.unwrap() + i,
                                     vec![],
                                     vec![],
                                     SymbolicOp::Output,
                                     "write_output precompile invocation".to_string(),
+                                ));
+                            }
+                        }
+                        "assert_eq" => {
+                            // assert equality of 2 witness variables
+                            if args.len() != 2 {
+                                anyhow::bail!(
+                                    "ashlang: assert_eq precompile expects exactly 2 arguments. Got {}",
+                                    args.len()
+                                )
+                            }
+                            if body_maybe.is_some() {
+                                anyhow::bail!(
+                                    "ashlang: assert_eq precompile may not contain a body"
+                                );
+                            }
+                            let lhs = self.eval(&args[0])?;
+                            let rhs = self.eval(&args[1])?;
+                            if lhs.location == VarLocation::Static {
+                                anyhow::bail!(
+                                    "ashlang: assert_eq precompile refusing to operate on static lhs"
+                                )
+                            }
+                            if rhs.location == VarLocation::Static {
+                                anyhow::bail!(
+                                    "ashlang: assert_eq precompile refusing to operate on static rhs"
+                                )
+                            }
+                            if lhs.value.len() != rhs.value.len() {
+                                anyhow::bail!(
+                                    "ashlang: assert_eq precompile failed, lhs and rhs are of different dimension: {}, {}",
+                                    lhs.value.len(),
+                                    rhs.value.len()
+                                )
+                            }
+                            let left_i = lhs.index.unwrap();
+                            let right_i = rhs.index.unwrap();
+                            for (i, (_lv, _rv)) in
+                                lhs.value.iter().zip(rhs.value.iter()).enumerate()
+                            {
+                                self.constraints.push(Constraint::new(
+                                    vec![(1.into(), left_i + i)],
+                                    vec![(1.into(), 0)],
+                                    vec![(1.into(), right_i + i)],
+                                    "assert_eq constraint",
                                 ));
                             }
                         }
@@ -531,13 +576,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
     }
 
     fn assignment_constraint(&mut self, lhs_i: usize, rhs_i: usize) {
-        self.constraints.push(AR1CSConstraint::new(
+        self.constraints.push(Constraint::new(
             vec![(E::one(), lhs_i)],
             vec![(E::one(), 0)],
             vec![(E::one(), rhs_i)],
             &format!("equality constraint {} = {}", lhs_i, rhs_i),
         ));
-        self.constraints.push(AR1CSConstraint::symbolic(
+        self.constraints.push(Constraint::symbolic(
             lhs_i,
             vec![(E::one(), 0)],
             vec![(E::one(), rhs_i)],
@@ -547,13 +592,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
     }
 
     fn static_assignment_constraint(&mut self, lhs_i: usize, rhs_v: E) {
-        self.constraints.push(AR1CSConstraint::new(
+        self.constraints.push(Constraint::new(
             vec![(rhs_v, 0)],
             vec![(E::one(), 0)],
             vec![(E::one(), lhs_i)],
             &format!("static assignment ({}) <- {}", lhs_i, rhs_v),
         ));
-        self.constraints.push(AR1CSConstraint::symbolic(
+        self.constraints.push(Constraint::symbolic(
             lhs_i,
             vec![(rhs_v, 0)],
             vec![(E::one(), 0)],
@@ -564,7 +609,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
 
     /// Used for constants and statics.
     fn spawn_known_variable(&mut self, val: E) {
-        self.constraints.push(AR1CSConstraint::new(
+        self.constraints.push(Constraint::new(
             vec![(E::one(), self.var_index)],
             vec![(E::one(), 0)],
             vec![(val, 0)],
@@ -573,7 +618,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 val, self.var_index,
             ),
         ));
-        self.constraints.push(AR1CSConstraint::symbolic(
+        self.constraints.push(Constraint::symbolic(
             self.var_index,
             vec![(E::one(), 0)],
             vec![(val, 0)],
@@ -745,7 +790,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                     };
                     self.var_index += read_count;
                     for i in 0..read_count {
-                        self.constraints.push(AR1CSConstraint::symbolic(
+                        self.constraints.push(Constraint::symbolic(
                             out.index.unwrap() + i,
                             vec![],
                             vec![],
@@ -847,13 +892,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                     // (cv*1 + 1*svi)*(1*1) - (1*ovi) = 0
                     // cv + sv - ov = 0
                     self.constraints.append(&mut vec![
-                        AR1CSConstraint::new(
+                        Constraint::new(
                             vec![(cv, 0), (E::one(), svi)],
                             vec![(E::one(), 0)],
                             vec![(E::one(), ovi)],
                             &format!("addition between ({cv}) and {svi} into {ovi}"),
                         ),
-                        AR1CSConstraint::symbolic(
+                        Constraint::symbolic(
                             ovi,
                             vec![(cv, 0), (E::one(), svi)],
                             vec![(E::one(), 0)],
@@ -879,13 +924,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                     // (cv*1)*(1*svi) - (1*ovi) = 0
                     // cv * sv - ov = 0
                     self.constraints.append(&mut vec![
-                        AR1CSConstraint::new(
+                        Constraint::new(
                             vec![(cv, 0)],
                             vec![(E::one(), svi)],
                             vec![(E::one(), ovi)],
                             &format!("multiplication between ({cv}) and {svi} into {ovi}"),
                         ),
-                        AR1CSConstraint::symbolic(
+                        Constraint::symbolic(
                             ovi,
                             vec![(cv, 0)],
                             vec![(E::one(), svi)],
@@ -913,13 +958,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                         // (cv*1 + 1*ovi)*(1*1) - (1*lvi) = 0
                         // (cv + ovi)*1 - lvi = 0
                         self.constraints.append(&mut vec![
-                            AR1CSConstraint::new(
+                            Constraint::new(
                                 vec![(cv, 0), (E::one(), ovi)],
                                 vec![(E::one(), 0)],
                                 vec![(E::one(), lvi)],
                                 &format!("subtraction between {lvi} and ({cv}) into {ovi}"),
                             ),
-                            AR1CSConstraint::symbolic(
+                            Constraint::symbolic(
                                 ovi,
                                 vec![(E::one(), lvi), (E::negone() * cv, 0)],
                                 vec![(E::one(), 0)],
@@ -938,13 +983,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                         // (1*rvi + 1*ovi)*(1*1) - (lv*1) = 0
                         // (rvi + ovi)*1 - lv = 0
                         self.constraints.append(&mut vec![
-                            AR1CSConstraint::new(
+                            Constraint::new(
                                 vec![(E::one(), rvi), (E::one(), ovi)],
                                 vec![(E::one(), 0)],
                                 vec![(lv, 0)],
                                 &format!("subtraction between ({lv}) and {rvi} into {ovi}"),
                             ),
-                            AR1CSConstraint::symbolic(
+                            Constraint::symbolic(
                                 ovi,
                                 vec![(lv, 0), (E::negone(), rvi)],
                                 vec![(E::one(), 0)],
@@ -976,13 +1021,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                         // (icv*lvi)*(1*1) - (1*ovi) = 0
                         // (icv*lvi)*1 - ovi = 0
                         self.constraints.append(&mut vec![
-                            AR1CSConstraint::new(
+                            Constraint::new(
                                 vec![(icv, lvi)],
                                 vec![(E::one(), 0)],
                                 vec![(E::one(), ovi)],
                                 &format!("modinv between {lvi} and ({cv}) into {ovi}"),
                             ),
-                            AR1CSConstraint::symbolic(
+                            Constraint::symbolic(
                                 ovi,
                                 vec![(icv, lvi)],
                                 vec![(E::one(), 0)],
@@ -1007,13 +1052,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                         // (1*rvi)*(1*ovi) - (1*1) = 0
                         // rvi*ovi - 1 = 0
                         self.constraints.append(&mut vec![
-                            AR1CSConstraint::new(
+                            Constraint::new(
                                 vec![(E::one(), rvi)],
                                 vec![(E::one(), ovi)],
                                 vec![(E::one(), 0)],
                                 &format!("modinv {rvi} into {ovi}"),
                             ),
-                            AR1CSConstraint::symbolic(
+                            Constraint::symbolic(
                                 ovi,
                                 vec![(E::one(), 0)],
                                 vec![(E::one(), rvi)],
@@ -1028,13 +1073,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                         // (lv*rvi)*(1*1) - (1*ovi) = 0
                         // (lv*rvi)*1 - ovi = 0
                         self.constraints.append(&mut vec![
-                            AR1CSConstraint::new(
+                            Constraint::new(
                                 vec![(lv, rvi)],
                                 vec![(E::one(), 0)],
                                 vec![(E::one(), ovi)],
                                 &format!("multiply {rvi} and ({lv}) into {ovi}"),
                             ),
-                            AR1CSConstraint::symbolic(
+                            Constraint::symbolic(
                                 ovi,
                                 vec![(lv, rvi)],
                                 vec![(E::one(), 0)],
@@ -1076,13 +1121,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                     // (1*lv + 1*rv) * (1*1) - (1*new_var) = 0
                     // lv + rv - new_var = 0
                     self.constraints.append(&mut vec![
-                        AR1CSConstraint::new(
+                        Constraint::new(
                             vec![(E::one(), lvi), (E::one(), rvi)],
                             vec![(E::one(), 0)],
                             vec![(E::one(), ovi)],
                             &format!("addition between {lvi} and {rvi} into {ovi}"),
                         ),
-                        AR1CSConstraint::symbolic(
+                        Constraint::symbolic(
                             ovi,
                             vec![(E::one(), lvi), (E::one(), rvi)],
                             vec![(E::one(), 0)],
@@ -1107,13 +1152,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                     // (1*lv + 1*rv) * (1*1) - (1*new_var) = 0
                     // lv + rv - new_var = 0
                     self.constraints.append(&mut vec![
-                        AR1CSConstraint::new(
+                        Constraint::new(
                             vec![(E::one(), lvi)],
                             vec![(E::one(), rvi)],
                             vec![(E::one(), ovi)],
                             &format!("multiplication between {lvi} and {rvi} into {ovi}"),
                         ),
-                        AR1CSConstraint::symbolic(
+                        Constraint::symbolic(
                             ovi,
                             vec![(E::one(), lvi)],
                             vec![(E::one(), rvi)],
@@ -1138,13 +1183,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                     // (1*lv + -1*rv) * (1*1) - (1*new_var) = 0
                     // lv + -1*rv - new_var = 0
                     self.constraints.append(&mut vec![
-                        AR1CSConstraint::new(
+                        Constraint::new(
                             vec![(E::one(), lvi), (E::negone(), rvi)],
                             vec![(E::one(), 0)],
                             vec![(E::one(), ovi)],
                             &format!("subtraction between {lvi} and {rvi} into {ovi}"),
                         ),
-                        AR1CSConstraint::symbolic(
+                        Constraint::symbolic(
                             ovi,
                             vec![(E::one(), lvi), (E::negone(), rvi)],
                             vec![(E::one(), 0)],
@@ -1169,13 +1214,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                     // (1*rhs) * (1*rhs_inv) - (1*1) = 0
                     // rhs * rhs_inv - 1 = 0
                     self.constraints.append(&mut vec![
-                        AR1CSConstraint::new(
+                        Constraint::new(
                             vec![(E::one(), rvi)],
                             vec![(E::one(), ovi)],
                             vec![(E::one(), 0)],
                             &format!("inversion of {rvi} into {ovi} (1/2)"),
                         ),
-                        AR1CSConstraint::symbolic(
+                        Constraint::symbolic(
                             ovi,
                             vec![(E::one(), 0)],
                             vec![(E::one(), rvi)],
@@ -1198,13 +1243,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                     // (1*lv) * (1*rv) - (1*new_var) = 0
                     // lv * rv - new_var = 0
                     self.constraints.append(&mut vec![
-                        AR1CSConstraint::new(
+                        Constraint::new(
                             vec![(E::one(), lvi)],
                             vec![(E::one(), rvi)],
                             vec![(E::one(), ovi)],
                             &format!("multiplication of {lvi} and {rvi} into {ovi} (2/2)"),
                         ),
-                        AR1CSConstraint::symbolic(
+                        Constraint::symbolic(
                             ovi,
                             vec![(E::one(), lvi)],
                             vec![(E::one(), rvi)],

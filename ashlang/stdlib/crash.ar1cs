@@ -1,3 +1,0 @@
-() -> ()
-
-0 = (1*one) * (0*one) - (0*one) # this constraint always fails
