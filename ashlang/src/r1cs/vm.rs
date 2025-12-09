@@ -273,37 +273,82 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                         .insert(0, "unassigned expression".to_string());
                     self.eval(&expr)?;
                 }
-                AstNode::Loop(expr, body) => {
-                    self.compiler_state
-                        .messages
-                        .insert(0, "loop condition".to_string());
-                    let var = self.eval(&expr)?;
-                    if var.location != VarLocation::Static {
-                        return log::error!("loop condition must be static variable");
-                    }
-                    let loop_count = if let Some(v) = var.scalar_maybe() {
-                        v.into() as usize
-                    } else {
-                        return log::error!(
-                            "loop condition must be a scalar, received a vector/matrix"
-                        );
-                    };
-                    // track the old variables, delete any variables
-                    // created inside the loop body
-                    let old_vars = self.vars.clone();
-                    let mut i = E::zero().into() as usize;
-                    while i < loop_count {
-                        self.compiler_state
-                            .messages
-                            .insert(0, format!("loop iteration {i}"));
-                        self.eval_ast(body.clone())?;
-                        i += 1;
-                        let current_vars = self.vars.clone();
-                        for k in current_vars.keys() {
-                            if !old_vars.contains_key(k) {
-                                self.vars.remove(k);
+                AstNode::Precompile(name, args, body_maybe) => {
+                    match name.as_str() {
+                        "loop" => {
+                            if args.len() != 1 {
+                                anyhow::bail!(
+                                    "ashlang: loop precompile expects exactly 1 argument. Got {}",
+                                    args.len()
+                                )
+                            }
+                            let expr = &args[0];
+                            let body = body_maybe.ok_or(anyhow::anyhow!(
+                                "ashlang: loop precompile expects a body"
+                            ))?;
+                            self.compiler_state
+                                .messages
+                                .insert(0, "loop condition".to_string());
+                            let var = self.eval(&expr)?;
+                            if var.location != VarLocation::Static {
+                                return log::error!("loop condition must be static variable");
+                            }
+                            let loop_count = if let Some(v) = var.scalar_maybe() {
+                                v.into() as usize
+                            } else {
+                                return log::error!(&format!(
+                                    "loop condition must be a scalar, received a vector of length {}",
+                                    var.value.len()
+                                ));
+                            };
+                            // track the old variables, delete any variables
+                            // created inside the loop body
+                            let old_vars = self.vars.clone();
+                            let mut i = E::zero().into() as usize;
+                            while i < loop_count {
+                                self.compiler_state
+                                    .messages
+                                    .insert(0, format!("loop iteration {i}"));
+                                self.eval_ast(body.clone())?;
+                                i += 1;
+                                let current_vars = self.vars.clone();
+                                for k in current_vars.keys() {
+                                    if !old_vars.contains_key(k) {
+                                        self.vars.remove(k);
+                                    }
+                                }
                             }
                         }
+                        "write_output" => {
+                            if args.len() != 1 {
+                                anyhow::bail!(
+                                    "ashlang: write_output precompile expects exactly 1 argument. Got {}",
+                                    args.len()
+                                )
+                            }
+                            let expr = &args[0];
+                            if body_maybe.is_some() {
+                                anyhow::bail!(
+                                    "ashlang: write_output precompile may not contain a body"
+                                );
+                            }
+                            let var = self.eval(expr)?;
+                            if var.location == VarLocation::Static {
+                                anyhow::bail!(
+                                    "ashlang: write_output precompile refusing to write a static variable to output"
+                                )
+                            }
+                            for (i, _v) in var.value.iter().enumerate() {
+                                self.constraints.push(AR1CSConstraint::symbolic(
+                                    var.index.unwrap() + i,
+                                    vec![],
+                                    vec![],
+                                    SymbolicOp::Output,
+                                    "write_output precompile invocation".to_string(),
+                                ));
+                            }
+                        }
+                        _ => anyhow::bail!("ashlang: unsupported precompile: {}", name),
                     }
                 }
                 AstNode::EmptyVecDef(location, name, index) => {
@@ -575,38 +620,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                     value: values.into(),
                 })
             }
-            Expr::FnCall(name, is_macro, vars) => {
-                if *is_macro {
-                    assert_eq!(vars.len(), 1, "reveal macro expected exactly 1 argument");
-                    let v = &vars[0];
-                    let var = self.eval(&v)?;
-                    if name == "write" {
-                        match var.location {
-                            VarLocation::Static => {
-                                anyhow::bail!("ashlang: refusing to reveal a static value");
-                            }
-                            VarLocation::Constraint => {
-                                for (i, _v) in var.value.iter().enumerate() {
-                                    self.constraints.push(AR1CSConstraint::symbolic(
-                                        var.index.unwrap() + i,
-                                        vec![(E::one(), 0)],
-                                        vec![(E::one(), 0)],
-                                        SymbolicOp::Output,
-                                        "explicit reveal by macro".to_string(),
-                                    ));
-                                }
-                            }
-                        }
-                        return Ok(Var {
-                            index: None,
-                            location: VarLocation::Static,
-                            value: vec![E::zero()].into(),
-                        });
-                    } else {
-                        panic!()
-                    }
-                }
-                // TODO: break this into separate functions
+            Expr::FnCall(name, vars) => {
                 let args: Vec<Var<E>> = vars.iter().map(|v| self.eval(v)).collect::<Result<_>>()?;
                 if let Some(ash_parser) = self.compiler_state.fn_ash_maybe(name) {
                     let mut vm = VM::from(self, args, name);
@@ -652,21 +666,41 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 }
                 let v = v.unwrap();
                 match (&v.location, index_maybe) {
-                    (VarLocation::Static, Some(index)) => Ok(Var {
-                        index: None,
-                        location: VarLocation::Static,
-                        value: vec![v.value[index]].into(),
-                    }),
+                    (VarLocation::Static, Some(index)) => {
+                        if index >= v.value.len() {
+                            anyhow::bail!(
+                                "ashlang: Attempting to access index {} of static \"{}\" which has {} elements",
+                                index,
+                                name,
+                                v.value.len()
+                            )
+                        }
+                        Ok(Var {
+                            index: None,
+                            location: VarLocation::Static,
+                            value: vec![v.value[index]].into(),
+                        })
+                    }
                     (VarLocation::Static, None) => Ok(Var {
                         index: None,
                         location: VarLocation::Static,
                         value: v.value.clone(),
                     }),
-                    (VarLocation::Constraint, Some(index)) => Ok(Var {
-                        index: Some(v.index.unwrap() + index),
-                        location: VarLocation::Constraint,
-                        value: vec![v.value[index]].into(),
-                    }),
+                    (VarLocation::Constraint, Some(index)) => {
+                        if index >= v.value.len() {
+                            anyhow::bail!(
+                                "ashlang: Attempting to access index {} of variable \"{}\" which has {} elements",
+                                index,
+                                name,
+                                v.value.len()
+                            )
+                        }
+                        Ok(Var {
+                            index: Some(v.index.unwrap() + index),
+                            location: VarLocation::Constraint,
+                            value: vec![v.value[index]].into(),
+                        })
+                    }
                     (VarLocation::Constraint, None) => Ok(Var {
                         index: Some(v.index.unwrap()),
                         location: VarLocation::Constraint,
@@ -680,6 +714,49 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 location: VarLocation::Static,
                 value: vec![E::from(u128::from_str(val)?)].into(),
             }),
+            Expr::Precompile(name, args, block_maybe) => match name.as_str() {
+                "read_input" => {
+                    if args.len() != 1 {
+                        anyhow::bail!(
+                            "ashlang: read_input precompile expects exactly 1 argument. Got {}",
+                            args.len()
+                        )
+                    }
+                    let expr = &args[0];
+                    if block_maybe.is_some() {
+                        anyhow::bail!("ashlang: read_input precompile may not contain a body");
+                    }
+                    let var = self.eval(expr)?;
+                    if var.location != VarLocation::Static {
+                        anyhow::bail!("ashlang: read_input precompile argument must be a static")
+                    }
+                    let read_count = if let Some(v) = var.scalar_maybe() {
+                        v.into() as usize
+                    } else {
+                        anyhow::bail!(
+                            "ashlang: read_input precompile argument must be a vector of length 1, received vector of len: {}",
+                            var.value.len()
+                        )
+                    };
+                    let out = Var {
+                        index: Some(self.var_index),
+                        location: VarLocation::Constraint,
+                        value: Vector::new(read_count),
+                    };
+                    self.var_index += read_count;
+                    for i in 0..read_count {
+                        self.constraints.push(AR1CSConstraint::symbolic(
+                            out.index.unwrap() + i,
+                            vec![],
+                            vec![],
+                            SymbolicOp::Input,
+                            "read_input recompile invocation".to_string(),
+                        ));
+                    }
+                    Ok(out)
+                }
+                _ => anyhow::bail!("ashlang: Unknown precompile in expression: {}", name),
+            },
             _ => {
                 log::error!("unimplemented expression case")
             }

@@ -1,16 +1,17 @@
 (input_len)
 
-let x = 0
+let x = 2
 let x_vec = [10, 20, 30, 40]
 
 x = x * x * x * x
 let x_vec = x_vec * x_vec + x_vec
 
-let i = 0##read(input_len)
+let v = read_input 1
+
 loop input_len * input_len {
   x = x + 1
   x = x * 100
 }
 
-#write_output(x)
-#write_output(9999)
+write_output x
+write_output v

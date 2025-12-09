@@ -8,7 +8,7 @@
 program = _{ SOI ~ "\n"* ~ (fn_header ~ "\n")? ~ "\n"* ~ (stmt ~ "\n"+)* ~ (return_stmt ~ "\n"?)? ~ "\n"* ~ EOI }
 
 fn_header = { "(" ~ ((varname ~ ("," | ")"))+ | ")") }
-stmt      = { var_def | if_stmt | function_call | loop_stmt | var_index_assign | var_vec_def }
+stmt      = { var_def | if_stmt | function_call | precompile_stmt | var_index_assign | var_vec_def }
 
 expr        = { atom ~ (op ~ atom)* }
 return_stmt = { "return " ~ expr }
@@ -17,7 +17,12 @@ return_stmt = { "return " ~ expr }
 fn_args       = { "(" ~ ((expr ~ ("," | ")"))+ | ")") }
 function_call = { varname ~ fn_args }
 
-loop_stmt = { "loop" ~ expr ~ block }
+// precompiles that return values
+
+precompile_with_output = { "read_input" }
+precompile_no_output = { "loop" | "write_output" }
+precompile_stmt = { precompile_no_output ~ expr+ ~ block? }
+precompile_expr = { precompile_with_output ~ expr+ ~ block? }
 
 op        = _{ add | sub | mul | inv }
 add       =  { "+" }
@@ -48,7 +53,7 @@ var_index_assign = { var_indexed ~ "=" ~ expr }
 var         = { (let_r | static_r)? ~ varname }
 var_indexed = { varname ~ ("[" ~ expr ~ "]")? }
 
-atom = { literal_dec | function_call | var_indexed | varname }
+atom = { literal_dec | precompile_expr | function_call | var_indexed | varname }
 
 literal_dec = @{ ASCII_DIGIT+ }
 
