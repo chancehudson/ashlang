@@ -1,8 +1,0 @@
-() -> (out)
-
-# we specify a result `out` that should be set as the next
-# input value
-#
-# this value will be returned as the result of this function
-
-out = (1*one) input (1*one)
