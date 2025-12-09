@@ -519,8 +519,8 @@ Path 2: {:?}",
                     lhs,
                     rhs,
                     out_i,
-                    comment_maybe,
                     op,
+                    ..
                 } => match op {
                     SymbolicOp::Inv => {
                         let lhs = build_linear_combo_expr("lhs", &lhs);
@@ -545,7 +545,6 @@ Path 2: {:?}",
                     SymbolicOp::Output => {
                         output_mask[*out_i] = E::one();
                     }
-                    _ => unreachable!(),
                 },
                 _ => unreachable!(),
             }

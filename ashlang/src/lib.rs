@@ -96,7 +96,7 @@ pub fn cli_main() -> Result<()> {
         ashlang_program.r1cs(config.input.len(), static_args.clone())?
     );
     println!(
-        "wtns script: \n{}",
+        "\n\nWitness computation script: \n{}",
         ashlang_program
             .as_r1cs(config.input.len(), static_args.clone())?
             .1
