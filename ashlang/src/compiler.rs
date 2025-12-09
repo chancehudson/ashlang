@@ -9,7 +9,6 @@ use lettuce::*;
 use crate::log;
 use crate::*;
 
-pub type AR1CSSourceString = String;
 pub type AshlangSourceString = String;
 
 #[derive(Clone)]
@@ -26,11 +25,18 @@ impl<E: FieldScalar> AshlangProgram<E> {
         }
     }
 
-    pub fn ar1cs_src(
+    /// Execute the program using statics only. Program must not have witness variables.
+    pub fn exec_static(&self, static_args: Vec<Vector<E>>) -> Result<Option<Vector<E>>> {
+        Compiler::<E>::default().exec_static(&self.src, static_args)
+    }
+
+    /// Get an r1cs representing this program and a witness computation program that may be
+    /// executed with inputs to produce a witness vector.
+    pub fn as_r1cs(
         &self,
         input_len: usize,
-        static_args: &Vec<usize>,
-    ) -> Result<AR1CSSourceString> {
+        static_args: Vec<Vector<E>>,
+    ) -> Result<(R1CS<E>, AshlangProgram<E>)> {
         let compiler = Compiler::<E>::default();
         compiler.compile_src(&self.src, input_len, static_args)
     }
@@ -41,16 +47,17 @@ impl<E: FieldScalar> ZKProgram<E> for AshlangProgram<E> {
         vec![].into()
     }
 
-    fn r1cs(&self, input_len: usize, static_args: &Vec<usize>) -> Result<R1CS<E>> {
-        let ar1cs_src = Self::ar1cs_src(self, input_len, static_args)?;
-        let ar1cs = AshlangR1CS::new(ar1cs_src)?;
-        Ok(ar1cs.r1cs)
+    fn r1cs(&self, input_len: usize, static_args: Vec<Vector<E>>) -> Result<R1CS<E>> {
+        Ok(self.as_r1cs(input_len, static_args)?.0)
     }
 
-    fn compute_wtns(&self, input: Vector<E>, static_args: &Vec<usize>) -> Result<Vector<E>> {
-        let ar1cs_src = Self::ar1cs_src(self, input.len(), static_args)?;
-        let ar1cs = AshlangR1CS::new(ar1cs_src)?;
-        ar1cs.compute_wtns(input)
+    fn compute_wtns(&self, input: Vector<E>, static_args: Vec<Vector<E>>) -> Result<Vector<E>> {
+        let wtns_program = self.as_r1cs(input.len(), static_args)?.1;
+        if let Some(wtns) = wtns_program.exec_static(vec![input])? {
+            Ok(wtns)
+        } else {
+            anyhow::bail!("ashlang: Witness program did not return a value!");
+        }
     }
 }
 
@@ -68,7 +75,7 @@ pub struct Config<E: FieldScalar> {
 
 // things that both Compiler and VM
 // need to modify
-pub struct CompilerState<E: FieldScalar> {
+pub struct CompilerState {
     // each function gets it's own memory space
     // track where in the memory we're at
     pub memory_offset: usize,
@@ -76,19 +83,18 @@ pub struct CompilerState<E: FieldScalar> {
     fn_to_ash_parser: HashMap<String, AshParser>,
     pub block_counter: usize,
     pub block_fn_asm: Vec<Vec<String>>,
-    fn_to_r1cs_parser: HashMap<String, AR1CSParser<E>>,
     path_to_fn: HashMap<Utf8PathBuf, String>,
     fn_to_path: HashMap<String, Utf8PathBuf>,
     pub messages: Vec<String>,
 }
 
-impl<E: FieldScalar> Default for CompilerState<E> {
+impl Default for CompilerState {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<E: FieldScalar> CompilerState<E> {
+impl CompilerState {
     pub fn new() -> Self {
         CompilerState {
             memory_offset: 0,
@@ -96,7 +102,6 @@ impl<E: FieldScalar> CompilerState<E> {
             is_fn_ash: HashMap::new(),
             block_counter: 0,
             block_fn_asm: vec![],
-            fn_to_r1cs_parser: HashMap::new(),
             path_to_fn: HashMap::new(),
             fn_to_path: HashMap::new(),
             messages: vec![],
@@ -104,11 +109,7 @@ impl<E: FieldScalar> CompilerState<E> {
     }
 }
 
-impl<E: FieldScalar> CompilerState<E> {
-    pub fn fn_ar1cs_maybe(&self, fn_name: &str) -> Option<AR1CSParser<E>> {
-        self.fn_to_r1cs_parser.get(fn_name).cloned()
-    }
-
+impl CompilerState {
     pub fn fn_ash_maybe(&self, fn_name: &str) -> Option<AshParser> {
         self.fn_to_ash_parser.get(fn_name).cloned()
     }
@@ -128,8 +129,9 @@ impl<E: FieldScalar> CompilerState<E> {
 /// Compiler should output deterministically identical ar1cs from an equal ashlang ast.
 pub struct Compiler<E: FieldScalar> {
     pub print_asm: bool,
-    state: CompilerState<E>,
+    state: CompilerState,
     extensions: Vec<String>,
+    _phantom: PhantomData<E>,
 }
 
 impl<E: FieldScalar> Default for Compiler<E> {
@@ -137,7 +139,8 @@ impl<E: FieldScalar> Default for Compiler<E> {
         Compiler {
             print_asm: false,
             state: CompilerState::new(),
-            extensions: ["ash", "ar1cs"].map(|v| v.to_string()).into(),
+            extensions: ["ash"].map(|v| v.to_string()).into(),
+            _phantom: PhantomData::default(),
         }
     }
 }
@@ -148,6 +151,7 @@ impl<E: FieldScalar> Compiler<E> {
             print_asm: false,
             state: CompilerState::new(),
             extensions: config.extension_priorities.clone(),
+            _phantom: PhantomData::default(),
         };
         if let Err(e) = compiler.include_many(&config.include_paths) {
             return log::error!(&format!("Failed to include path: {:?}", e));
@@ -290,9 +294,6 @@ Path 2: {:?}",
             if let Some(ash_parser) = self.state.fn_ash_maybe(&fn_name) {
                 out.push_str(&format!("\n=====\n{fn_name}.ash\n"));
                 out.push_str(&ash_parser.src);
-            } else if let Some(ar1cs_parser) = self.state.fn_ar1cs_maybe(&fn_name) {
-                out.push_str(&format!("\n=====\n{fn_name}.ar1cs\n"));
-                out.push_str(&ar1cs_parser.src);
             } else {
                 anyhow::bail!("ashlang::combine_entrypoint_src: unknown function: {fn_name}")
             }
@@ -301,13 +302,13 @@ Path 2: {:?}",
         Ok(AshlangProgram::new(out))
     }
 
-    /// Try to compile a combined ashlang source file into an ar1cs.
+    /// Try to compile a combined ashlang source file into an r1cs and witness fn.
     pub fn compile_src(
         mut self,
         src: &AshlangSourceString,
         input_len: usize,
-        static_args: &Vec<usize>,
-    ) -> Result<String> {
+        static_args: Vec<Vector<E>>,
+    ) -> Result<(R1CS<E>, AshlangProgram<E>)> {
         let mut src_files = src.split("\n=====\n");
         let entrypoint = src_files.next().expect("should have entrypoint");
         for fn_src in src_files {
@@ -325,28 +326,11 @@ Path 2: {:?}",
                         .fn_to_ash_parser
                         .insert(fn_name.to_string(), parser);
                 }
-                "ar1cs" => {
-                    let parser: AR1CSParser<E> = AR1CSParser::new(src)?;
-                    self.state
-                        .fn_to_r1cs_parser
-                        .insert(fn_name.to_string(), parser);
-                }
                 v => anyhow::bail!("ashlang: bad source file extension: {v}"),
             }
         }
         let entrypoint_parser = AshParser::parse(&entrypoint, "entrypoint")?;
         self.compile_parser(entrypoint_parser, input_len, static_args)
-    }
-
-    #[allow(dead_code)]
-    pub fn compile_str(
-        self,
-        entry_src: &str,
-        input_len: usize,
-        static_args: &Vec<usize>,
-    ) -> Result<String> {
-        let parser = AshParser::parse(entry_src, "entry")?;
-        self.compile_parser(parser, input_len, static_args)
     }
 
     // start at the entry file
@@ -356,8 +340,8 @@ Path 2: {:?}",
         self,
         entry_fn_name: &str,
         input_len: usize,
-        static_args: &Vec<usize>,
-    ) -> Result<AR1CSSourceString> {
+        static_args: Vec<Vector<E>>,
+    ) -> Result<(R1CS<E>, AshlangProgram<E>)> {
         let parsed = self.parse_fn(entry_fn_name)?;
         let parser = AshParser::parse(&parsed.0, entry_fn_name)?;
         self.compile_parser(parser, input_len, static_args)
@@ -370,15 +354,11 @@ Path 2: {:?}",
         // each function has a single ast, but multiple implementations
         // based on argument types it is called with
         loop {
-            if included_fn.len()
-                == self.state.fn_to_ash_parser.len() + self.state.fn_to_r1cs_parser.len()
-            {
+            if included_fn.len() == self.state.fn_to_ash_parser.len() {
                 break;
             }
             for (fn_name, _) in included_fn.clone() {
-                if self.state.fn_to_r1cs_parser.contains_key(&fn_name)
-                    || self.state.fn_to_ash_parser.contains_key(&fn_name)
-                {
+                if self.state.fn_to_ash_parser.contains_key(&fn_name) {
                     continue;
                 }
                 let (text, ext) = self.parse_fn(&fn_name)?;
@@ -395,10 +375,6 @@ Path 2: {:?}",
                         self.state.is_fn_ash.insert(fn_name.clone(), true);
                         self.state.fn_to_ash_parser.insert(fn_name, parser);
                     }
-                    "ar1cs" => {
-                        let parser: AR1CSParser<E> = AR1CSParser::new(&text)?;
-                        self.state.fn_to_r1cs_parser.insert(fn_name.clone(), parser);
-                    }
                     _ => {
                         return log::error!(&format!("unexpected file extension: {ext}"));
                     }
@@ -408,12 +384,45 @@ Path 2: {:?}",
         Ok(included_fn)
     }
 
+    /// Take an ashlang source file and statically evaluate it. Equivalent to executing with a
+    /// witness of length 0. A vector static may be returned.
+    fn exec_static(
+        mut self,
+        ashlang_src: &str,
+        static_args: Vec<Vector<E>>,
+    ) -> Result<Option<Vector<E>>> {
+        let parser = AshParser::parse(ashlang_src, "_")?;
+        let mut vm: VM<E> = VM::new(&mut self.state, 0, static_args);
+        vm.eval_ast(parser.ast)?;
+        let constraints = vm
+            .constraints
+            .iter()
+            .filter(|v| !v.symbolic)
+            .cloned()
+            .collect::<Vec<AR1CSConstraint<E>>>()
+            .to_vec();
+        assert!(
+            constraints.len() == 1, // field safety constraint
+            "ashlang: static execution should have no constraints!"
+        );
+        if let Some(return_var) = vm.return_val {
+            assert_eq!(
+                return_var.location,
+                VarLocation::Static,
+                "ashlang: static execution may only return static variables"
+            );
+            Ok(Some(return_var.value))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn compile_parser(
         mut self,
         parser: AshParser,
         input_len: usize,
-        static_args: &Vec<usize>,
-    ) -> Result<String> {
+        static_args: Vec<Vector<E>>,
+    ) -> Result<(R1CS<E>, AshlangProgram<E>)> {
         let mut vm: VM<E> = VM::new(&mut self.state, input_len, static_args);
         // build constraints from the AST
         vm.eval_ast(parser.ast)?;
@@ -436,24 +445,105 @@ Path 2: {:?}",
                 .collect::<Vec<AR1CSConstraint<E>>>()
                 .to_vec(),
         );
-        let ar1cs_src = [
-            vec![
-                format!("# {}", parser.entry_fn_name),
-                format!("# Compiled at {}", crate::time::now()),
-                format!("# Compiled for {}", E::Q),
-                format!("#"),
-            ],
-            final_constraints
-                .iter()
-                .map(|v| v.to_string())
-                .collect::<Vec<String>>(),
-        ]
-        .concat()
-        .join("\n");
-        if self.print_asm {
-            // prints the raw constraints
-            println!("{ar1cs_src}");
+        // separate the symbolic constraints and the non-symbolic ones into a witness computation
+        // program and an r1cs
+        let constraints = final_constraints
+            .iter()
+            .filter(|v| !v.symbolic)
+            .collect::<Vec<_>>();
+
+        let wtns_len = {
+            let mut max_i = 0usize;
+            for constraint in &final_constraints {
+                if let Some(out_i) = constraint.out_i
+                    && out_i > max_i
+                {
+                    max_i = out_i;
+                }
+            }
+            max_i + 1
+        };
+
+        // determine the public outputs
+        let mut output_mask = Vector::new(wtns_len);
+        // take the inputs as a vector, return a witness as a vector
+        let mut wtns_script = String::new();
+        wtns_script.push_str("(input_len, input)\n");
+        // declare the output witness vector
+        wtns_script.push_str(&format!("static wtns[{wtns_len}]\n"));
+        // set the first entry in the vector to the multiplicative identity
+        wtns_script.push_str("wtns[0] = 1\n");
+        let mut input_count = 0_usize;
+        let build_linear_combo_expr = |name: &str, val: &Vec<(E, usize)>| -> String {
+            if val.is_empty() {
+                return format!("static {name} = 0");
+            }
+            let mut expr = format!("static {name} = ");
+            let mut is_first = true;
+            for (coef, wtns_i) in val {
+                if is_first {
+                    is_first = false;
+                } else {
+                    expr.push_str(" + ");
+                }
+                if coef == &E::one() {
+                    expr.push_str(&format!("wtns[{wtns_i}]"));
+                } else {
+                    expr.push_str(&format!("{coef} * wtns[{wtns_i}]"));
+                }
+            }
+            expr
+        };
+        for symbolic_constraint in final_constraints.iter().filter(|v| v.symbolic) {
+            let out_i = symbolic_constraint.out_i.ok_or(anyhow::anyhow!(
+                "ashlang: symbolic constraint should have witness vector index"
+            ))?;
+            assert!(symbolic_constraint.c.is_empty());
+            match symbolic_constraint.symbolic_op {
+                Some(SymbolicOp::Inv) => {
+                    let lhs = build_linear_combo_expr("lhs", &symbolic_constraint.a);
+                    let rhs = build_linear_combo_expr("rhs", &symbolic_constraint.b);
+                    wtns_script.push_str(&format!("{lhs}\n{rhs}\nwtns[{out_i}] = lhs / rhs\n"));
+                }
+                Some(SymbolicOp::Mul) => {
+                    let lhs = build_linear_combo_expr("lhs", &symbolic_constraint.a);
+                    let rhs = build_linear_combo_expr("rhs", &symbolic_constraint.b);
+                    wtns_script.push_str(&format!("{lhs}\n{rhs}\nwtns[{out_i}] = lhs * rhs\n"));
+                }
+                Some(SymbolicOp::Add) => {
+                    unimplemented!()
+                }
+                Some(SymbolicOp::Sqrt) => {
+                    unimplemented!()
+                }
+                Some(SymbolicOp::Input) => {
+                    wtns_script.push_str(&format!("wtns[{out_i}] = input[{input_count}]\n"));
+                    input_count += 1;
+                }
+                Some(SymbolicOp::Output) => {
+                    output_mask[out_i] = E::one();
+                }
+                _ => unreachable!(),
+            }
         }
-        Ok(ar1cs_src)
+        wtns_script.push_str("return wtns\n");
+        let mut r1cs = R1CS::<E>::identity(constraints.len(), wtns_len);
+        r1cs.output_mask = output_mask;
+
+        for (i, constraint) in constraints.iter().enumerate() {
+            for (coef, wtns_i) in &constraint.a {
+                assert!(r1cs.a[i][*wtns_i].is_zero());
+                r1cs.a[i][*wtns_i] = *coef;
+            }
+            for (coef, wtns_i) in &constraint.b {
+                assert!(r1cs.b[i][*wtns_i].is_zero());
+                r1cs.b[i][*wtns_i] = *coef;
+            }
+            for (coef, wtns_i) in &constraint.c {
+                assert!(r1cs.c[i][*wtns_i].is_zero());
+                r1cs.c[i][*wtns_i] = *coef;
+            }
+        }
+        Ok((r1cs, AshlangProgram::new(wtns_script)))
     }
 }

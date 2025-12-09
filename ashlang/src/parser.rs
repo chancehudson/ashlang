@@ -19,14 +19,13 @@ use log::error;
 pub enum AstNode {
     // a variable argument to a function call
     FnVar(Vec<String>),
-    // a let defintion, const definition, or if statement
-    Stmt(String, bool, Expr),
+    // a let definition, static definition, or a variable assignment
+    Stmt(String, Option<VarLocation>, Expr),
     ExprUnassigned(Expr),
     Rtrn(Expr),
-    StaticDef(String, Expr),
     If(Expr, Vec<AstNode>),
     Loop(Expr, Vec<AstNode>),
-    EmptyVecDef(String, Expr),
+    EmptyVecDef(VarLocation, String, Expr),
 
     // name, indices being assigned
     // and an expression representing the value
@@ -195,12 +194,22 @@ mod internal {
                 }
                 Rule::var_vec_def => {
                     let mut pair = pair.into_inner();
-                    let _ = AshParser::next_or_error(&mut pair)?;
+                    let var_location = AshParser::next_or_error(&mut pair)?;
+                    let location = match var_location.as_rule() {
+                        Rule::let_r => VarLocation::Constraint,
+                        Rule::static_r => VarLocation::Static,
+                        _ => {
+                            anyhow::bail!(
+                                "unexpected rule in vector definition: {:?}",
+                                var_location.as_rule()
+                            )
+                        }
+                    };
                     let next = AshParser::next_or_error(&mut pair)?;
                     let expr = self.build_expr_from_pair(next)?;
                     match expr {
                         Expr::Val(name, index_maybe) => {
-                            Ok(AstNode::EmptyVecDef(name, *index_maybe.unwrap()))
+                            Ok(AstNode::EmptyVecDef(location, name, *index_maybe.unwrap()))
                         }
                         _ => {
                             anyhow::bail!(
@@ -237,30 +246,35 @@ mod internal {
                     let next = AshParser::next_or_error(&mut pair)?;
                     let mut varpair = next.into_inner();
                     let name;
-                    let is_let;
+                    let mut location_maybe = None;
                     if varpair.len() == 2 {
-                        // it's a let assignment
-                        AshParser::next_or_error(&mut varpair)?;
+                        // it's a definition assignment
+                        let let_or_static = AshParser::next_or_error(&mut varpair)?;
+                        match let_or_static.as_rule() {
+                            Rule::let_r => {
+                                location_maybe = Some(VarLocation::Constraint);
+                            }
+                            Rule::static_r => {
+                                location_maybe = Some(VarLocation::Static);
+                            }
+                            _ => anyhow::bail!(
+                                "ashlang: unsupported rule in var_def: {:?}",
+                                let_or_static.as_rule()
+                            ),
+                        }
                         name = AshParser::next_or_error(&mut varpair)?.as_str().to_string();
-                        is_let = true;
                     } else if varpair.len() == 1 {
                         // it's a regular assignment
                         name = AshParser::next_or_error(&mut varpair)?.as_str().to_string();
-                        is_let = false;
                     } else {
                         return Err(anyhow::anyhow!("invalid varpait"));
                     }
 
                     let n = AshParser::next_or_error(&mut pair)?;
-                    Ok(AstNode::Stmt(name, is_let, self.build_expr_from_pair(n)?))
-                }
-                Rule::static_def => {
-                    let mut pair = pair.into_inner();
-                    let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
-                    let expr = AshParser::next_or_error(&mut pair)?;
-                    Ok(AstNode::StaticDef(
-                        name.as_str().to_string(),
-                        self.build_expr_from_pair(expr)?,
+                    Ok(AstNode::Stmt(
+                        name,
+                        location_maybe,
+                        self.build_expr_from_pair(n)?,
                     ))
                 }
                 Rule::if_stmt => {
