@@ -393,6 +393,7 @@ Path 2: {:?}",
     ) -> Result<Option<Vector<E>>> {
         let parser = AshParser::parse(ashlang_src, "_")?;
         let mut vm: VM<E> = VM::new(&mut self.state, 0, static_args);
+
         vm.eval_ast(parser.ast)?;
         let constraints = vm
             .constraints
@@ -407,11 +408,11 @@ Path 2: {:?}",
         );
         if let Some(return_var) = vm.return_val {
             assert_eq!(
-                return_var.location,
+                return_var.location(),
                 VarLocation::Static,
                 "ashlang: static execution may only return static variables"
             );
-            Ok(Some(return_var.value))
+            Ok(Some(return_var.static_value()?.clone()))
         } else {
             Ok(None)
         }

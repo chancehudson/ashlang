@@ -40,6 +40,7 @@ impl<E: FieldScalar> ZKArg<E> for AshlangInnerProdArg<E> {
         // let start = Instant::now();
         let input_len = input.len();
         let wtns = program.compute_wtns(input, static_args.clone())?;
+
         // print!(
         //     " {} (?)\nVerifying transparent inner product argument... ",
         //     format!("{} ms", start.elapsed().as_millis())

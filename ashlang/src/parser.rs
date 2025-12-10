@@ -26,22 +26,22 @@ pub enum AstNode {
     If(Expr, Vec<AstNode>),
     // name of the precompile, tuple inputs, optional body
     Precompile(String, Vec<Expr>, Option<Vec<AstNode>>),
-    EmptyVecDef(VarLocation, String, Expr),
+    EmptyVecDef(VarLocation, String, Box<Expr>),
 
-    // name, indices being assigned
-    // and an expression representing the value
-    // being assigned
-    AssignVec(String, Option<Box<Expr>>, Expr),
+    // direct variable assignment without index access
+    AssignVar(String, Expr),
+    // name, index being assigned, Expr
+    AssignVarIndex(String, Box<Expr>, Expr),
 }
 
 /// An expression in the AST. Many expressions may appear on a single
 /// line.
 #[derive(Debug, Clone)]
 pub enum Expr {
-    VecVec(Vec<Expr>),
     VecLit(Vec<String>),
     Lit(String),
-    Val(String, Option<Box<Expr>>),
+    ValVar(String),
+    ValVarIndex(String, Box<Expr>),
     FnCall(String, Vec<Expr>),
     // a precompile that returns a value
     Precompile(String, Vec<Expr>, Option<Vec<AstNode>>),
@@ -178,11 +178,15 @@ mod internal {
                     let next = AshParser::next_or_error(&mut pair)?;
                     let v = self.build_expr_from_pair(next)?;
                     let name;
-                    let indices;
+                    let index_maybe;
                     match v {
-                        Expr::Val(n, i) => {
+                        Expr::ValVar(n) => {
                             name = n;
-                            indices = i;
+                            index_maybe = None;
+                        }
+                        Expr::ValVarIndex(n, i) => {
+                            name = n;
+                            index_maybe = Some(i);
                         }
                         _ => {
                             anyhow::bail!(
@@ -193,13 +197,16 @@ mod internal {
                     }
                     let next = AshParser::next_or_error(&mut pair)?;
                     let expr = self.build_expr_from_pair(next)?;
-                    Ok(AstNode::AssignVec(name, indices, expr))
+                    match index_maybe {
+                        Some(index) => Ok(AstNode::AssignVarIndex(name, index, expr)),
+                        None => Ok(AstNode::AssignVar(name, expr)),
+                    }
                 }
                 Rule::var_vec_def => {
                     let mut pair = pair.into_inner();
                     let var_location = AshParser::next_or_error(&mut pair)?;
                     let location = match var_location.as_rule() {
-                        Rule::let_r => VarLocation::Constraint,
+                        Rule::let_r => VarLocation::Witness,
                         Rule::static_r => VarLocation::Static,
                         _ => {
                             anyhow::bail!(
@@ -211,8 +218,8 @@ mod internal {
                     let next = AshParser::next_or_error(&mut pair)?;
                     let expr = self.build_expr_from_pair(next)?;
                     match expr {
-                        Expr::Val(name, index_maybe) => {
-                            Ok(AstNode::EmptyVecDef(location, name, *index_maybe.unwrap()))
+                        Expr::ValVarIndex(name, index) => {
+                            Ok(AstNode::EmptyVecDef(location, name, index))
                         }
                         _ => {
                             anyhow::bail!(
@@ -273,7 +280,7 @@ mod internal {
                         let let_or_static = AshParser::next_or_error(&mut varpair)?;
                         match let_or_static.as_rule() {
                             Rule::let_r => {
-                                location_maybe = Some(VarLocation::Constraint);
+                                location_maybe = Some(VarLocation::Witness);
                             }
                             Rule::static_r => {
                                 location_maybe = Some(VarLocation::Static);
@@ -347,25 +354,26 @@ mod internal {
                 Rule::var_indexed => {
                     let mut pair = pair.into_inner();
                     let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
-                    let index_maybe = if let Some(next) = pair.next() {
-                        Some(self.build_expr_from_pair(next)?.into())
+                    if let Some(next) = pair.next() {
+                        let index = self.build_expr_from_pair(next)?;
+                        Ok(Expr::ValVarIndex(name, Box::new(index)))
                     } else {
-                        None
-                    };
-                    Ok(Expr::Val(name, index_maybe))
+                        Ok(Expr::ValVar(name))
+                    }
                 }
                 Rule::literal_dec => Ok(Expr::Lit(pair.as_str().to_string())),
                 Rule::vec => {
                     let mut pair = pair.into_inner();
                     let next = AshParser::next_or_error(&mut pair)?;
                     if next.as_rule() == Rule::vec {
-                        let mut out: Vec<Expr> = Vec::new();
-                        out.push(self.build_expr_from_pair(next.clone())?);
-                        for next in pair {
-                            out.push(self.build_expr_from_pair(next.clone())?);
-                            // next = pair.next().unwrap();
-                        }
-                        Ok(Expr::VecVec(out))
+                        unimplemented!()
+                        // let mut out: Vec<Expr> = Vec::new();
+                        // out.push(self.build_expr_from_pair(next.clone())?);
+                        // for next in pair {
+                        //     out.push(self.build_expr_from_pair(next.clone())?);
+                        //     // next = pair.next().unwrap();
+                        // }
+                        // Ok(Expr::VecVec(out))
                     } else {
                         let mut out: Vec<String> = Vec::new();
                         out.push(next.as_str().to_string());
@@ -392,16 +400,16 @@ mod internal {
                     let n = AshParser::next_or_error(&mut pair)?;
                     match n.as_rule() {
                         Rule::function_call => Ok(self.build_expr_from_pair(n)?),
-                        Rule::varname => Ok(Expr::Val(n.as_str().to_string(), None)),
+                        Rule::varname => Ok(Expr::ValVar(n.as_str().to_string())),
                         Rule::var_indexed => {
                             let mut pair = n.into_inner();
                             let name = AshParser::next_or_error(&mut pair)?.as_str().to_string();
-                            let index_maybe = if let Some(next) = pair.next() {
-                                Some(self.build_expr_from_pair(next)?.into())
+                            if let Some(next) = pair.next() {
+                                let index = self.build_expr_from_pair(next)?;
+                                Ok(Expr::ValVarIndex(name, Box::new(index)))
                             } else {
-                                None
-                            };
-                            Ok(Expr::Val(name, index_maybe))
+                                Ok(Expr::ValVar(name))
+                            }
                         }
                         Rule::precompile_expr => {
                             let mut pair = n.into_inner();

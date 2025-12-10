@@ -1,7 +1,4 @@
-use std::fmt::Display;
-
-use anyhow::Result;
-use lettuce::*;
+use super::*;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Constraint<E: FieldScalar> {
