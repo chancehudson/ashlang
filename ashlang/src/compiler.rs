@@ -6,7 +6,6 @@ use anyhow::Result;
 use camino::Utf8PathBuf;
 use lettuce::*;
 
-use crate::log;
 use crate::*;
 
 pub type AshlangSourceString = String;

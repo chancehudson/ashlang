@@ -1,0 +1,3 @@
+[checkOnSave]
+allTargets = true
+extraArgs = ["--tests"]
