@@ -38,7 +38,7 @@ pub enum AstNode {
 /// line.
 #[derive(Debug, Clone)]
 pub enum Expr {
-    VecLit(Vec<String>),
+    VecLit(Vec<Expr>),
     DecLit(String),
     HexLit(String),
     ValVar(String),
@@ -366,24 +366,12 @@ mod internal {
                 Rule::literal_hex => Ok(Expr::HexLit(pair.as_str().to_string())),
                 Rule::vec => {
                     let mut pair = pair.into_inner();
-                    let next = AshParser::next_or_error(&mut pair)?;
-                    if next.as_rule() == Rule::vec {
-                        unimplemented!()
-                        // let mut out: Vec<Expr> = Vec::new();
-                        // out.push(self.build_expr_from_pair(next.clone())?);
-                        // for next in pair {
-                        //     out.push(self.build_expr_from_pair(next.clone())?);
-                        //     // next = pair.next().unwrap();
-                        // }
-                        // Ok(Expr::VecVec(out))
-                    } else {
-                        let mut out: Vec<String> = Vec::new();
-                        out.push(next.as_str().to_string());
-                        for next in pair {
-                            out.push(next.as_str().to_string());
-                        }
-                        Ok(Expr::VecLit(out))
+                    let mut exprs = Vec::new();
+                    while let Some(next) = pair.next() {
+                        let expr = self.build_expr_from_pair(next)?;
+                        exprs.push(expr);
                     }
+                    Ok(Expr::VecLit(exprs))
                 }
                 Rule::function_call => {
                     let mut pair = pair.into_inner();

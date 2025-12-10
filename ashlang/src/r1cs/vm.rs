@@ -437,10 +437,8 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                                 Var::Witness { .. } => unreachable!(),
                             }
                         }
-                        (Var::Witness { .. }, Var::Static { .. }) => {
-                            anyhow::bail!(
-                                "ashlang: witness index assignment from static unsupported"
-                            )
+                        (Var::Witness { index: wtns_i, .. }, Var::Static { value }) => {
+                            self.static_assignment_constraint(wtns_i + index, value[0]);
                         }
                         (Var::Witness { .. }, Var::Witness { .. }) => {
                             // need sparse vectors for this
@@ -496,11 +494,11 @@ impl<'a, E: FieldScalar> VM<'a, E> {
         }
         // then pull all the literals into a 1 dimensional vec
         let mut vec_rep: Vec<E> = Vec::new();
-        Self::extract_literals(expr, &mut vec_rep)?;
+        self.extract_literals(expr, &mut vec_rep)?;
         Ok((dimensions, vec_rep))
     }
 
-    fn extract_literals(expr: &Expr, out: &mut Vec<E>) -> Result<()> {
+    fn extract_literals(&mut self, expr: &Expr, out: &mut Vec<E>) -> Result<()> {
         match expr {
             // Expr::VecVec(v) => {
             //     for a in v {
@@ -508,12 +506,17 @@ impl<'a, E: FieldScalar> VM<'a, E> {
             //     }
             // }
             Expr::VecLit(v) => {
-                let mut vv = v
-                    .clone()
-                    .iter()
-                    .map(|v| Ok(E::from(u128::from_str(v)?)))
-                    .collect::<Result<_>>()?;
-                out.append(&mut vv);
+                for expr in v {
+                    println!("{:?}", expr);
+                    let var = self.eval(&expr)?;
+                    if var.location() != VarLocation::Static {
+                        anyhow::bail!("ashlang: Vector literal must have only static expressions")
+                    }
+                    if !var.is_scalar() {
+                        anyhow::bail!("ashlang: Vector literal must have only scalar expressions")
+                    }
+                    out.push(var.scalar_static_value()?);
+                }
             }
             _ => unreachable!(),
         }
@@ -600,10 +603,11 @@ impl<'a, E: FieldScalar> VM<'a, E> {
     pub fn eval(&mut self, expr: &Expr) -> Result<Var<E>> {
         match &expr {
             /*Expr::VecVec(_) |*/
-            Expr::VecLit(_) => {
+            Expr::VecLit(exprs) => {
                 let (dimensions, values) = self.build_var_from_ast_vec(expr)?;
-                if dimensions.len() > 2 {
-                    anyhow::bail!("Hypercube structures are not supported.");
+                println!("{}", Into::<Vector<E>>::into(values.clone()));
+                if dimensions.len() > 1 {
+                    anyhow::bail!("Only vectors are supported.");
                 }
                 Ok(Var::Static {
                     value: values.into(),
@@ -695,6 +699,44 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 .into(),
             }),
             Expr::Precompile(name, args, block_maybe) => match name.as_str() {
+                "len" => {
+                    if args.len() != 1 {
+                        anyhow::bail!(
+                            "ashlang: len precompile expects exactly 1 argument. Got {}",
+                            args.len()
+                        )
+                    }
+                    let v = self.eval(&args[0])?;
+                    Ok(Var::Static {
+                        value: vec![(v.len() as u128).into()].into(),
+                    })
+                }
+                "div_floor" => {
+                    if args.len() != 2 {
+                        anyhow::bail!(
+                            "ashlang: div_floor precompile expects exactly 2 static argument. Got {}",
+                            args.len()
+                        )
+                    }
+                    let lhs = self.eval(&args[0])?;
+                    let rhs = self.eval(&args[1])?;
+                    if lhs.location() != VarLocation::Static
+                        || rhs.location() != VarLocation::Static
+                    {
+                        anyhow::bail!("ashlang: div_floor precompile inputs must be static")
+                    }
+                    if !rhs.is_scalar() || !lhs.is_scalar() {
+                        anyhow::bail!("ashlang: div_floor precompile inputs must be scalar")
+                    }
+
+                    let lhs = lhs.scalar_static_value()?;
+                    let rhs = rhs.scalar_static_value()?;
+                    let out = lhs.into() / rhs.into();
+
+                    Ok(Var::Static {
+                        value: vec![out.into()].into(),
+                    })
+                }
                 "read_input" => {
                     if args.len() != 1 {
                         anyhow::bail!(

@@ -19,7 +19,7 @@ function_call = { varname ~ fn_args }
 
 // precompiles that return values
 
-precompile_with_output = { "read_input" }
+precompile_with_output = { "read_input" | "div_floor" | "len" }
 precompile_no_output = { "loop" | "write_output" | "assert_eq" }
 precompile_stmt = { precompile_no_output ~ expr+ ~ block? }
 precompile_expr = { precompile_with_output ~ expr+ ~ block? }
@@ -39,7 +39,7 @@ bool_expr = { expr ~ bool_op ~ expr }
 if_stmt   = { "if " ~ bool_expr ~ block }
 block     = { "{" ~ "\n"* ~ ((stmt ~ "\n") | "\n")* ~ "\n"* ~ "}" }
 
-vec = { "[" ~ "\n"* ~ (vec | literal_dec) ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ (vec | literal_dec))* ~ "\n"* ~ "]" }
+vec = { "[" ~ "\n"* ~ expr ~ "\n"* ~ ("\n"* ~ "," ~ "\n"* ~ expr)* ~ "\n"* ~ "]" }
 
 // this let_r match is needed to
 // determine if a variable is being

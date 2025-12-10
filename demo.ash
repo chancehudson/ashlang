@@ -25,4 +25,6 @@ assert_eq x+29 y
 
 let x = 10
 write_output x
+let o = div_floor 22 2
+write_output o
 #write_output v
