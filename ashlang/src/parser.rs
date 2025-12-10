@@ -39,7 +39,8 @@ pub enum AstNode {
 #[derive(Debug, Clone)]
 pub enum Expr {
     VecLit(Vec<String>),
-    Lit(String),
+    DecLit(String),
+    HexLit(String),
     ValVar(String),
     ValVarIndex(String, Box<Expr>),
     FnCall(String, Vec<Expr>),
@@ -361,7 +362,8 @@ mod internal {
                         Ok(Expr::ValVar(name))
                     }
                 }
-                Rule::literal_dec => Ok(Expr::Lit(pair.as_str().to_string())),
+                Rule::literal_dec => Ok(Expr::DecLit(pair.as_str().to_string())),
+                Rule::literal_hex => Ok(Expr::HexLit(pair.as_str().to_string())),
                 Rule::vec => {
                     let mut pair = pair.into_inner();
                     let next = AshParser::next_or_error(&mut pair)?;
@@ -448,7 +450,8 @@ mod internal {
                             Ok(Expr::Precompile(precompile_name, args, block_maybe))
                         }
 
-                        Rule::literal_dec => Ok(Expr::Lit(n.as_str().to_string())),
+                        Rule::literal_dec => Ok(Expr::DecLit(n.as_str().to_string())),
+                        Rule::literal_hex => Ok(Expr::HexLit(n.as_str().to_string())),
                         _ => anyhow::bail!("invalid atom"),
                     }
                 }

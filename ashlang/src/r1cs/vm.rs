@@ -684,8 +684,15 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 }
             }
             Expr::NumOp { lhs, op, rhs } => self.eval_numop(lhs, op, rhs),
-            Expr::Lit(val) => Ok(Var::Static {
+            Expr::DecLit(val) => Ok(Var::Static {
                 value: vec![E::from(u128::from_str(val)?)].into(),
+            }),
+            Expr::HexLit(val) => Ok(Var::Static {
+                value: vec![E::from(
+                    u128::from_str_radix(val, 16)
+                        .with_context(|| format!("ashlang: HexLit: \"{val}\""))?,
+                )]
+                .into(),
             }),
             Expr::Precompile(name, args, block_maybe) => match name.as_str() {
                 "read_input" => {

@@ -53,9 +53,10 @@ var_index_assign = { var_indexed ~ "=" ~ expr }
 var         = { (let_r | static_r)? ~ varname }
 var_indexed = { varname ~ ("[" ~ expr ~ "]")? }
 
-atom = { literal_dec | precompile_expr | function_call | var_indexed | varname }
+atom = { ("0x" ~ literal_hex) | literal_dec | precompile_expr | function_call | var_indexed | varname }
 
 literal_dec = @{ ASCII_DIGIT+ }
+literal_hex = @{ ASCII_HEX_DIGIT+ }
 
 varname = @{ char+ }
 

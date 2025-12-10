@@ -1,6 +1,6 @@
 (input_len)
 
-let x = 2
+let x = 0x2
 let x_vec = [10, 20, 30, 40]
 
 x = x * x * x * x
