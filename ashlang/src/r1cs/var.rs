@@ -11,14 +11,16 @@ pub enum VarLocation {
 pub enum Var<E: FieldScalar> {
     // a variable in the witness vector. Known at at witness computation time only.
     // dimension of variable is always known.
-    Witness { index: usize, len: usize },
+    Witness { indices: Vec<usize> },
     // a static variable. Always known. Parameter of program.
     Static { value: Vector<E> },
 }
 
 impl<E: FieldScalar> Var<E> {
     pub fn new_wtns(index: usize, len: usize) -> Self {
-        Self::Witness { index, len }
+        Self::Witness {
+            indices: (0..len).map(|i| index + i).collect(),
+        }
     }
 
     /// Where doth the variable reside?
@@ -32,7 +34,7 @@ impl<E: FieldScalar> Var<E> {
     /// Variables are statically sized
     pub fn len(&self) -> usize {
         match self {
-            Self::Witness { len, .. } => *len,
+            Self::Witness { indices } => indices.len(),
             Self::Static { value } => value.len(),
         }
     }
@@ -52,7 +54,7 @@ impl<E: FieldScalar> Var<E> {
     /// If the variable is static, error.
     pub fn wtns_index(&self) -> Result<usize> {
         match self {
-            Self::Witness { index, .. } => Ok(*index),
+            Self::Witness { indices } => Ok(indices[0]),
             Self::Static { .. } => anyhow::bail!(
                 "ashlang::Var::wtns_index: attempted to access witness index of static variable"
             ),
@@ -83,7 +85,7 @@ impl<E: FieldScalar> Var<E> {
     pub fn is_scalar(&self) -> bool {
         match self {
             Self::Static { value } => value.len() == 1,
-            Self::Witness { len, .. } => len == &1,
+            Self::Witness { indices } => indices.len() == 1,
         }
     }
 }

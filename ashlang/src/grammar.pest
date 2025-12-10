@@ -20,7 +20,7 @@ function_call = { varname ~ fn_args }
 // precompiles that return values
 
 precompile_with_output = { "read_input" | "div_floor" | "len" }
-precompile_no_output = { "loop" | "write_output" | "assert_eq" }
+precompile_no_output = { "loop_short" | "loop" | "write_output" | "assert_eq" }
 precompile_stmt = { precompile_no_output ~ expr+ ~ block? }
 precompile_expr = { precompile_with_output ~ expr+ ~ block? }
 

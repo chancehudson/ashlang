@@ -72,6 +72,36 @@ impl<'a, E: FieldScalar> VM<'a, E> {
         }
     }
 
+    /// Retrieve the constraints that exist for a witness index.
+    fn constraints_for(&self, wtns_i: usize) -> Vec<Constraint<E>> {
+        self.constraints
+            .iter()
+            .cloned()
+            .filter(|v| !v.is_symbolic())
+            .filter(|v| match v {
+                Constraint::Witness { a, b, c, .. } => {
+                    for (_, i) in a.iter() {
+                        if wtns_i == *i {
+                            return true;
+                        }
+                    }
+                    for (_, i) in b.iter() {
+                        if wtns_i == *i {
+                            return true;
+                        }
+                    }
+                    for (_, i) in c.iter() {
+                        if wtns_i == *i {
+                            return true;
+                        }
+                    }
+                    false
+                }
+                _ => false,
+            })
+            .collect::<Vec<_>>()
+    }
+
     pub fn eval_ast(&mut self, ast: Vec<AstNode>) -> Result<()> {
         for v in ast {
             match v {
@@ -116,15 +146,14 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                                 let new_var = self.static_to_constraint(&rhs)?;
                                 self.vars.insert(name, new_var);
                             }
-                            (VarLocation::Witness, Var::Witness { index, len }) => {
+                            (VarLocation::Witness, Var::Witness { indices }) => {
                                 // # assignment of witness vars
                                 // let x = 0
                                 // let y = x
                                 self.vars.insert(
                                     name,
                                     Var::Witness {
-                                        index: *index,
-                                        len: *len,
+                                        indices: indices.clone(),
                                     },
                                 );
                             }
@@ -166,15 +195,17 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                             }
                             (
                                 Var::Witness {
-                                    index: lhs_index, ..
+                                    indices: lhs_indices,
+                                    ..
                                 },
                                 Var::Witness {
-                                    index: rhs_index, ..
+                                    indices: rhs_indices,
+                                    ..
                                 },
                             ) => {
                                 // copy by value+pointer. Constraints are implicitly copied and
                                 // equality is implied
-                                *lhs_index = *rhs_index;
+                                *lhs_indices = rhs_indices.clone();
                             }
                             (Var::Static { .. }, Var::Witness { .. }) => {
                                 anyhow::bail!(
@@ -258,6 +289,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                                 .insert(0, "loop condition".to_string());
                             let var = self.eval(&expr)?;
                             if var.location() != VarLocation::Static {
+                                println!("{:?}", args[0]);
                                 return log::error!("loop condition must be static variable");
                             }
                             let loop_count = var
@@ -272,6 +304,52 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                                 self.compiler_state
                                     .messages
                                     .insert(0, format!("loop iteration {i}"));
+                                self.eval_ast(body.clone())?;
+                                i += 1;
+                                let current_vars = self.vars.clone();
+                                for k in current_vars.keys() {
+                                    if !old_vars.contains_key(k) {
+                                        self.vars.remove(k);
+                                    }
+                                }
+                            }
+                        }
+                        "loop_short" => {
+                            // loop for some number of iterations, or 0 if the number is > Q/2 \in
+                            // Z
+                            if args.len() != 1 {
+                                anyhow::bail!(
+                                    "ashlang: loop_short precompile expects exactly 1 argument. Got {}",
+                                    args.len()
+                                )
+                            }
+                            let expr = &args[0];
+                            let body = body_maybe.ok_or(anyhow::anyhow!(
+                                "ashlang: loop_short precompile expects a body"
+                            ))?;
+                            self.compiler_state
+                                .messages
+                                .insert(0, "loop_short condition".to_string());
+                            let var = self.eval(&expr)?;
+                            if var.location() != VarLocation::Static {
+                                return log::error!("loop_short condition must be static variable");
+                            }
+                            let loop_count = var
+                                .scalar_static_value()
+                                .with_context(|| "In invocation of loop_short keyword argument")?
+                                .into() as usize;
+                            if loop_count as u128 > (E::CARDINALITY / 2).into() {
+                                // loop count is zero
+                                return Ok(());
+                            }
+                            // track the old variables, delete any variables
+                            // created inside the loop body
+                            let old_vars = self.vars.clone();
+                            let mut i = E::zero().into() as usize;
+                            while i < loop_count {
+                                self.compiler_state
+                                    .messages
+                                    .insert(0, format!("loop_short iteration {i}"));
                                 self.eval_ast(body.clone())?;
                                 i += 1;
                                 let current_vars = self.vars.clone();
@@ -297,10 +375,10 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                             }
                             let var = self.eval(expr)?;
                             match var {
-                                Var::Witness { index, .. } => {
-                                    for i in 0..var.len() {
+                                Var::Witness { indices } => {
+                                    for wtns_i in indices {
                                         self.constraints.push(Constraint::symbolic(
-                                            index + i,
+                                            wtns_i,
                                             vec![],
                                             vec![],
                                             SymbolicOp::Output,
@@ -383,10 +461,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                         .into() as usize;
                     match location {
                         VarLocation::Witness => {
-                            let var = Var::Witness {
-                                index: self.var_index,
-                                len,
-                            };
+                            let var = Var::new_wtns(self.var_index, len);
                             self.var_index += len;
                             self.vars.insert(name, var);
                         }
@@ -437,14 +512,26 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                                 Var::Witness { .. } => unreachable!(),
                             }
                         }
-                        (Var::Witness { index: wtns_i, .. }, Var::Static { value }) => {
-                            self.static_assignment_constraint(wtns_i + index, value[0]);
+                        (Var::Witness { indices, .. }, Var::Static { value }) => {
+                            self.static_assignment_constraint(indices[index], value[0]);
                         }
-                        (Var::Witness { .. }, Var::Witness { .. }) => {
-                            // need sparse vectors for this
-                            anyhow::bail!(
-                                "ashlang: witness index assignment from witness unsupported"
-                            )
+                        (
+                            Var::Witness {
+                                indices: lhs_indices,
+                                ..
+                            },
+                            Var::Witness {
+                                indices: rhs_indices,
+                                ..
+                            },
+                        ) => {
+                            let lhs_mut = self.vars.get_mut(&name).unwrap();
+                            match lhs_mut {
+                                Var::Witness { indices } => {
+                                    indices[index] = rhs_indices[0];
+                                }
+                                Var::Static { .. } => unreachable!(),
+                            }
                         }
                         _ => unreachable!(),
                     }
@@ -507,7 +594,6 @@ impl<'a, E: FieldScalar> VM<'a, E> {
             // }
             Expr::VecLit(v) => {
                 for expr in v {
-                    println!("{:?}", expr);
                     let var = self.eval(&expr)?;
                     if var.location() != VarLocation::Static {
                         anyhow::bail!("ashlang: Vector literal must have only static expressions")
@@ -594,10 +680,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 }
             }
         }
-        Ok(Var::Witness {
-            index,
-            len: var.len(),
-        })
+        Ok(Var::new_wtns(index, var.len()))
     }
 
     pub fn eval(&mut self, expr: &Expr) -> Result<Var<E>> {
@@ -605,7 +688,6 @@ impl<'a, E: FieldScalar> VM<'a, E> {
             /*Expr::VecVec(_) |*/
             Expr::VecLit(exprs) => {
                 let (dimensions, values) = self.build_var_from_ast_vec(expr)?;
-                println!("{}", Into::<Vector<E>>::into(values.clone()));
                 if dimensions.len() > 1 {
                     anyhow::bail!("Only vectors are supported.");
                 }
@@ -672,19 +754,9 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                     Var::Static { value } => Ok(Var::Static {
                         value: vec![value[index]].into(),
                     }),
-                    Var::Witness {
-                        index: var_index,
-                        len: _,
-                    } => {
-                        // constrain an equality to a new witness scalar
-                        self.assignment_constraint(self.var_index, var_index + index);
-                        let var = Var::Witness {
-                            index: self.var_index,
-                            len: 1,
-                        };
-                        self.var_index += 1;
-                        Ok(var)
-                    }
+                    Var::Witness { indices } => Ok(Var::Witness {
+                        indices: vec![indices[index]],
+                    }),
                 }
             }
             Expr::NumOp { lhs, op, rhs } => self.eval_numop(lhs, op, rhs),
@@ -760,10 +832,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                             var.len()
                         )
                     };
-                    let out = Var::Witness {
-                        index: self.var_index,
-                        len: read_count,
-                    };
+                    let out: Var<E> = Var::new_wtns(self.var_index, read_count);
                     self.var_index += read_count;
                     for i in 0..read_count {
                         self.constraints.push(Constraint::symbolic(
@@ -853,10 +922,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
         }
         Ok(match op {
             NumOp::Add => {
-                let new_var = Var::Witness {
-                    index: self.var_index,
-                    len: lv.len(),
-                };
+                let new_var = Var::new_wtns(self.var_index, lv.len());
                 self.var_index += new_var.len();
                 for x in 0..new_var.len() {
                     let svi = signal_v.wtns_index()? + x;
@@ -884,10 +950,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 new_var
             }
             NumOp::Mul => {
-                let new_var = Var::Witness {
-                    index: self.var_index,
-                    len: lv.len(),
-                };
+                let new_var = Var::new_wtns(self.var_index, lv.len());
                 self.var_index += new_var.len();
                 for x in 0..new_var.len() {
                     let svi = signal_v.wtns_index()? + x;
@@ -915,10 +978,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 new_var
             }
             NumOp::Sub => {
-                let new_var = Var::Witness {
-                    index: self.var_index,
-                    len: lv.len(),
-                };
+                let new_var = Var::new_wtns(self.var_index, lv.len());
                 self.var_index += new_var.len();
                 if lv.location() == VarLocation::Witness {
                     // subtracting a static from a signal
@@ -974,10 +1034,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 new_var
             }
             NumOp::Inv => {
-                let new_var = Var::Witness {
-                    index: self.var_index,
-                    len: lv.len(),
-                };
+                let new_var = Var::new_wtns(self.var_index, lv.len());
                 self.var_index += new_var.len();
                 if lv.location() == VarLocation::Witness {
                     // can statically inv
@@ -1007,11 +1064,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                         ]);
                     }
                 } else {
-                    // must inv in a signal first
-                    let inv_var = Var::<E>::Witness {
-                        index: self.var_index,
-                        len: lv.len(),
-                    };
+                    let inv_var = Var::<E>::new_wtns(self.var_index, lv.len());
                     self.var_index += inv_var.len();
                     for x in 0..inv_var.len() {
                         // first invert into a signal
@@ -1082,10 +1135,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
         // an operation to each element
         Ok(match op {
             NumOp::Add => {
-                let new_var = Var::Witness {
-                    index: self.var_index,
-                    len: lv.len(),
-                };
+                let new_var = Var::new_wtns(self.var_index, lv.len());
                 self.var_index += new_var.len();
                 for x in 0..new_var.len() {
                     let lvi = lv.wtns_index()? + x;
@@ -1112,10 +1162,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 new_var
             }
             NumOp::Mul => {
-                let new_var = Var::Witness {
-                    index: self.var_index,
-                    len: rv.len(),
-                };
+                let new_var = Var::new_wtns(self.var_index, rv.len());
                 self.var_index += new_var.len();
                 for x in 0..new_var.len() {
                     let lvi = lv.wtns_index()? + x;
@@ -1142,10 +1189,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 new_var
             }
             NumOp::Sub => {
-                let new_var = Var::Witness {
-                    index: self.var_index,
-                    len: rv.len(),
-                };
+                let new_var = Var::new_wtns(self.var_index, rv.len());
                 self.var_index += new_var.len();
                 for x in 0..new_var.len() {
                     let lvi = lv.wtns_index()? + x;
@@ -1172,10 +1216,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 new_var
             }
             NumOp::Inv => {
-                let inv_var = Var::<E>::Witness {
-                    index: self.var_index,
-                    len: rv.len(),
-                };
+                let inv_var = Var::<E>::new_wtns(self.var_index, rv.len());
                 self.var_index += inv_var.len();
                 for x in 0..inv_var.len() {
                     let rvi = rv.wtns_index()? + x;
@@ -1200,10 +1241,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                     ]);
                 }
                 // then multiply rv_inv by the lhs
-                let new_var: Var<E> = Var::Witness {
-                    index: self.var_index,
-                    len: inv_var.len(),
-                };
+                let new_var: Var<E> = Var::new_wtns(self.var_index, inv_var.len());
                 self.var_index += new_var.len();
                 for x in 0..inv_var.len() {
                     let lvi = lv.wtns_index()? + x;

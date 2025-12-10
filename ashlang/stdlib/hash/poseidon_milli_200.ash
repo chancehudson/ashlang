@@ -1,6 +1,6 @@
 (input)
 
-static MDS = [0x22f7f6d8, 0x86bfee25, 0xb99909f1, 0xa7173d28, 0xc9b59db9, 0x7598a160, 0xbbf14242, 0xfcf89c5e, 0x877824fb, 0x625700f5, 0xfc9bf82f, 0xa60e3036, 0x312a582e, 0x6e9cec08, 0x786f80be,
+static MDS_MATRIX = [0x22f7f6d8, 0x86bfee25, 0xb99909f1, 0xa7173d28, 0xc9b59db9, 0x7598a160, 0xbbf14242, 0xfcf89c5e, 0x877824fb, 0x625700f5, 0xfc9bf82f, 0xa60e3036, 0x312a582e, 0x6e9cec08, 0x786f80be,
  0x93afac39, 0xc891720f, 0x1bd497b9, 0xf7760d91, 0x14afc9ce, 0x82300d43, 0x9acc579a, 0xf29857d0, 0xbd38f2a0, 0x4a03f4db, 0x552dc989, 0x1b437c58, 0xfeb026be, 0x6ce1dd8d, 0x4ffa5b49,
  0x408141d2, 0x51a52598, 0x4860ad9e, 0x162a0c86, 0xe6c8813d, 0x5a2b8094, 0x688fbe4f, 0xfb3c48bb, 0xcf747b52, 0x77a1ef2d, 0x607aa014, 0x1a7e58a7, 0xda0310db, 0xedec4476, 0x0c0a8cf2,
  0x6b2423e4, 0x8056fb97, 0xa3978b4e, 0x66815d2f, 0x2e83b7f4, 0x67badaa0, 0x229fdb12, 0x2b89a8d9, 0x63240a39, 0x9224de65, 0x7099ce64, 0xd12687ce, 0x42ce3fea, 0x0b887661, 0x43cf2638,
@@ -21,10 +21,14 @@ static ROUND_CONSTANTS = [0x1dea77fc, 0xe4d41cd4, 0xaaa117ff, 0x20741b09, 0xecee
 
 # number of full rounds
 static N_ROUNDS_F = 8
+
 # number of partial rounds
 static N_ROUNDS_P = 13
+
 # power being raised to in the s-box
 static ALPHA = 11
+
+# state vector len
 static T = 15
 
 # MDS matrix is TxT
@@ -32,14 +36,26 @@ static T = 15
 # number of round constants
 static N_C = 315
 
+# initialize state vector
 let state[T]
-static i = 0
-loop T {
+state[0] = 0
+
+static input_len = len input
+static i = 1 
+loop input_len {
   state[i] = 0
   i = i + 1
 }
+
+# we want to initialize any trailing state elements
 static i = 0
-static input_len = len input
+loop_short T - input_len - 1 {
+  state[1 + input_len + i] = 0
+  i = i + 1
+}
+
+# initialize inputs
+static i = 0
 loop input_len {
   state[i + 1] = input[i]
   i = i + 1
@@ -76,7 +92,8 @@ loop N_ROUNDS_P {
 
 # final set of full rounds
 static x = 0
-loop div_floor N_ROUNDS_F 2 {
+static v = div_floor N_ROUNDS_F 2
+loop v {
     static y = 0
     loop T {
       state[y] = state[y] + ROUND_CONSTANTS[x * T + y]
