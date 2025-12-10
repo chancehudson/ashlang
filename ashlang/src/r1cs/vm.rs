@@ -349,6 +349,13 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                             }
                             let left_i = lhs.wtns_index()?;
                             let right_i = rhs.wtns_index()?;
+                            if left_i == right_i {
+                                anyhow::bail!(
+                                    "ashlang::assert_eq: Refusing to assert equality between a witness variable and itself:\nlhs: {:?}\nrhs: {:?}",
+                                    args[0],
+                                    args[1]
+                                )
+                            }
                             for i in 0..lhs.len() {
                                 self.constraints.push(Constraint::new(
                                     vec![(1.into(), left_i + i)],

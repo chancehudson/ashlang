@@ -13,8 +13,15 @@ loop input_len * input_len {
   x = x * 100
 }
 
-let y = x
-assert_eq x y
+# asserting equality between the same witness index
+# fails
+# e.g.
+# let y = x
+# assert_eq x y
+
+# constrain into new var
+let y = x + 29
+assert_eq x+29 y
 
 let x = 10
 write_output x
