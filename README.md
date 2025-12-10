@@ -12,6 +12,16 @@ Two types of variables exist:
 
 All variables are vectors. Vectors of length 1 are scalars and may be used to index other vectors using bracket syntax e.g. `let x[100]`
 
+## Run locally
+
+```sh
+git clone git@github.com:chancehudson/ashlang
+cd ashlang
+cargo run --release -- demo innerprod
+```
+
+Change the `demo.ash` script and re-run to prove a different program.
+
 ### Features
 
 - all variables are vectors with static length
