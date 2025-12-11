@@ -445,6 +445,8 @@ Path 2: {:?}",
                 .collect::<Vec<Constraint<E>>>()
                 .to_vec(),
         );
+        let optimizer = ConstraintOptimizer::new(final_constraints);
+        let final_constraints = optimizer.optimize();
         // separate the symbolic constraints and the non-symbolic ones into a witness computation
         // program and an r1cs
         let constraints = final_constraints

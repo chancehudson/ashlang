@@ -1,9 +1,11 @@
 //! Core logic for the r1cs target.
 mod constraint;
+mod optimizer;
 mod var;
 mod vm;
 
 pub use constraint::*;
+pub use optimizer::*;
 pub use var::*;
 pub use vm::*;
 
