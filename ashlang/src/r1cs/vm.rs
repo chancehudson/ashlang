@@ -675,7 +675,7 @@ impl<'a, E: FieldScalar> VM<'a, E> {
                 self.spawn_known_variable(v);
             }
             None => {
-                for v in var.static_value()? {
+                for v in var.static_value()?.iter() {
                     self.spawn_known_variable(*v);
                 }
             }

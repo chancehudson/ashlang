@@ -8,7 +8,7 @@ let x_vec = x_vec * x_vec + x_vec
 
 #let v = read_input input_len
 
-loop input_len * input_len {
+loop input_len * input_len + 1000 {
   x = x + 1
   x = x * 100
 }

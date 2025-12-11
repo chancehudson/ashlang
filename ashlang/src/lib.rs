@@ -39,7 +39,9 @@ impl<E: FieldScalar> ZKArg<E> for AshlangInnerProdArg<E> {
         let oraccle = Oraccle::new();
         // let start = Instant::now();
         let input_len = input.len();
+        println!("Building witness...");
         let wtns = program.compute_wtns(input, static_args.clone())?;
+        println!("Building argument...");
 
         // print!(
         //     " {} (?)\nVerifying transparent inner product argument... ",

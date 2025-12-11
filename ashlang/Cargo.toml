@@ -14,7 +14,7 @@ readme = "../README.md"
 [[bin]]
 name = "acc"
 path = "src/main.rs"
-required-features = ["default"]
+required-features = []
 
 [[example]]
 name = "matmul"

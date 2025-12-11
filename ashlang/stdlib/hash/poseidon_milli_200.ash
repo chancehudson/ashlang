@@ -68,7 +68,7 @@ loop c {
     static y = 0
     loop T {
       state[y] = state[y] + ROUND_CONSTANTS[x * T + y]
-      state[y] = pow(state[y], ALPHA)
+      state[y] = pow11(state[y])
       y = y + 1
     }
     state = poseidon_milli_200_mix(state, MDS_MATRIX, T)
@@ -80,7 +80,7 @@ static x = 0
 loop N_ROUNDS_P {
     static y = 0
     state[y] = state[y] + ROUND_CONSTANTS[x * T + y]
-    state[y] = pow(state[y], ALPHA)
+    state[y] = pow11(state[y])
     y = y + 1
     loop T - 1 {
       state[y] = state[y] + ROUND_CONSTANTS[x * T + y]
@@ -97,7 +97,7 @@ loop v {
     static y = 0
     loop T {
       state[y] = state[y] + ROUND_CONSTANTS[x * T + y]
-      state[y] = pow(state[y], ALPHA)
+      state[y] = pow11(state[y])
       y = y + 1
     }
     state = poseidon_milli_200_mix(state, MDS_MATRIX, T)

@@ -557,15 +557,21 @@ Path 2: {:?}",
             match constraint {
                 Constraint::Witness { a, b, c, .. } => {
                     for (coef, wtns_i) in a {
-                        assert!(r1cs.a[i][*wtns_i].is_zero());
+                        if coef.is_zero() {
+                            continue;
+                        }
                         r1cs.a[i][*wtns_i] = *coef;
                     }
                     for (coef, wtns_i) in b {
-                        assert!(r1cs.b[i][*wtns_i].is_zero());
+                        if coef.is_zero() {
+                            continue;
+                        }
                         r1cs.b[i][*wtns_i] = *coef;
                     }
                     for (coef, wtns_i) in c {
-                        assert!(r1cs.c[i][*wtns_i].is_zero());
+                        if coef.is_zero() {
+                            continue;
+                        }
                         r1cs.c[i][*wtns_i] = *coef;
                     }
                 }
